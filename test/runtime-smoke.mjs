@@ -178,3 +178,37 @@ test("rejects an adapter result outside the node's declared options", async () =
 		/节点不允许结果/,
 	);
 });
+
+test("keeps an accepted adapter interaction reference queryable", async () => {
+	const messages = [{ id: "entry", role: "assistant", content: "evidence" }];
+	const adapter = new AgentRunModel({
+		async createAgent() {
+			return { id: "agent", platformReference: "agent" };
+		},
+		async takeOverAgent() {
+			throw new Error("unused");
+		},
+		async executeNode(request) {
+			await request.submitOutcome({
+				nodeExecutionReference: request.nodeExecutionReference,
+				result: "ok",
+				content: "done",
+				interactionReference: "entry",
+			});
+			return { id: "session", interactionReference: "entry" };
+		},
+		async getNodeSession() {
+			return messages;
+		},
+		async releaseAgent() {},
+	});
+	const executed = await adapter.executeNode({
+		runId: "run",
+		action: "新建Agent",
+		nodeExecutionReference: "node",
+		prompt: "work",
+		outcomes: [{ name: "ok", description: "ok" }],
+	});
+	assert.equal(executed.session.interactionReference, "entry");
+	assert.deepEqual(await adapter.getNodeSession(executed.session), messages);
+});
