@@ -5,7 +5,7 @@
 Included examples:
 
 - `examples/code-change.md`: code change and verification loop.
-- `examples/simplify.md`: project simplification with a review gate that loops until the remaining complexity has a documented reason.
+- `examples/simplify.md`: project simplification with a self-gated loop that continues until the remaining complexity has a documented reason.
 
 ## Install
 
