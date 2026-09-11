@@ -130,7 +130,7 @@ Flow 的终态以结果提交工具的结构化内容为准，脚本应从 JSON 
 
 ## 8. 实现依据
 
-当前实现位于[Pi Flow 扩展入口](../src/extension.ts)，安装和运行命令见[实现 README](../README.md)。CLI MVP 明确限制为首个`新建Agent`和后续`复用Agent`，中途创建第二个 Agent 会话应改用 SDK 宿主。
+当前实现位于[Pi Flow 扩展入口](../src/extension.ts)，安装和运行命令见[实现 README](../README.md)。CLI MVP 使用一个可见 Pi 会话；首个`新建Agent`建立绑定，后续`复用Agent`和循环再次进入`新建Agent`都继续使用该会话。需要多个真正独立 Agent 会话时应使用 SDK 宿主。
 
 - [Pi CLI 参数和启动流程](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/cli/args.ts)
 - [Pi 主流程](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/main.ts)

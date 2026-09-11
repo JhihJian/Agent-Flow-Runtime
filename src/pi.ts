@@ -59,7 +59,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	private readonly handles = new Map<string, SdkHandle>();
 	private readonly sessionHandles = new Map<string, SdkHandle>();
 	private pendingCli?: PendingCliNode;
-	private cliConnectionCreated = false;
+	private cliConnection?: AgentConnection;
 	private readonly options: PiAgentAdapterOptions;
 
 	constructor(options: PiAgentAdapterOptions = {}) {
@@ -233,17 +233,16 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	}
 
 	private createCliConnection(runId: string): AgentConnection {
-		if (this.cliConnectionCreated)
-			throw new Error("Pi CLI MVP 只支持首个新建Agent和后续复用Agent");
 		const bridge = this.options.cliBridge;
 		if (!bridge) throw new Error("Pi CLI bridge 不可用");
-		this.cliConnectionCreated = true;
+		if (this.cliConnection) return this.cliConnection;
 		const reference = bridge.getSessionReference();
-		return {
+		this.cliConnection = {
 			id: `${runId}:cli-agent`,
 			platformReference: reference,
 			sessionReference: reference,
 		};
+		return this.cliConnection;
 	}
 
 	private async executeCliNode(request: {

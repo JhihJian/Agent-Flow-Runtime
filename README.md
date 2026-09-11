@@ -57,7 +57,7 @@ Flow records are stored in `.pi/flow-runs.json` under the working directory. Eac
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge.
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
 
-The Pi CLI MVP supports a Flow whose first Agent action is `新建Agent` and whose later Agent actions are `复用Agent`. SDK hosts can create a new Agent session or take over a persisted Pi session. A CLI Flow that creates another Agent after the first one is rejected because one visible Pi CLI session cannot represent it.
+The Pi CLI MVP uses one visible session as the Flow's Agent carrier. It supports a first `新建Agent` action, later `复用Agent` actions, and loop re-entry into a `新建Agent` node by continuing the same visible session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
 
 ## Development
 

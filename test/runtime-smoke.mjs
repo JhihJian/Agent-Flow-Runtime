@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { FlowDirectory } from "../dist/directory.js";
 import { parseFlow } from "../dist/parser.js";
+import { PiAgentIntegrationAdapter } from "../dist/pi.js";
 import {
 	AgentRunModel,
 	FlowCoordinator,
@@ -242,4 +243,24 @@ test("keeps an accepted adapter interaction reference queryable", async () => {
 	});
 	assert.equal(executed.session.interactionReference, "entry");
 	assert.deepEqual(await adapter.getNodeSession(executed.session), messages);
+});
+
+test("reuses the visible CLI session when a new-agent node loops", async () => {
+	const bridge = {
+		sendNodePrompt() {},
+		getSessionReference() {
+			return "visible-session";
+		},
+		getLeafEntryId() {
+			return undefined;
+		},
+		getMessages() {
+			return [];
+		},
+	};
+	const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
+	const first = await adapter.createAgent({ runId: "run" });
+	const second = await adapter.createAgent({ runId: "run" });
+	assert.equal(second.id, first.id);
+	assert.equal(second.sessionReference, "visible-session");
 });

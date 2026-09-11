@@ -192,7 +192,7 @@ MVP 支持 SDK 内嵌会话的新建与恢复、Pi CLI 当前会话绑定、单�
 
 ## 10. 实现依据
 
-当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。
+当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 单会话路径在循环再次进入`新建Agent`时复用当前可见会话作为承载，以保证通用 Flow 的回环可以继续执行。
 
 - [Pi SDK：AgentSession 与 SessionManager](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)
 - [Pi RPC 模式说明](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)
