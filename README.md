@@ -2,6 +2,11 @@
 
 `@summ/agent-flow-runtime` executes portable Markdown Flow files. A Flow controls node routing, gates, retries, command-only parallel checks, and explicit joins. Agent-specific behavior stays outside the Markdown definition.
 
+Included examples:
+
+- `examples/code-change.md`: code change and verification loop.
+- `examples/simplify.md`: project simplification with a review gate that loops until the remaining complexity has a documented reason.
+
 ## Install
 
 Build the package before installing it from a local checkout:

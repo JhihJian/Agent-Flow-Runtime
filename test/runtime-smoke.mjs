@@ -98,6 +98,38 @@ test("discovers reusable Flow files by filename identifier", async () => {
 	assert.equal((await directory.load("ordinary")).name, "普通流转");
 });
 
+test("runs the simplify flow through a review gate loop", async () => {
+	const simplify = parseFlow(
+		await readFile(
+			join(import.meta.dirname, "..", "examples", "simplify.md"),
+			"utf8",
+		),
+		"simplify.md",
+	);
+	assert.deepEqual(simplify.nodes.get("gate").successors.get("继续精简"), {
+		kind: "node",
+		ref: "simplify",
+	});
+	const store = new InMemoryRunStore();
+	const run = await new FlowCoordinator(
+		simplify,
+		store,
+		new AgentRunModel(
+			new FakeAdapter([
+				{ result: "已精简", content: "first pass" },
+				{ result: "继续精简", content: "gate found more" },
+				{ result: "已精简", content: "second pass" },
+				{ result: "通过", content: "no further simplification" },
+			]),
+		),
+	).run("review the project");
+	assert.equal(run.status, "completed");
+	assert.deepEqual(
+		(await store.listNodeRuns(run.id)).map((record) => record.nodeRef),
+		["simplify", "gate", "simplify", "gate"],
+	);
+});
+
 test("coordinates parallel commands and persists every node visit", async () => {
 	const flow = await fixture("command-parallel.md");
 	const adapter = new FakeAdapter([
