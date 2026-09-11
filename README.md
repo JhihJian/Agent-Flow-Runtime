@@ -50,7 +50,7 @@ Flow records are stored in `.pi/flow-runs.json` under the working directory. Eac
 
 ## Architecture
 
-For a compact source-level reading guide, see [源码伪代码阅读图](docs/source-pseudocode-guide.md).
+For a compact source-level reading guide, see [源码逻辑阅读图](docs/source-pseudocode-guide.md).
 
 - `src/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
 - `src/directory.ts` discovers and loads Flow files by filename identifier for reuse.

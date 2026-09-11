@@ -8,7 +8,8 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | --- | --- |
 | [Flow 概览](flow-overview.md) | 理解 Flow 文件、一次运行、节点结果、并行和记录。 |
 | [Flow 规范](flow-spec.md) | 编写、生成或检查可运行的 Flow 文件。 |
-| [源码伪代码阅读图](source-pseudocode-guide.md) | 用压缩伪代码建立从 Flow 文件到 Pi 会话的源码主线。 |
+| [源码逻辑阅读图](source-pseudocode-guide.md) | 用函数级流程图、伪代码和源码链接建立从 Flow 文件到 Pi 会话的源码主线。 |
+| [源码符号索引](source-index.md) | 自动生成的模块、符号和源码位置索引。 |
 | [Agent Flow Runtime 总体设计](agent-flow-runtime-design.md) | 理解 Flow 如何与一次具体任务、Agent 和命令结合。 |
 | [Agent Flow Runtime 架构设计](agent-flow-runtime-architecture.md) | 了解解释器、协调器、统一 Agent 运行模型和记录存储的职责边界。 |
 
@@ -20,6 +21,17 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | [Pi Flow 启动入口设计](pi-flow-host-design.md) | 了解如何在 Pi TUI、无头命令和 RPC 中启动指定 Flow。 |
 
 Flow 文件保持通用，Pi 文档只描述 Pi 的会话和启动实现。
+
+## 维护源码阅读资料
+
+以下命令只面向源码仓库开发者。发布包不包含生成工具及其开发依赖。`source-pseudocode-guide.md`中的 Mermaid 图和伪代码由人工维护，关键函数的源码链接以及`source-index.md`由`ts-morph`生成。修改关键函数、移动源码或调整阅读图后，执行：
+
+```bash
+npm run docs:source-index
+npm run check
+```
+
+`npm run check`会拒绝未更新的位置链接、缺少受控阅读区块或缺少 Mermaid 图、伪代码的文档变更。
 
 ## 实现
 

@@ -1,202 +1,318 @@
-# 源码伪代码阅读图
+# 源码逻辑阅读图
 
-本文是给初次阅读本项目源码的人准备的压缩视图。它省略 TypeScript、Pi SDK 和 Node.js 的语法细节，只保留运行时的控制流、数据流和模块边界。伪代码不是另一份规范，判断细节时以对应源码和 [Flow 规范](flow-spec.md) 为准。
+本文按关键函数展示 Agent Flow Runtime 的控制流。每一节把 Mermaid 图、压缩伪代码和确切源码位置放在一起，便于从运行场景跳回实现。
 
-## 先记住四件事
+图和伪代码是阅读辅助，不是另一份规范。静态 Flow 格式以[Flow 规范](flow-spec.md)为准，完整的模块和符号位置见自动生成的[源码符号索引](source-index.md)。
 
-```text
-Flow Markdown  --解析-->  FlowDefinition（静态流程定义）
-任务 + FlowDefinition --运行--> FlowRunRecord（一次运行状态）
-节点动作 --执行--> NodeOutcome（结果名 + 传给下一节点的内容）
-结果名 --查图--> 下一个节点、并行区或结束
+## 使用方式
+
+- 先从与问题最接近的场景进入，不必顺序阅读所有文件。
+- 图只表达当前函数的关键分支和数据去向，省略局部错误文本、日志与类型细节。
+- 每个“源码”链接由`npm run docs:source-index`生成。修改关键函数后必须运行该命令，`npm run check`会检查位置和阅读区块是否过期。
+
+## 全局数据流
+
+```mermaid
+flowchart LR
+  file[Flow Markdown] --> parser[parseFlow]
+  parser --> definition[FlowDefinition]
+  task[用户任务] --> start[startFlow]
+  definition --> start
+  start --> coordinator[FlowCoordinator.run]
+  coordinator --> records[FlowRunRecord 与 NodeRunRecord]
+  coordinator --> agent[AgentRunModel]
+  agent --> pi[PiAgentIntegrationAdapter]
+  pi --> session[Pi 会话]
 ```
 
-- `parser.ts` 只将 Markdown 变成可信的静态定义。
-- `runtime.ts` 是唯一会改变一次 Flow 运行状态的模块。
-- `pi.ts` 只将“运行一个 Agent 节点”的通用接口接到 Pi 会话。
-- `extension.ts` 只将 Pi CLI/TUI 的参数、命令和事件接到运行时。
+四个贯穿整个运行时的值：
 
-## 一次运行
+| 值 | 负责者 | 含义 |
+| --- | --- | --- |
+| `FlowDefinition` | `parser.ts` | 已校验的静态节点、结果边和并行定义。 |
+| `FlowRunRecord` | `FlowCoordinator` | 一次运行的状态、当前节点或当前并行轮次。 |
+| `NodeRunRecord` | `FlowCoordinator` | 每次进入节点的输入、结果、时间和会话引用。 |
+| `NodeOutcome` | 节点执行方 | `result`选择下一条边，`content`成为后续输入。 |
 
-入口是 `extension.ts` 的 `startFlow`。它读取 Flow 文件，组装运行时依赖，然后把用户任务交给协调器。
+## 函数级逻辑图
+
+### 1. 启动 Flow
+
+<!-- source-guide:start-flow -->
+<!-- source-guide:location:start-flow -->
+**源码：** [src/extension.ts:188-233](../src/extension.ts#L188)，`启动 Flow`
+<!-- /source-guide:location:start-flow -->
+
+```mermaid
+flowchart TD
+  A[接收 Flow 路径、任务和 Pi 上下文] --> B[读取并 parseFlow]
+  B --> C[创建 Pi 适配器、运行记录存储和协调器]
+  C --> D{首节点动作}
+  D -->|复用Agent| E[带当前会话引用运行]
+  D -->|其他动作| F[直接运行]
+  E --> G[等待流程结束]
+  F --> G
+```
 
 ```text
-startFlow(Flow文件路径, 用户任务, Pi上下文):
+startFlow(路径, 任务, Pi上下文):
+    拒绝已有正在运行的 Flow
     flow = parseFlow(读取文件)
-    adapter = PiAgentIntegrationAdapter(当前 Pi CLI 桥接器)
-    store = JsonFileRunStore(".pi/flow-runs.json")
-    coordinator = FlowCoordinator(flow, store, AgentRunModel(adapter))
-
-    如果首节点是“复用Agent”:
-        coordinator.run(用户任务, 当前 Pi 会话引用)
+    创建 PiAgentIntegrationAdapter、JsonFileRunStore、FlowCoordinator
+    如果首节点是复用Agent:
+        coordinator.run(任务, 当前 Pi 会话引用)
     否则:
-        coordinator.run(用户任务)
+        coordinator.run(任务)
+    无论成功或失败都清理扩展中的活动状态
 ```
+<!-- /source-guide:start-flow -->
 
-协调器的主循环位于 `runtime.ts` 的 `FlowCoordinator.run`：
+入口把 Pi CLI/TUI 的上下文转换为运行时依赖，不解释 Mermaid 图，也不选择节点去向。
 
-```text
-run(任务):
-    run = 创建状态为 running 的运行记录
-    保存 run
-    如有已有 Agent，会话模型接管它
+### 2. 解析 Flow
 
-    当前节点 = Flow 首节点
-    当前输入 = 任务
+<!-- source-guide:parse-flow -->
+<!-- source-guide:location:parse-flow -->
+**源码：** [src/parser.ts:44-82](../src/parser.ts#L44)，`解析 Flow`
+<!-- /source-guide:location:parse-flow -->
 
-    循环:
-        本次结果 = executeNode(run, 当前节点, 当前输入)
-        去向 = 流程定义[当前节点][本次结果.result]
-
-        如果去向是结束:
-            将 run 标记为 completed，保存，解除 Agent 绑定，返回
-
-        如果去向是普通节点:
-            当前节点 = 去向节点
-            当前输入 = 本次结果.content
-            保存 run
-            继续循环
-
-        如果去向是并行开始点:
-            分支结果 = executeParallel(当前输入)
-            执行该并行区的汇合命令节点
-            根据汇合结果继续普通路由，或结束
-
-    任何异常:
-        将 run 标记为 failed，保存，解除 Agent 绑定，再抛出异常
+```mermaid
+flowchart TD
+  A[Markdown] --> B[读取元信息]
+  B --> C[提取唯一 Mermaid 图]
+  C --> D[解析节点、边和并行开始点]
+  D --> E[解析同名二级标题中的动作和结果]
+  E --> F[校验并连接图]
+  F --> G[FlowDefinition]
 ```
-
-这里的关键是：每个节点的结果由 `result` 和 `content` 组成。`result` 决定走哪条 Mermaid 边，`content` 成为下一个节点的 `{outcome}` 输入。
-
-## 一个节点
-
-每次进入节点，无论是初次进入、循环重试还是并行分支，都会建立一条独立的节点运行记录。
-
-```text
-executeNode(run, 节点引用, 输入, 可选分支结果):
-    node = Flow 定义中找到节点
-    record = 创建节点运行记录（输入、开始时间）
-    保存 record
-
-    如果 node 是“执行自定义命令”:
-        command = 将 {outcome} 和 {分支.outcome} 填入命令 JSON
-        commandResult = 执行子进程，向 stdin 写 JSON
-        outcome = { result: "已执行", content: commandResult }
-
-    否则 node 是 Agent 节点:
-        prompt = 将 {outcome} 填入节点提示，并附上允许的结果列表
-        outcome, session = AgentRunModel.executeNode(...)
-        record.session = session
-
-    record.outcome = outcome
-    record.completedAt = 当前时间
-    保存 record
-    返回 record 和 outcome
-```
-
-命令节点没有业务判断，固定产生 `已执行`。Agent 节点必须通过 `submit_flow_outcome` 恰好提交一次允许的结果。
-
-## 并行与汇合
-
-并行只用于命令节点，Agent 节点始终串行。并行开始前的输入会被冻结，同一份输入交给每个分支；所有分支结束后才执行汇合节点。
-
-```text
-executeParallel(run, 并行开始点, 输入):
-    round = 创建并行轮次记录，保存原始输入
-    run 的当前节点置空，当前并行轮次 = round
-    保存 run
-
-    同时执行每个分支节点:
-        executeNode(run, 分支节点, 输入)
-        将分支的节点记录 ID 写入 round
-
-    返回 { input, 以分支节点引用为键的结果集合 }
-
-执行汇合节点时:
-    {outcome} 使用并行开始前被冻结的 input
-    {分支.outcome} 使用本轮对应分支的完整结果
-```
-
-## Flow 如何被解析和校验
-
-`parser.ts` 不负责运行任务。它把 Flow Markdown 转成 `FlowDefinition`，并在运行前拒绝结构不合法的文件。
 
 ```text
 parseFlow(Markdown, 文件名):
-    id = 文件名去掉扩展名
-    metadata = 读取唯一的 name 和 description
-    graph = 读取唯一的 Mermaid flowchart TD
-    sections = 读取每个二级标题下的动作和三级结果说明
-
-    为 Mermaid 中每个工作节点:
-        找到同名二级标题
-        将动作解析为 新建Agent / 复用Agent / 执行自定义命令
-        建立节点和结果说明
-
-    校验并连接图:
-        start 只能无条件指向一个工作节点
-        每条工作节点出边都必须有对应结果名
-        命令节点只能有“已执行”结果
-        并行分支必须是命令节点，且汇合到同一个命令节点
-        所有工作节点必须可达，并至少有一条路径抵达 finish
-
+    id = 从文件名取得标识
+    metadata = 校验唯一且非空的 name、description
+    graph = 解析唯一的 flowchart TD
+    sections = 解析每个节点标题下的动作和结果说明
+    为每个图节点合并对应 section
+    校验可达性、结果边、命令节点、并行和汇合约束
     返回 FlowDefinition
 ```
+<!-- /source-guide:parse-flow -->
 
-`renderCommandRequest` 在真正执行命令前再替换 `{outcome}` 和并行分支结果。这样解析阶段保留的是模板，运行阶段才使用某一次任务的数据。
+这个函数只构造可信的静态定义。它不执行命令、不创建 Agent，也不保存某次运行状态。
 
-## Agent 与 Pi 的边界
+### 3. 驱动一次运行
 
-运行时不直接调用 Pi SDK，而是依赖 `AgentIntegrationAdapter`。`AgentRunModel` 负责“本次 Flow 运行绑定哪个 Agent”，`PiAgentIntegrationAdapter` 负责“如何创建 Pi 会话、发送提示、接收工具调用”。
+<!-- source-guide:coordinator-run -->
+<!-- source-guide:location:coordinator-run -->
+**源码：** [src/runtime.ts:298-395](../src/runtime.ts#L298)，`驱动一次运行`
+<!-- /source-guide:location:coordinator-run -->
 
-```text
-AgentRunModel.executeNode(运行 ID, 节点动作, 提示, 允许结果):
-    如果动作是“新建Agent”:
-        释放旧绑定（如有）
-        adapter.createAgent()
-        保存新的运行级绑定
-
-    如果动作是“复用Agent”且没有绑定:
-        报错
-
-    adapter.executeNode(连接, 节点执行 ID, 提示, 允许结果, 提交回调)
-
-    提交回调只接受一次，并校验:
-        节点执行 ID 一致
-        结果名在允许列表内
-
-    未提交结果就结束的节点视为失败
+```mermaid
+flowchart TD
+  A[创建 running 运行记录] --> B[开始或接管 Agent 绑定]
+  B --> C[executeNode]
+  C --> D{结果的去向}
+  D -->|结束| E[标记 completed 并解除绑定]
+  D -->|普通节点| C
+  D -->|并行开始点| F[executeParallel]
+  F --> G[执行汇合节点]
+  G --> D
+  C --> H[异常]
+  F --> H
+  G --> H
+  H --> I[标记 failed 并解除绑定]
 ```
 
-Pi 的两种执行路径如下：
-
 ```text
-SDK 路径:
-    创建或恢复 Pi AgentSession
-    session.prompt(节点提示)
-    Agent 调用 submit_flow_outcome
-    工具回调把结果交给运行时
+run(任务, 可选已有会话):
+    创建并保存 running 的 FlowRunRecord
+    让 AgentRunModel 建立或接管绑定
+    从首节点开始循环:
+        结果 = executeNode(当前节点, 当前输入)
+        去向 = 查询(当前节点, 结果.result)
+        结束时完成运行并返回
+        普通节点时保存下一节点和结果内容，继续循环
+        并行时执行分支，再执行汇合节点并继续路由
+    任意异常时记录失败，解除绑定后重新抛出
+```
+<!-- /source-guide:coordinator-run -->
 
-CLI 路径:
-    extension 在当前可见会话发送后续提示
-    工具调用先暂存为候选结果
-    turn_end 后 Pi 已持久化消息，adapter 再正式提交结果
-    返回这次交互的起止消息引用
+协调器是唯一改变 `FlowRunRecord`、`NodeRunRecord` 和节点输入的模块。
+
+### 4. 执行单个节点
+
+<!-- source-guide:execute-node -->
+<!-- source-guide:location:execute-node -->
+**源码：** [src/runtime.ts:423-472](../src/runtime.ts#L423)，`执行单个节点`
+<!-- /source-guide:location:execute-node -->
+
+```mermaid
+flowchart TD
+  A[按节点引用取得定义] --> B[创建 NodeRunRecord]
+  B --> C{动作种类}
+  C -->|执行自定义命令| D[替换输入和分支结果引用]
+  D --> E[执行命令，固定得到已执行]
+  C -->|新建Agent 或 复用Agent| F[渲染提示和允许结果]
+  F --> G[AgentRunModel.executeNode]
+  E --> H[保存结果和完成时间]
+  G --> H
+  H --> I[返回记录和 NodeOutcome]
 ```
 
-CLI 路径延迟到 `turn_end` 提交，是为了让节点记录引用完整、已持久化的 Pi 会话交互。
+```text
+executeNode(run, 节点引用, 输入, 分支结果):
+    node = 从 FlowDefinition 取得节点
+    record = 创建并保存本次 NodeRunRecord
+    如果是命令节点:
+        request = 替换 {outcome} 与 {分支.outcome}
+        outcome = 已执行 + 命令执行结果
+    否则:
+        prompt = 注入输入和允许结果
+        outcome, session = AgentRunModel.executeNode(...)
+        record.session = session
+    保存 outcome 和 completedAt
+    返回 record、outcome
+```
+<!-- /source-guide:execute-node -->
 
-## 源码阅读顺序
+循环重试与并行分支也调用这个函数，因此每次进入节点都留下独立记录。
 
-按下列顺序打开源码，并在每个文件中对照上面的同名伪代码：
+### 5. 执行并行分支
 
-| 顺序 | 源码 | 阅读目标 |
+<!-- source-guide:execute-parallel -->
+<!-- source-guide:location:execute-parallel -->
+**源码：** [src/runtime.ts:397-421](../src/runtime.ts#L397)，`执行并行分支`
+<!-- /source-guide:location:execute-parallel -->
+
+```mermaid
+flowchart TD
+  A[收到并行开始点和输入] --> B[创建输入快照和并行轮次]
+  B --> C[清空当前节点，保存当前轮次]
+  C --> D[同时执行分支一]
+  C --> E[同时执行分支二]
+  C --> F[同时执行其他分支]
+  D --> G[记录分支节点运行 ID]
+  E --> G
+  F --> G
+  G --> H[返回冻结输入和按分支引用分组的结果]
+```
+
+```text
+executeParallel(run, 并行引用, 输入):
+    parallel = 取得已校验的并行定义
+    round = 保存 input 快照与分支记录表
+    将 run 切换为 currentParallelRound
+    并发执行每个分支，并回填本轮分支记录 ID
+    返回 input 快照和每个分支的 NodeOutcome
+```
+<!-- /source-guide:execute-parallel -->
+
+分支只允许命令节点。汇合节点使用的是该轮冻结的输入和该轮分支结果，不会读取历史轮次。
+
+### 6. 管理 Agent 节点
+
+<!-- source-guide:agent-execute-node -->
+<!-- source-guide:location:agent-execute-node -->
+**源码：** [src/runtime.ts:211-266](../src/runtime.ts#L211)，`管理 Agent 节点`
+<!-- /source-guide:location:agent-execute-node -->
+
+```mermaid
+flowchart TD
+  A[接收节点执行请求] --> B{动作种类}
+  B -->|新建Agent| C[释放旧绑定，创建新连接]
+  B -->|复用Agent| D{已有绑定}
+  D -->|否| E[报错]
+  D -->|是| F[执行适配器节点]
+  C --> F
+  F --> G[回调校验执行引用、结果名和单次提交]
+  G --> H{提交过结果}
+  H -->|否| I[报错]
+  H -->|是| J[返回结果和会话引用]
+```
+
+```text
+AgentRunModel.executeNode(请求):
+    新建Agent时替换运行级绑定
+    复用Agent时要求已有绑定
+    调用 adapter.executeNode，并提供一次性提交回调
+    回调校验节点执行引用和允许结果名
+    未提交结果即结束视为失败
+    返回已接受的结果与节点会话引用
+```
+<!-- /source-guide:agent-execute-node -->
+
+这一层定义跨 Agent 平台都适用的契约，不读取 Flow 图，也不决定下一条边。
+
+### 7. 执行 Pi 节点
+
+<!-- source-guide:pi-execute-node -->
+<!-- source-guide:location:pi-execute-node -->
+**源码：** [src/pi.ts:106-139](../src/pi.ts#L106)，`执行 Pi 节点`
+<!-- /source-guide:location:pi-execute-node -->
+
+```mermaid
+flowchart TD
+  A[接收已绑定连接和节点请求] --> B{运行方式}
+  B -->|SDK| C[取得 SDK 会话句柄]
+  C --> D[记录起始消息，调用 session.prompt]
+  D --> E[等待 submit_flow_outcome]
+  E --> F[返回本次交互的会话范围]
+  B -->|CLI| G[登记 pending CLI 节点]
+  G --> H[向当前可见会话发送提示]
+  H --> I[等待 turn_end 的延迟提交]
+```
+
+```text
+PiAgentIntegrationAdapter.executeNode(请求):
+    CLI 模式委托 executeCliNode，等待 turn_end 完成
+    SDK 模式要求连接存在且没有并发 pending 节点
+    保存起始消息引用和待提交状态
+    session.prompt(提示)
+    要求结果工具已提交，否则失败
+    返回会话引用和本次交互的起止引用
+```
+<!-- /source-guide:pi-execute-node -->
+
+SDK 模式在一次 `prompt` 返回后提交结果。CLI 模式必须等待 Pi 将消息持久化，下一节解释该差异。
+
+### 8. 提交 CLI 节点结果
+
+<!-- source-guide:finalize-cli-turn -->
+<!-- source-guide:location:finalize-cli-turn -->
+**源码：** [src/pi.ts:180-208](../src/pi.ts#L180)，`提交 CLI 节点结果`
+<!-- /source-guide:location:finalize-cli-turn -->
+
+```mermaid
+flowchart TD
+  A[Pi turn_end 事件] --> B{存在候选结果且未提交}
+  B -->|否| C[直接返回]
+  B -->|是| D[读取持久化后的末尾消息引用]
+  D --> E[调用运行时提交回调]
+  E --> F[标记已提交并完成等待中的节点]
+  E --> G[失败时拒绝等待中的节点]
+  F --> H[清理 pending CLI 状态]
+  G --> H
+```
+
+```text
+finalizeCliTurn():
+    没有候选结果或已提交时直接返回
+    读取当前叶消息作为本次交互终点
+    将候选 result、content 与消息范围提交给运行时
+    成功时完成 executeCliNode 的等待 Promise
+    失败时拒绝该 Promise
+    最终清理 pendingCli
+```
+<!-- /source-guide:finalize-cli-turn -->
+
+CLI 路径把工具调用先保存为候选结果，直到 `turn_end` 才正式提交，从而确保 `NodeRunRecord` 指向完整且已持久化的会话交互。
+
+## 建议阅读顺序
+
+| 目标 | 首先阅读 | 然后阅读 |
 | --- | --- | --- |
-| 1 | `src/types.ts` | 认识 `FlowDefinition`、`FlowRunRecord`、`NodeRunRecord`、`NodeOutcome` 和适配器接口。 |
-| 2 | `src/parser.ts` | 看静态 Flow 如何被解析、校验和连线。 |
-| 3 | `src/runtime.ts` | 看 `FlowCoordinator.run`、`executeNode`、`executeParallel` 如何驱动状态机。 |
-| 4 | `src/pi.ts` | 看适配器如何把 Agent 节点翻译成 Pi 会话调用。 |
-| 5 | `src/extension.ts` | 看 Pi CLI/TUI 如何启动运行时，并在事件中提交节点结果。 |
-| 6 | `test/runtime.test.ts` 与 `test/parser.test.ts` | 对照正常路由、循环、并行和非法 Flow 的可执行例子。 |
-
-`src/directory.ts` 仅负责按文件名发现和载入 Flow，`src/index.ts` 仅导出公共模块，可以最后阅读。
+| 理解 Flow 文件为何会被拒绝 | 解析 Flow | `parser.ts`中的各项校验和 `test/parser.test.ts`。 |
+| 排查节点没有走到预期分支 | 驱动一次运行 | 执行单个节点，再查看运行记录中的 `result` 与 `content`。 |
+| 排查并行汇合输入错误 | 执行并行分支 | 执行单个节点与 Flow 规范中的并行约束。 |
+| 排查 Agent 提交失败或结果丢失 | 管理 Agent 节点 | 执行 Pi 节点、提交 CLI 节点结果与 `test/adapter-contract.test.ts`。 |
+| 排查 Pi CLI 中的新会话或后续提示 | 启动 Flow | 执行 Pi 节点和 `extension.ts`中的事件绑定。 |
