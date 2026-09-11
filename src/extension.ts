@@ -51,7 +51,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 			const promise = new Promise<void>((resolve, reject) => {
 				state.pendingSessionReplacement = { resolve, reject };
 			});
-			state.sendCommand("/new");
+			state.sendCommand("/flow-new-session");
 			await promise;
 		},
 		getSessionReference() {
@@ -105,8 +105,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 		}),
 	);
 
-	pi.registerCommand("new", {
-		description: "Start a fresh Pi session for an injected Flow command",
+	pi.registerCommand("flow-new-session", {
+		description: "Start a fresh Pi session for an injected Flow transition",
 		handler: async (_args, ctx) => {
 			const pending = state.pendingSessionReplacement;
 			if (!pending) return;
