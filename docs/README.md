@@ -8,6 +8,7 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | --- | --- |
 | [Flow 概览](flow-overview.md) | 理解 Flow 文件、一次运行、节点结果、并行和记录。 |
 | [Flow 规范](flow-spec.md) | 编写、生成或检查可运行的 Flow 文件。 |
+| [源码伪代码阅读图](source-pseudocode-guide.md) | 用压缩伪代码建立从 Flow 文件到 Pi 会话的源码主线。 |
 | [Agent Flow Runtime 总体设计](agent-flow-runtime-design.md) | 理解 Flow 如何与一次具体任务、Agent 和命令结合。 |
 | [Agent Flow Runtime 架构设计](agent-flow-runtime-architecture.md) | 了解解释器、协调器、统一 Agent 运行模型和记录存储的职责边界。 |
 
