@@ -25,6 +25,7 @@
 		"dist",
 		"src",
 		"docs",
+		"skills",
 		"README.md",
 		"examples"
 	],
@@ -40,6 +41,9 @@
 		"@earendil-works/pi-coding-agent": "*",
 		"typebox": "*"
 	},
+	"dependencies": {
+		"yaml": "2.9.0"
+	},
 	"devDependencies": {
 		"@earendil-works/pi-coding-agent": "0.85.1",
 		"@biomejs/biome": "2.3.5",
@@ -53,6 +57,9 @@
 	"pi": {
 		"extensions": [
 			"./src/extension.ts"
+		],
+		"skills": [
+			"./skills"
 		]
 	}
 }
