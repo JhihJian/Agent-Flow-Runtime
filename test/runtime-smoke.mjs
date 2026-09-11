@@ -245,11 +245,15 @@ test("keeps an accepted adapter interaction reference queryable", async () => {
 	assert.deepEqual(await adapter.getNodeSession(executed.session), messages);
 });
 
-test("reuses the visible CLI session when a new-agent node loops", async () => {
+test("creates a new CLI session when a new-agent node loops", async () => {
+	let sessionNumber = 0;
 	const bridge = {
 		sendNodePrompt() {},
+		async createNewSession() {
+			sessionNumber += 1;
+		},
 		getSessionReference() {
-			return "visible-session";
+			return `visible-session-${sessionNumber}`;
 		},
 		getLeafEntryId() {
 			return undefined;
@@ -261,6 +265,7 @@ test("reuses the visible CLI session when a new-agent node loops", async () => {
 	const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
 	const first = await adapter.createAgent({ runId: "run" });
 	const second = await adapter.createAgent({ runId: "run" });
-	assert.equal(second.id, first.id);
-	assert.equal(second.sessionReference, "visible-session");
+	assert.notEqual(second.id, first.id);
+	assert.notEqual(second.sessionReference, first.sessionReference);
+	assert.equal(second.sessionReference, "visible-session-2");
 });

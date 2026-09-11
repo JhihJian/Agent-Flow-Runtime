@@ -80,7 +80,7 @@ Pi CLI 启动时已经创建了一个`AgentSession`。Pi Flow 扩展通过扩展
 - Flow 首个 Agent 动作是`复用Agent`时，启动入口先将当前 Pi 会话作为已有绑定交给统一 Agent 运行模型。
 - 后续`复用Agent`持续使用当前会话。
 
-Pi CLI 入口的 MVP 使用一个可见 Pi 会话，适合“首个节点新建Agent、后续节点复用Agent”的常用 Flow。需要在中途创建额外 Agent 会话的 Flow 由 SDK 入口执行。两类入口共用同一份 Flow 文件，无需添加 Pi 专用动作。
+Pi CLI 入口通过扩展注册的`new`命令接收注入的`/new`，并调用`ctx.newSession()`替换当前会话。每个`新建Agent`都从清空上下文的新会话开始，Flow 协调器通过进程级交接状态跨扩展重载继续；`复用Agent`才继续当前会话。两类入口共用同一份 Flow 文件，无需添加 Pi 专用动作。
 
 ## 5. 一次执行如何开始
 
@@ -130,7 +130,7 @@ Flow 的终态以结果提交工具的结构化内容为准，脚本应从 JSON 
 
 ## 8. 实现依据
 
-当前实现位于[Pi Flow 扩展入口](../src/extension.ts)，安装和运行命令见[实现 README](../README.md)。CLI MVP 使用一个可见 Pi 会话；首个`新建Agent`建立绑定，后续`复用Agent`和循环再次进入`新建Agent`都继续使用该会话。需要多个真正独立 Agent 会话时应使用 SDK 宿主。
+当前实现位于[Pi Flow 扩展入口](../src/extension.ts)，安装和运行命令见[实现 README](../README.md)。CLI 的`/new`注入由扩展命令接收，命令内部调用`ctx.newSession()`，并在`withSession`中绑定新会话；Flow 协调器和待执行节点通过进程级交接状态继续。交互界面手工输入的内置`/new`仍由 Pi 自己处理，Flow 运行期间不应手工切换会话。
 
 - [Pi CLI 参数和启动流程](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/cli/args.ts)
 - [Pi 主流程](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/main.ts)

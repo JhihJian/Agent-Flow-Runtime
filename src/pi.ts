@@ -40,6 +40,7 @@ interface PendingCliNode extends PendingSdkNode {
 
 export interface PiCliBridge {
 	sendNodePrompt(prompt: string): void;
+	createNewSession(): Promise<void>;
 	getSessionReference(): string;
 	getLeafEntryId(): string | undefined;
 	getMessages(
@@ -59,7 +60,6 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	private readonly handles = new Map<string, SdkHandle>();
 	private readonly sessionHandles = new Map<string, SdkHandle>();
 	private pendingCli?: PendingCliNode;
-	private cliConnection?: AgentConnection;
 	private readonly options: PiAgentAdapterOptions;
 
 	constructor(options: PiAgentAdapterOptions = {}) {
@@ -71,8 +71,8 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		cwd?: string;
 	}): Promise<AgentConnection> {
 		if (this.options.cliBridge) {
-			const connection = this.createCliConnection(request.runId);
-			return connection;
+			await this.options.cliBridge.createNewSession();
+			return this.createCliConnection(request.runId);
 		}
 		return this.createSdkConnection(request.runId, request.cwd);
 	}
@@ -235,14 +235,12 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	private createCliConnection(runId: string): AgentConnection {
 		const bridge = this.options.cliBridge;
 		if (!bridge) throw new Error("Pi CLI bridge 不可用");
-		if (this.cliConnection) return this.cliConnection;
 		const reference = bridge.getSessionReference();
-		this.cliConnection = {
-			id: `${runId}:cli-agent`,
+		return {
+			id: `${runId}:cli-agent:${reference}`,
 			platformReference: reference,
 			sessionReference: reference,
 		};
-		return this.cliConnection;
 	}
 
 	private async executeCliNode(request: {

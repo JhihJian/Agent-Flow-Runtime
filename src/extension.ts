@@ -4,6 +4,10 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import {
+	getCliFlowState,
+	rejectPendingSessionReplacement,
+} from "./cli-state.ts";
 import { parseFlow } from "./parser.ts";
 import {
 	createFlowOutcomeTool,
@@ -13,29 +17,51 @@ import {
 import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
 import type { FlowDefinition, UnifiedMessage } from "./types.ts";
 
-interface ActiveFlow {
-	path: string;
-	promise: Promise<void>;
-}
-
 /** Install with `pi install <package>` or load with `pi -e ./dist/extension.js`. */
 export default function flowExtension(pi: ExtensionAPI) {
-	let configuredPath: string | undefined;
-	let active: ActiveFlow | undefined;
-	let adapter: PiAgentIntegrationAdapter | undefined;
+	const state = getCliFlowState();
+
+	const bindContext = (
+		ctx: ExtensionContext,
+		sendPrompt: (prompt: string) => void = (prompt) => {
+			pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+		},
+		sendCommand: (command: string) => void = (command) => {
+			pi.sendUserMessage(command, { expandPromptTemplates: true });
+		},
+	): void => {
+		state.currentContext = ctx;
+		state.sessionReference =
+			ctx.sessionManager.getSessionFile() ?? ctx.sessionManager.getSessionId();
+		state.notify = (message, level) => ctx.ui.notify(message, level);
+		state.sendNodePrompt = sendPrompt;
+		state.sendCommand = sendCommand;
+	};
 
 	const bridge: PiCliBridge = {
 		sendNodePrompt(prompt) {
-			pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+			if (!state.sendNodePrompt) throw new Error("Pi Flow 当前会话不可用");
+			state.sendNodePrompt(prompt);
+		},
+		async createNewSession() {
+			if (!state.sendCommand) throw new Error("Pi Flow 当前会话不可用");
+			if (state.pendingSessionReplacement) {
+				throw new Error("Pi Flow 已有正在进行的会话替换");
+			}
+			const promise = new Promise<void>((resolve, reject) => {
+				state.pendingSessionReplacement = { resolve, reject };
+			});
+			state.sendCommand("/new");
+			await promise;
 		},
 		getSessionReference() {
-			return adapterSessionReference;
+			return state.sessionReference;
 		},
 		getLeafEntryId() {
-			return latestContext?.sessionManager.getLeafId() ?? undefined;
+			return state.currentContext?.sessionManager.getLeafId() ?? undefined;
 		},
 		getMessages(startEntryId, endEntryId) {
-			const entries = latestContext?.sessionManager.getEntries() ?? [];
+			const entries = state.currentContext?.sessionManager.getEntries() ?? [];
 			const start = startEntryId
 				? entries.findIndex((entry) => entry.id === startEntryId) + 1
 				: 0;
@@ -65,8 +91,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 			});
 		},
 	};
-	let latestContext: ExtensionContext | undefined;
-	let adapterSessionReference = "pi-current-session";
 
 	pi.registerFlag("flow", {
 		description: "Run a Markdown Flow file",
@@ -75,36 +99,78 @@ export default function flowExtension(pi: ExtensionAPI) {
 	pi.registerTool(
 		createFlowOutcomeTool({
 			submitCliOutcome: async (outcome, content) => {
-				if (!adapter) throw new Error("Flow 尚未启动");
-				await adapter.submitCliOutcome(outcome, content);
+				if (!state.adapter) throw new Error("Flow 尚未启动");
+				await state.adapter.submitCliOutcome(outcome, content);
 			},
 		}),
 	);
 
+	pi.registerCommand("new", {
+		description: "Start a fresh Pi session for an injected Flow command",
+		handler: async (_args, ctx) => {
+			const pending = state.pendingSessionReplacement;
+			if (!pending) return;
+			try {
+				await ctx.waitForIdle();
+				const parentSession = ctx.sessionManager.getSessionFile();
+				const result = await ctx.newSession({
+					parentSession,
+					withSession: async (replacementContext) => {
+						bindContext(
+							replacementContext,
+							(prompt) => {
+								replacementContext.sendUserMessage(prompt, {
+									deliverAs: "followUp",
+								});
+							},
+							(command) => {
+								replacementContext.sendUserMessage(command, {
+									expandPromptTemplates: true,
+								});
+							},
+						);
+					},
+				});
+				if (result.cancelled) {
+					throw new Error("创建新的 Pi 会话已取消");
+				}
+				state.pendingSessionReplacement = undefined;
+				pending.resolve();
+			} catch (error) {
+				const failure =
+					error instanceof Error ? error : new Error(String(error));
+				rejectPendingSessionReplacement(failure);
+				throw error;
+			}
+		},
+	});
+
 	pi.on("session_start", (_event, ctx) => {
-		latestContext = ctx;
-		adapterSessionReference =
-			ctx.sessionManager.getSessionFile() ?? ctx.sessionManager.getSessionId();
+		bindContext(ctx);
 		const flag = pi.getFlag("flow");
-		configuredPath = typeof flag === "string" && flag.trim() ? flag : undefined;
+		if (!state.active) {
+			state.configuredPath =
+				typeof flag === "string" && flag.trim() ? flag : undefined;
+		}
 	});
 
 	pi.on("turn_end", async () => {
-		if (adapter) await adapter.finalizeCliTurn();
+		if (state.adapter) await state.adapter.finalizeCliTurn();
 	});
 
 	pi.on("input", async (event, ctx) => {
-		latestContext = ctx;
-		if (event.source === "extension" || !configuredPath)
+		bindContext(ctx);
+		if (event.source === "extension" || !state.configuredPath) {
 			return { action: "continue" };
-		await startFlow(configuredPath, event.text, ctx);
+		}
+		await startFlow(state.configuredPath, event.text, ctx);
 		return { action: "handled" };
 	});
 
 	pi.registerCommand("flow", {
 		description: "Run a Flow: /flow run <file> <task>",
 		handler: async (args, ctx) => {
-			latestContext = ctx;
+			bindContext(ctx);
 			const match = /^run\s+(\S+)\s+([\s\S]+)$/.exec(args.trim());
 			if (!match) {
 				ctx.ui.notify("用法: /flow run <文件> <任务>", "warning");
@@ -115,7 +181,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
-		if (active) await active.promise.catch(() => undefined);
+		// A session replacement reloads this extension while the coordinator
+		// continues through the process-level CLI state.
 	});
 
 	async function startFlow(
@@ -123,11 +190,13 @@ export default function flowExtension(pi: ExtensionAPI) {
 		task: string,
 		ctx: ExtensionContext,
 	): Promise<void> {
-		if (active) throw new Error(`Flow 正在运行: ${active.path}`);
+		if (state.active) throw new Error(`Flow 正在运行: ${state.active.path}`);
 		const absolutePath = isAbsolute(path) ? path : resolve(ctx.cwd, path);
+		const cwd = ctx.cwd;
 		const flow = await loadFlow(absolutePath);
-		adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
-		const store = new JsonFileRunStore(join(ctx.cwd, ".pi", "flow-runs.json"));
+		const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
+		state.adapter = adapter;
+		const store = new JsonFileRunStore(join(cwd, ".pi", "flow-runs.json"));
 		const coordinator = new FlowCoordinator(
 			flow,
 			store,
@@ -141,23 +210,25 @@ export default function flowExtension(pi: ExtensionAPI) {
 				first.action.kind === "复用Agent"
 					? {
 							existingAgentReference: bridge.getSessionReference(),
-							cwd: ctx.cwd,
+							cwd,
 						}
-					: { cwd: ctx.cwd },
+					: { cwd },
 			)
-			.then(() => ctx.ui.notify(`Flow 已完成: ${flow.name}`, "info"))
+			.then(() => {
+				state.notify?.(`Flow 已完成: ${flow.name}`, "info");
+			})
 			.catch((error) => {
-				ctx.ui.notify(
+				state.notify?.(
 					`Flow 失败: ${error instanceof Error ? error.message : String(error)}`,
 					"error",
 				);
 				throw error;
 			})
 			.finally(() => {
-				active = undefined;
-				adapter = undefined;
+				state.active = undefined;
+				state.adapter = undefined;
 			});
-		active = { path: absolutePath, promise };
+		state.active = { path: absolutePath, promise };
 		await promise;
 	}
 }

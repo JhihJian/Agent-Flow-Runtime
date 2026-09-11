@@ -59,7 +59,7 @@ For a compact source-level reading guide, see [源码伪代码阅读图](docs/so
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge.
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
 
-The Pi CLI MVP uses one visible session as the Flow's Agent carrier. It supports a first `新建Agent` action, later `复用Agent` actions, and loop re-entry into a `新建Agent` node by continuing the same visible session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
+The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/new` command and Pi's `ctx.newSession()` API. The Flow coordinator survives extension reload through process-level handoff state, and the next node prompt is sent only after the replacement session is ready. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
 
 ## Development
 

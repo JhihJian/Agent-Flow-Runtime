@@ -188,11 +188,11 @@ SDK 会话解除绑定时结束当前`AgentSession`的运行资源并调用`disp
 
 ## 9. MVP 范围
 
-MVP 支持 SDK 内嵌会话的新建与恢复、Pi CLI 当前会话绑定、单会话串行节点执行、结构化结果提交、节点交互查询和流程结束释放。Pi CLI 入口支持首个`新建Agent`和后续`复用Agent`的 Flow。模型选择、工具白名单、会话目录等运行环境配置由外部宿主或 Pi CLI 提供。
+MVP 支持 SDK 内嵌会话的新建与恢复、Pi CLI 通过扩展注入`/new`完成会话替换、单会话串行节点执行、结构化结果提交、节点交互查询和流程结束释放。每个 CLI `新建Agent`都会替换为清空上下文的新会话，`复用Agent`继续当前会话。模型选择、工具白名单、会话目录等运行环境配置由外部宿主或 Pi CLI 提供。
 
 ## 10. 实现依据
 
-当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 单会话路径在循环再次进入`新建Agent`时复用当前可见会话作为承载，以保证通用 Flow 的回环可以继续执行。
+当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 路径通过扩展注册的`new`命令接收注入的`/new`，再调用`ctx.newSession()`创建清空上下文的新会话，并用进程级交接状态恢复节点执行，不会把`新建Agent`降级为复用旧会话。
 
 - [Pi SDK：AgentSession 与 SessionManager](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)
 - [Pi RPC 模式说明](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)
