@@ -106,7 +106,7 @@ test("runs the simplify flow through a self-gated loop", async () => {
 		),
 		"simplify.md",
 	);
-	assert.deepEqual(simplify.nodes.get("simplify").successors.get("继续精简"), {
+	assert.deepEqual(simplify.nodes.get("simplify").successors.get("已精简"), {
 		kind: "node",
 		ref: "simplify",
 	});
@@ -116,15 +116,16 @@ test("runs the simplify flow through a self-gated loop", async () => {
 		store,
 		new AgentRunModel(
 			new FakeAdapter([
-				{ result: "继续精简", content: "first pass found more" },
-				{ result: "已精简", content: "second pass is sufficient" },
+				{ result: "已精简", content: "first pass found more" },
+				{ result: "已精简", content: "second pass found more" },
+				{ result: "无法精简", content: "no further simplification" },
 			]),
 		),
 	).run("review the project");
 	assert.equal(run.status, "completed");
 	assert.deepEqual(
 		(await store.listNodeRuns(run.id)).map((record) => record.nodeRef),
-		["simplify", "simplify"],
+		["simplify", "simplify", "simplify"],
 	);
 });
 
