@@ -23,7 +23,7 @@ After publishing the package, install a versioned package through Pi:
 pi install npm:@summ/agent-flow-runtime@0.1.0
 ```
 
-Pi discovers `src/extension.ts` and the bundled `skills/flow-authoring` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Core Pi packages and `typebox` are peers, while `yaml` is installed as the runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
+Pi discovers `src/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Core Pi packages and `typebox` are peers, while `yaml` is installed as the runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
 
 ## Run
 
@@ -44,7 +44,7 @@ pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
 
 In TUI, use `/flow run <文件> <任务>`. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC event streams include each `submit_flow_outcome` tool execution with `{ outcome, content }` in `details`.
 
-After installing the package, ask Pi to create a Flow and it can use the bundled `flow-authoring` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi.
+After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi.
 
 Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, outcome, Pi session reference, and Pi entry range for every Agent-node visit.
 
@@ -52,7 +52,7 @@ Flow records are stored in `.pi/flow-runs.json` under the working directory. Eac
 
 - `src/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
 - `src/directory.ts` discovers and loads Flow files by filename identifier for reuse.
-- `skills/flow-authoring/SKILL.md` guides Pi to create and check generic Flow files.
+- `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge.
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
