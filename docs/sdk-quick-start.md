@@ -41,7 +41,14 @@ flowchart LR
 
 ## 3. 最小可运行示例
 
-以下示例不需要模型和 API Key，用一个假适配器代替 Pi 会话，验证组装和理解结果流转。`node --import tsx demo.ts` 直接运行。
+以下示例不需要模型和 API Key，用一个假适配器代替 Pi 会话，验证组装和理解结果流转。示例使用 TypeScript 和顶层 await，先在项目里准备两个条件：
+
+```bash
+npm pkg set type=module           # 顶层 await 需要 ESM，npm init 默认 commonjs
+npm install --save-dev tsx        # TypeScript 执行器，不是本包的依赖
+```
+
+然后把以下内容保存为 `demo.ts`，运行 `node --import tsx demo.ts`。
 
 ```typescript
 import {
@@ -169,7 +176,7 @@ SDK 宿主自己决定持久化位置，运行时不做隐藏写入：
 | Flow 运行记录 | 传给 `RunStore` 的位置；`JsonFileRunStore` 写入指定 JSON 文件 |
 | 内存模式 | `InMemoryRunStore` 不落盘，适合测试 |
 
-Pi 会话日志与 Pi CLI 交互模式的会话同目录同格式：工作目录路径中的 `/` 和 `:` 被替换为 `-` 并以 `--` 包裹。例如 `cwd` 为 `/data/dev/SUMM` 时，会话目录是 `~/.pi/agent/sessions/--data-dev-SUMM--`。因此 SDK 创建的会话可以被 `pi -r` 找回并继续。
+Pi 会话日志与 Pi CLI 交互模式的会话同目录同格式：工作目录路径中的 `/` 和 `:` 被替换为 `-` 并以 `--` 包裹。例如 `cwd` 为 `/data/dev/SUMM` 时，会话目录是 `~/.pi/agent/sessions/--data-dev-SUMM--`。因此 SDK 创建的会话可以被 `pi -r` 找回并继续。会话 jsonl 文件在首次消息写入后才落盘，仅创建会话不执行节点不会产生文件。
 
 ## 6. 恢复与接管
 
