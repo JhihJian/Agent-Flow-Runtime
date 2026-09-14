@@ -1,6 +1,6 @@
 # Agent Flow Runtime
 
-`@summ/agent-flow-runtime` executes portable Markdown Flow files. A Flow controls node routing, gates, retries, command-only parallel checks, and explicit joins. Agent-specific behavior stays outside the Markdown definition.
+`@jhihjian/agent-flow-runtime` executes portable Markdown Flow files. A Flow controls node routing, gates, retries, command-only parallel checks, and explicit joins. Agent-specific behavior stays outside the Markdown definition.
 
 Included examples:
 
@@ -12,7 +12,7 @@ Included examples:
 Install the published package through Pi:
 
 ```bash
-pi install npm:@summ/agent-flow-runtime
+pi install npm:@jhihjian/agent-flow-runtime
 ```
 
 Or install directly from GitHub without npm:
@@ -32,7 +32,7 @@ pi install /absolute/path/to/Agent-Flow-Runtime
 After publishing the package, install a versioned package through Pi:
 
 ```bash
-pi install npm:@summ/agent-flow-runtime@0.1.0
+pi install npm:@jhihjian/agent-flow-runtime@0.1.0
 ```
 
 Pi discovers `src/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Core Pi packages and `typebox` are peers, while `yaml` is installed as the runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
