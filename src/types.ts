@@ -17,6 +17,8 @@ export interface CommandRequest {
 	command: string;
 	args?: string[];
 	stdin?: FlowValue;
+	/** 命令进程的工作目录；缺省时继承当前进程 cwd。 */
+	cwd?: string;
 }
 
 export interface CommandAction {

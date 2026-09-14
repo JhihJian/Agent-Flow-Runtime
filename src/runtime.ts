@@ -158,6 +158,7 @@ export class ProcessCommandExecutor implements CommandExecutor {
 		return await new Promise((resolve, reject) => {
 			const child = spawn(request.command, request.args ?? [], {
 				stdio: ["pipe", "pipe", "pipe"],
+				cwd: request.cwd,
 			});
 			let stdout = "";
 			let stderr = "";
@@ -644,16 +645,19 @@ export class FlowCoordinator {
 		}
 		let outcome: NodeOutcome;
 		if (node.action.kind === "执行自定义命令") {
-			const request = renderCommandRequest(
-				node.action.request,
-				input,
-				branchOutcomes,
-			);
+			const request = {
+				...renderCommandRequest(node.action.request, input, branchOutcomes),
+				cwd,
+			};
+			const commandResult = await this.commandExecutor.execute(request);
 			outcome = {
 				result: "已执行",
-				content: (await this.commandExecutor.execute(
-					request,
-				)) as unknown as FlowValue,
+				content: {
+					status: commandResult.status,
+					exitCode: commandResult.exitCode,
+					stdout: commandResult.stdout,
+					stderr: commandResult.stderr,
+				},
 			};
 		} else {
 			const result = await this.agentModel.executeNode({

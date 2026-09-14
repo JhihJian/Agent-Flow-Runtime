@@ -287,8 +287,13 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 				}),
 			}),
 			executionMode: "sequential",
-			execute: async (_id, params) => {
-				await this.submitSdkOutcome(params.outcome, params.content);
+			execute: async (_id, params, _signal, _onUpdate, ctx) => {
+				const sessionFile = ctx?.sessionManager.getSessionFile();
+				await this.submitSdkOutcome(
+					params.outcome,
+					params.content,
+					sessionFile,
+				);
 				return {
 					content: [
 						{ type: "text", text: `Flow outcome submitted: ${params.outcome}` },
@@ -303,11 +308,9 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	private async submitSdkOutcome(
 		outcome: string,
 		content: string,
+		sessionFile?: string,
 	): Promise<void> {
-		const pending = [...this.handles.values()]
-			.map((handle) => handle.pending)
-			.find((value) => value !== undefined);
-		if (!pending) throw new Error("当前没有等待结果的 Flow 节点");
+		const pending = this.resolvePending(sessionFile);
 		if (pending.submitted) throw new Error("当前 Flow 节点已经提交结果");
 		if (!pending.outcomes.some((option) => option.name === outcome))
 			throw new Error(`当前节点不允许结果: ${outcome}`);
@@ -317,6 +320,23 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			content,
 		});
 		pending.submitted = true;
+	}
+
+	/** 根据发起提交的 Pi 会话定位等待结果的节点，避免并发 Flow 会话串号。 */
+	private resolvePending(sessionFile?: string): PendingSdkNode {
+		if (sessionFile) {
+			const handle = this.sessionHandles.get(sessionFile);
+			if (!handle || !handle.pending)
+				throw new Error("当前会话没有等待结果的 Flow 节点");
+			return handle.pending;
+		}
+		const pending = [...this.handles.values()]
+			.map((handle) => handle.pending)
+			.filter((value) => value !== undefined);
+		if (pending.length === 0) throw new Error("当前没有等待结果的 Flow 节点");
+		if (pending.length > 1)
+			throw new Error("存在多个并发 Flow 节点，无法确定结果归属会话");
+		return pending[0];
 	}
 }
 
