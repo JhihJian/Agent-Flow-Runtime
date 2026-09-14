@@ -15,19 +15,25 @@ class FakeAdapter {
 	constructor(outcomes) {
 		this.outcomes = outcomes;
 		this.released = 0;
+		this.created = [];
+		this.takenOver = [];
+		this.executed = [];
 	}
 
 	async createAgent({ runId }) {
+		this.created.push(runId);
 		return { id: runId, platformReference: runId };
 	}
 
 	async takeOverAgent({ agentReference }) {
+		this.takenOver.push(agentReference);
 		return { id: agentReference, platformReference: agentReference };
 	}
 
 	async executeNode(request) {
 		const outcome = this.outcomes.shift();
 		if (!outcome) throw new Error("Fake Agent 缺少预设结果");
+		this.executed.push(request.nodeExecutionReference);
 		await request.submitOutcome({
 			nodeExecutionReference: request.nodeExecutionReference,
 			...outcome,
@@ -175,6 +181,210 @@ test("records repeated gate visits independently", async () => {
 		(await store.listNodeRuns(run.id)).map((record) => record.nodeRef),
 		["review", "review"],
 	);
+});
+
+test("resumes an interrupted new-agent node in its persisted Pi session", async () => {
+	const flow = await fixture("ordinary.md");
+	const adapter = new FakeAdapter([
+		{ result: "已分析", content: "analysis" },
+		{ result: "已完成", content: "done" },
+	]);
+	const store = new InMemoryRunStore();
+	await store.createRun({
+		id: "interrupted-run",
+		flowId: flow.id,
+		task: "task",
+		status: "running",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		flowPath: "/flows/ordinary.md",
+		cwd: "/work",
+		sessionReference: "saved-pi-session",
+		currentNodeRef: "analyze",
+		currentInput: "task",
+	});
+	await store.createNodeRun({
+		id: "interrupted-node",
+		runId: "interrupted-run",
+		nodeRef: "analyze",
+		input: "task",
+		startedAt: "2026-01-01T00:01:00.000Z",
+	});
+
+	const result = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(adapter),
+	).resume("interrupted-run", { cwd: "/work" });
+
+	assert.equal(result.status, "completed");
+	assert.deepEqual(adapter.takenOver, ["saved-pi-session"]);
+	assert.deepEqual(adapter.created, []);
+	assert.deepEqual(await store.listRunningRuns(), []);
+	assert.equal((await store.listNodeRuns(result.id)).length, 3);
+});
+
+test("routes a completed checkpoint without re-executing its node", async () => {
+	const flow = await fixture("ordinary.md");
+	const adapter = new FakeAdapter([{ result: "已完成", content: "done" }]);
+	const store = new InMemoryRunStore();
+	await store.createRun({
+		id: "completed-checkpoint-run",
+		flowId: flow.id,
+		task: "task",
+		status: "running",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		sessionReference: "saved-pi-session",
+		currentNodeRef: "analyze",
+		currentInput: "task",
+		currentNodeRunId: "completed-node",
+	});
+	await store.createNodeRun({
+		id: "completed-node",
+		runId: "completed-checkpoint-run",
+		nodeRef: "analyze",
+		input: "task",
+		startedAt: "2026-01-01T00:01:00.000Z",
+		completedAt: "2026-01-01T00:02:00.000Z",
+		outcome: { result: "已分析", content: "analysis" },
+	});
+
+	const result = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(adapter),
+	).resume("completed-checkpoint-run");
+
+	assert.equal(result.status, "completed");
+	assert.equal(adapter.executed.length, 1);
+	assert.equal((await store.listNodeRuns(result.id)).length, 2);
+});
+
+test("reuses completed parallel branches and restores their join inputs", async () => {
+	const flow = await fixture("command-parallel.md");
+	const adapter = new FakeAdapter([{ result: "通过", content: "approved" }]);
+	const commands = new FakeCommandExecutor();
+	const store = new InMemoryRunStore();
+	await store.createRun({
+		id: "parallel-run",
+		flowId: flow.id,
+		task: "task",
+		status: "running",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		sessionReference: "saved-pi-session",
+		currentInput: "check task",
+		currentParallelRound: {
+			id: "parallel-round",
+			parallelRef: "parallel",
+			input: "check task",
+			branchNodeRunIds: { test: "completed-test" },
+		},
+	});
+	await store.createNodeRun({
+		id: "completed-test",
+		runId: "parallel-run",
+		nodeRef: "test",
+		input: "check task",
+		startedAt: "2026-01-01T00:01:00.000Z",
+		completedAt: "2026-01-01T00:02:00.000Z",
+		outcome: { result: "已执行", content: { status: "success" } },
+	});
+
+	const result = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(adapter),
+		commands,
+	).resume("parallel-run");
+
+	assert.equal(result.status, "completed");
+	assert.deepEqual(commands.requests.map((request) => request.command).sort(), [
+		"lint",
+		"merge",
+	]);
+	assert.equal(
+		commands.requests.find((request) => request.command === "merge")?.stdin.test
+			.result,
+		"已执行",
+	);
+});
+
+test("fails an interrupted custom command instead of replaying its side effect", async () => {
+	const flow = await fixture("command-parallel.md");
+	const commands = new FakeCommandExecutor();
+	const store = new InMemoryRunStore();
+	await store.createRun({
+		id: "interrupted-command-run",
+		flowId: flow.id,
+		task: "task",
+		status: "running",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		currentNodeRef: "merge",
+		currentInput: "check task",
+		currentNodeRunId: "interrupted-command",
+	});
+	await store.createNodeRun({
+		id: "interrupted-command",
+		runId: "interrupted-command-run",
+		nodeRef: "merge",
+		input: "check task",
+		startedAt: "2026-01-01T00:01:00.000Z",
+	});
+
+	await assert.rejects(
+		() =>
+			new FlowCoordinator(
+				flow,
+				store,
+				new AgentRunModel(new FakeAdapter([])),
+				commands,
+			).resume("interrupted-command-run"),
+		/无法安全自动重试/,
+	);
+
+	assert.deepEqual(commands.requests, []);
+	assert.equal(
+		(await store.getRun("interrupted-command-run"))?.status,
+		"failed",
+	);
+});
+
+test("does not start other parallel branches when one command was interrupted", async () => {
+	const flow = await fixture("command-parallel.md");
+	const commands = new FakeCommandExecutor();
+	const store = new InMemoryRunStore();
+	await store.createRun({
+		id: "interrupted-parallel-run",
+		flowId: flow.id,
+		task: "task",
+		status: "running",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		currentParallelRound: {
+			id: "interrupted-round",
+			parallelRef: "parallel",
+			input: "check task",
+			branchNodeRunIds: { test: "interrupted-test" },
+		},
+	});
+	await store.createNodeRun({
+		id: "interrupted-test",
+		runId: "interrupted-parallel-run",
+		nodeRef: "test",
+		input: "check task",
+		startedAt: "2026-01-01T00:01:00.000Z",
+	});
+
+	await assert.rejects(
+		() =>
+			new FlowCoordinator(
+				flow,
+				store,
+				new AgentRunModel(new FakeAdapter([])),
+				commands,
+			).resume("interrupted-parallel-run"),
+		/无法安全自动重试/,
+	);
+
+	assert.deepEqual(commands.requests, []);
 });
 
 test("rejects an adapter result outside the node's declared options", async () => {

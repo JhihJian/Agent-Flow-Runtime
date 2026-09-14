@@ -25,6 +25,8 @@ const fixture = (name: string) =>
 class FakeAdapter implements AgentIntegrationAdapter {
 	readonly executed: string[] = [];
 	readonly released: string[] = [];
+	readonly created: string[] = [];
+	readonly takenOver: string[] = [];
 	readonly sessions = new Map<string, UnifiedMessage[]>();
 	private readonly outcomes: Array<{ result: string; content: string }>;
 
@@ -33,6 +35,7 @@ class FakeAdapter implements AgentIntegrationAdapter {
 	}
 
 	async createAgent(request: { runId: string }): Promise<AgentConnection> {
+		this.created.push(request.runId);
 		return {
 			id: `${request.runId}:agent`,
 			platformReference: `${request.runId}:agent`,
@@ -43,6 +46,7 @@ class FakeAdapter implements AgentIntegrationAdapter {
 	async takeOverAgent(request: {
 		agentReference: string;
 	}): Promise<AgentConnection> {
+		this.takenOver.push(request.agentReference);
 		return {
 			id: "taken-over",
 			platformReference: request.agentReference,
@@ -141,6 +145,46 @@ describe("FlowCoordinator", () => {
 			"review",
 		]);
 		expect(records[1].input).toBe("try again");
+	});
+
+	it("resumes an interrupted new-agent node in its persisted Pi session", async () => {
+		const adapter = new FakeAdapter([
+			{ result: "已分析", content: "analysis" },
+			{ result: "已完成", content: "done" },
+		]);
+		const store = new InMemoryRunStore();
+		const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+		await store.createRun({
+			id: "interrupted-run",
+			flowId: flow.id,
+			task: "task",
+			status: "running",
+			startedAt: "2026-01-01T00:00:00.000Z",
+			flowPath: "/flows/ordinary.md",
+			cwd: "/work",
+			sessionReference: "saved-pi-session",
+			currentNodeRef: "analyze",
+			currentInput: "task",
+		});
+		await store.createNodeRun({
+			id: "interrupted-node",
+			runId: "interrupted-run",
+			nodeRef: "analyze",
+			input: "task",
+			startedAt: "2026-01-01T00:01:00.000Z",
+		});
+
+		const result = await new FlowCoordinator(
+			flow,
+			store,
+			new AgentRunModel(adapter),
+		).resume("interrupted-run", { cwd: "/work" });
+
+		expect(result.status).toBe("completed");
+		expect(adapter.takenOver).toEqual(["saved-pi-session"]);
+		expect(adapter.created).toEqual([]);
+		expect(await store.listRunningRuns()).toEqual([]);
+		expect(await store.listNodeRuns(result.id)).toHaveLength(3);
 	});
 
 	it("runs command branches in parallel and gives the join this round's outcomes", async () => {

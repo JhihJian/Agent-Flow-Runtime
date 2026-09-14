@@ -146,7 +146,13 @@ export interface FlowRunRecord {
 	status: "running" | "completed" | "failed";
 	startedAt: string;
 	completedAt?: string;
+	/** CLI recovery metadata. SDK hosts may omit these fields. */
+	flowPath?: string;
+	cwd?: string;
+	sessionReference?: string;
 	currentNodeRef?: string;
+	currentInput?: FlowValue;
+	currentNodeRunId?: string;
 	currentParallelRound?: ParallelRoundRecord;
 	error?: string;
 }
@@ -156,6 +162,7 @@ export interface RunStore {
 	updateRun(run: FlowRunRecord): Promise<void>;
 	getRun(runId: string): Promise<FlowRunRecord | undefined>;
 	listRuns(flowId: string): Promise<FlowRunRecord[]>;
+	listRunningRuns(): Promise<FlowRunRecord[]>;
 	createNodeRun(record: NodeRunRecord): Promise<void>;
 	updateNodeRun(record: NodeRunRecord): Promise<void>;
 	listNodeRuns(runId: string): Promise<NodeRunRecord[]>;

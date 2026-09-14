@@ -46,6 +46,12 @@ export class InMemoryRunStore implements RunStore {
 			.map(clone);
 	}
 
+	async listRunningRuns(): Promise<FlowRunRecord[]> {
+		return [...this.runs.values()]
+			.filter((run) => run.status === "running")
+			.map(clone);
+	}
+
 	async createNodeRun(record: NodeRunRecord): Promise<void> {
 		if (this.nodeRuns.has(record.id))
 			throw new Error(`节点运行已存在: ${record.id}`);
@@ -126,6 +132,11 @@ export class JsonFileRunStore extends InMemoryRunStore {
 	override async listRuns(flowId: string): Promise<FlowRunRecord[]> {
 		await this.load();
 		return super.listRuns(flowId);
+	}
+
+	override async listRunningRuns(): Promise<FlowRunRecord[]> {
+		await this.load();
+		return super.listRunningRuns();
 	}
 
 	override async createNodeRun(record: NodeRunRecord): Promise<void> {
@@ -215,6 +226,7 @@ export class AgentRunModel {
 		prompt: string;
 		outcomes: OutcomeOption[];
 		cwd?: string;
+		onConnection?: (connection: AgentConnection) => Promise<void>;
 	}): Promise<{ outcome: NodeOutcome; session: NodeSession }> {
 		let connection = this.bindings.get(request.runId);
 		if (request.action === "新建Agent") {
@@ -227,6 +239,7 @@ export class AgentRunModel {
 		} else if (!connection) {
 			throw new Error("复用Agent前必须先新建或接管 Agent");
 		}
+		await request.onConnection?.(connection);
 		let accepted: NodeOutcome | undefined;
 		let sessionReference: string | undefined;
 		let interactionReference: string | undefined;
@@ -301,6 +314,8 @@ export class FlowCoordinator {
 			runId?: string;
 			existingAgentReference?: string;
 			cwd?: string;
+			flowPath?: string;
+			sessionReference?: string;
 		} = {},
 	): Promise<FlowRunRecord> {
 		const run: FlowRunRecord = {
@@ -309,24 +324,165 @@ export class FlowCoordinator {
 			task,
 			status: "running",
 			startedAt: new Date().toISOString(),
+			flowPath: options.flowPath,
+			cwd: options.cwd,
+			sessionReference: options.sessionReference,
 			currentNodeRef: this.flow.startNodeRef,
+			currentInput: task,
 		};
 		await this.store.createRun(run);
+		return this.continueRun(run, this.flow.startNodeRef, task, options);
+	}
+
+	/** Continue a persisted running Flow after its Pi session has been resumed. */
+	async resume(
+		runId: string,
+		options: {
+			existingAgentReference?: string;
+			cwd?: string;
+		} = {},
+	): Promise<FlowRunRecord> {
+		const run = await this.store.getRun(runId);
+		if (!run) throw new Error(`Flow 运行不存在: ${runId}`);
+		if (run.flowId !== this.flow.id)
+			throw new Error(`Flow 运行不属于当前 Flow: ${runId}`);
+		if (run.status !== "running")
+			throw new Error(`Flow 运行不是执行中状态: ${runId}`);
+		if (!run.currentNodeRef && !run.currentParallelRound) {
+			throw new Error(`Flow 运行缺少可恢复的执行位置: ${runId}`);
+		}
+
+		const nodeRuns = await this.store.listNodeRuns(run.id);
+		const completedCurrentNode = run.currentNodeRunId
+			? nodeRuns.find(
+					(record) =>
+						record.id === run.currentNodeRunId &&
+						record.completedAt &&
+						record.outcome,
+				)
+			: undefined;
+		const interrupted = run.currentParallelRound
+			? undefined
+			: [...nodeRuns]
+					.reverse()
+					.find(
+						(record) =>
+							record.nodeRef === run.currentNodeRef &&
+							!record.completedAt &&
+							!record.outcome,
+					);
+		const currentNodeRef =
+			completedCurrentNode?.nodeRef ??
+			interrupted?.nodeRef ??
+			run.currentNodeRef;
+		const currentInput =
+			completedCurrentNode?.input ??
+			interrupted?.input ??
+			run.currentInput ??
+			run.task;
+		if (!currentNodeRef && !run.currentParallelRound) {
+			throw new Error(`Flow 运行缺少当前节点: ${runId}`);
+		}
+		const interruptedNode = currentNodeRef
+			? this.flow.nodes.get(currentNodeRef)
+			: undefined;
+		if (interrupted && interruptedNode?.action.kind === "执行自定义命令") {
+			return this.failInterruptedCommand(run, interrupted.nodeRef);
+		}
+
+		const resumedOptions = {
+			existingAgentReference:
+				options.existingAgentReference ?? run.sessionReference,
+			cwd: options.cwd ?? run.cwd,
+		};
 		await this.agentModel.start(
 			run.id,
-			options.existingAgentReference,
-			options.cwd,
+			resumedOptions.existingAgentReference,
+			resumedOptions.cwd,
 		);
+		return this.continueRun(
+			run,
+			currentNodeRef ?? this.flow.startNodeRef,
+			currentInput,
+			resumedOptions,
+			interruptedNode?.action.kind === "执行自定义命令"
+				? undefined
+				: interrupted?.nodeRef,
+			true,
+			completedCurrentNode?.outcome,
+		);
+	}
+
+	private async failInterruptedCommand(
+		run: FlowRunRecord,
+		nodeRef: string,
+	): Promise<never> {
+		const error = `自定义命令节点“${nodeRef}”在完成前中断，无法安全自动重试`;
+		run.status = "failed";
+		run.error = error;
+		run.completedAt = new Date().toISOString();
+		await this.store.updateRun(run);
+		throw new Error(error);
+	}
+
+	private async continueRun(
+		run: FlowRunRecord,
+		initialNodeRef: string,
+		initialInput: FlowValue,
+		options: { existingAgentReference?: string; cwd?: string },
+		resumeInterruptedNodeRef?: string,
+		agentStarted = false,
+		initialOutcome?: NodeOutcome,
+	): Promise<FlowRunRecord> {
+		if (!agentStarted) {
+			await this.agentModel.start(
+				run.id,
+				options.existingAgentReference,
+				options.cwd,
+			);
+		}
 		try {
-			let currentNodeRef = this.flow.startNodeRef;
-			let input = task;
+			let currentNodeRef = initialNodeRef;
+			let input = initialInput;
+			let branchOutcomes = new Map<string, NodeOutcome>();
+			let outcome = initialOutcome;
+			let actionOverride: "新建Agent" | "复用Agent" | undefined =
+				resumeInterruptedNodeRef ? "复用Agent" : undefined;
 			while (true) {
-				const result = await this.executeNode(
-					run,
-					currentNodeRef,
-					input,
-					options.cwd,
-				);
+				if (run.currentParallelRound) {
+					const round = run.currentParallelRound;
+					const parallel = this.flow.parallels.get(round.parallelRef);
+					if (!parallel)
+						throw new Error(`并行开始点不存在: ${round.parallelRef}`);
+					const branchResults = await this.executeParallel(
+						run,
+						parallel.ref,
+						round.input,
+						options.cwd,
+						round,
+					);
+					currentNodeRef = parallel.joinRef;
+					input = branchResults.input;
+					branchOutcomes = branchResults.outcomes;
+					run.currentNodeRef = currentNodeRef;
+					run.currentInput = input;
+					run.currentNodeRunId = undefined;
+					run.currentParallelRound = undefined;
+					await this.store.updateRun(run);
+				}
+				const result = outcome
+					? { outcome }
+					: await this.executeNode(
+							run,
+							currentNodeRef,
+							input,
+							options.cwd,
+							branchOutcomes,
+							actionOverride,
+						);
+				outcome = undefined;
+				branchOutcomes = new Map();
+				actionOverride = undefined;
 				const destination = this.destination(
 					currentNodeRef,
 					result.outcome.result,
@@ -335,6 +491,7 @@ export class FlowCoordinator {
 					run.status = "completed";
 					run.completedAt = new Date().toISOString();
 					run.currentNodeRef = undefined;
+					run.currentNodeRunId = undefined;
 					await this.store.updateRun(run);
 					await this.agentModel.end(run.id);
 					return clone(run);
@@ -343,6 +500,8 @@ export class FlowCoordinator {
 					currentNodeRef = destination.ref;
 					input = result.outcome.content;
 					run.currentNodeRef = currentNodeRef;
+					run.currentInput = input;
+					run.currentNodeRunId = undefined;
 					await this.store.updateRun(run);
 					continue;
 				}
@@ -352,10 +511,13 @@ export class FlowCoordinator {
 					run,
 					parallel.ref,
 					input,
+					options.cwd,
 				);
 				currentNodeRef = parallel.joinRef;
 				input = branchResults.input;
 				run.currentNodeRef = currentNodeRef;
+				run.currentInput = input;
+				run.currentNodeRunId = undefined;
 				run.currentParallelRound = undefined;
 				await this.store.updateRun(run);
 				const joinResult = await this.executeNode(
@@ -373,6 +535,7 @@ export class FlowCoordinator {
 					run.status = "completed";
 					run.completedAt = new Date().toISOString();
 					run.currentNodeRef = undefined;
+					run.currentNodeRunId = undefined;
 					await this.store.updateRun(run);
 					await this.agentModel.end(run.id);
 					return clone(run);
@@ -382,6 +545,8 @@ export class FlowCoordinator {
 				currentNodeRef = joinDestination.ref;
 				input = joinResult.outcome.content;
 				run.currentNodeRef = currentNodeRef;
+				run.currentInput = input;
+				run.currentNodeRunId = undefined;
 				await this.store.updateRun(run);
 			}
 		} catch (error) {
@@ -398,22 +563,53 @@ export class FlowCoordinator {
 		run: FlowRunRecord,
 		parallelRef: string,
 		input: FlowValue,
+		cwd?: string,
+		existingRound?: ParallelRoundRecord,
 	) {
 		const parallel = this.flow.parallels.get(parallelRef);
 		if (!parallel) throw new Error(`并行开始点不存在: ${parallelRef}`);
-		const round: ParallelRoundRecord = {
+		const round: ParallelRoundRecord = existingRound ?? {
 			id: randomUUID(),
 			parallelRef,
 			input,
 			branchNodeRunIds: {},
 		};
 		run.currentNodeRef = undefined;
+		run.currentInput = input;
+		run.currentNodeRunId = undefined;
 		run.currentParallelRound = round;
 		await this.store.updateRun(run);
+		const records = await this.store.listNodeRuns(run.id);
+		for (const branchRef of parallel.branches) {
+			let recordId = round.branchNodeRunIds[branchRef];
+			if (!recordId) {
+				recordId = randomUUID();
+				round.branchNodeRunIds[branchRef] = recordId;
+				await this.store.updateRun(run);
+			}
+			const existingRecord = records.find((record) => record.id === recordId);
+			if (existingRecord && !existingRecord.outcome) {
+				await this.failInterruptedCommand(run, branchRef);
+			}
+		}
 		const results = await Promise.all(
 			parallel.branches.map(async (branchRef) => {
-				const result = await this.executeNode(run, branchRef, input);
-				round.branchNodeRunIds[branchRef] = result.record.id;
+				const recordId = round.branchNodeRunIds[branchRef];
+				if (!recordId) throw new Error(`并行分支缺少执行记录: ${branchRef}`);
+				const existingRecord = records.find((record) => record.id === recordId);
+				if (existingRecord?.outcome) {
+					return [branchRef, existingRecord.outcome] as const;
+				}
+				const result = await this.executeNode(
+					run,
+					branchRef,
+					input,
+					cwd,
+					new Map(),
+					undefined,
+					false,
+					recordId,
+				);
 				return [branchRef, result.outcome] as const;
 			}),
 		);
@@ -426,17 +622,26 @@ export class FlowCoordinator {
 		input: FlowValue,
 		cwd?: string,
 		branchOutcomes: ReadonlyMap<string, NodeOutcome> = new Map(),
+		actionOverride?: "新建Agent" | "复用Agent",
+		trackAsCurrentNode = true,
+		recordId: string = randomUUID(),
 	): Promise<{ record: NodeRunRecord; outcome: NodeOutcome }> {
 		const node = this.flow.nodes.get(nodeRef);
 		if (!node) throw new Error(`工作节点不存在: ${nodeRef}`);
 		const record: NodeRunRecord = {
-			id: randomUUID(),
+			id: recordId,
 			runId: run.id,
 			nodeRef,
 			input,
 			startedAt: new Date().toISOString(),
 		};
 		await this.store.createNodeRun(record);
+		if (trackAsCurrentNode) {
+			run.currentNodeRef = nodeRef;
+			run.currentInput = input;
+			run.currentNodeRunId = record.id;
+			await this.store.updateRun(run);
+		}
 		let outcome: NodeOutcome;
 		if (node.action.kind === "执行自定义命令") {
 			const request = renderCommandRequest(
@@ -453,7 +658,7 @@ export class FlowCoordinator {
 		} else {
 			const result = await this.agentModel.executeNode({
 				runId: run.id,
-				action: node.action.kind,
+				action: actionOverride ?? node.action.kind,
 				nodeExecutionReference: record.id,
 				prompt: renderAgentPrompt(node.action.prompt, input, node),
 				outcomes: [...node.results].map(([name, description]) => ({
@@ -461,6 +666,11 @@ export class FlowCoordinator {
 					description,
 				})),
 				cwd,
+				onConnection: async (connection) => {
+					if (run.sessionReference === connection.sessionReference) return;
+					run.sessionReference = connection.sessionReference;
+					await this.store.updateRun(run);
+				},
 			});
 			outcome = result.outcome;
 			record.session = result.session;

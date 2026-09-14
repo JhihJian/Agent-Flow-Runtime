@@ -40,7 +40,7 @@ flowchart LR
 
 <!-- source-guide:start-flow -->
 <!-- source-guide:location:start-flow -->
-**源码：** [src/extension.ts:188-233](../src/extension.ts#L188)，`启动 Flow`
+**源码：** [src/extension.ts:200-252](../src/extension.ts#L200)，`启动 Flow`
 <!-- /source-guide:location:start-flow -->
 
 ```mermaid
@@ -104,7 +104,7 @@ parseFlow(Markdown, 文件名):
 
 <!-- source-guide:coordinator-run -->
 <!-- source-guide:location:coordinator-run -->
-**源码：** [src/runtime.ts:298-395](../src/runtime.ts#L298)，`驱动一次运行`
+**源码：** [src/runtime.ts:311-335](../src/runtime.ts#L311)，`驱动一次运行`
 <!-- /source-guide:location:coordinator-run -->
 
 ```mermaid
@@ -143,7 +143,7 @@ run(任务, 可选已有会话):
 
 <!-- source-guide:execute-node -->
 <!-- source-guide:location:execute-node -->
-**源码：** [src/runtime.ts:423-472](../src/runtime.ts#L423)，`执行单个节点`
+**源码：** [src/runtime.ts:619-682](../src/runtime.ts#L619)，`执行单个节点`
 <!-- /source-guide:location:execute-node -->
 
 ```mermaid
@@ -181,7 +181,7 @@ executeNode(run, 节点引用, 输入, 分支结果):
 
 <!-- source-guide:execute-parallel -->
 <!-- source-guide:location:execute-parallel -->
-**源码：** [src/runtime.ts:397-421](../src/runtime.ts#L397)，`执行并行分支`
+**源码：** [src/runtime.ts:562-617](../src/runtime.ts#L562)，`执行并行分支`
 <!-- /source-guide:location:execute-parallel -->
 
 ```mermaid
@@ -213,7 +213,7 @@ executeParallel(run, 并行引用, 输入):
 
 <!-- source-guide:agent-execute-node -->
 <!-- source-guide:location:agent-execute-node -->
-**源码：** [src/runtime.ts:211-266](../src/runtime.ts#L211)，`管理 Agent 节点`
+**源码：** [src/runtime.ts:222-279](../src/runtime.ts#L222)，`管理 Agent 节点`
 <!-- /source-guide:location:agent-execute-node -->
 
 ```mermaid

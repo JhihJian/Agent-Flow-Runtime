@@ -9,6 +9,7 @@ interface PendingSessionReplacement {
 export interface CliFlowState {
 	adapter?: PiAgentIntegrationAdapter;
 	active?: { path: string; promise: Promise<void> };
+	resuming?: Promise<void>;
 	configuredPath?: string;
 	currentContext?: ExtensionContext;
 	sessionReference: string;

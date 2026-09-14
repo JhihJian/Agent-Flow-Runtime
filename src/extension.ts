@@ -145,12 +145,24 @@ export default function flowExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", (event, ctx) => {
 		bindContext(ctx);
 		const flag = pi.getFlag("flow");
 		if (!state.active) {
 			state.configuredPath =
 				typeof flag === "string" && flag.trim() ? flag : undefined;
+		}
+		if (event.reason === "resume" && !state.active && !state.resuming) {
+			state.resuming = resumeFlow(ctx)
+				.catch((error) => {
+					state.notify?.(
+						`Flow 恢复失败: ${error instanceof Error ? error.message : String(error)}`,
+						"error",
+					);
+				})
+				.finally(() => {
+					state.resuming = undefined;
+				});
 		}
 	});
 
@@ -190,6 +202,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 		task: string,
 		ctx: ExtensionContext,
 	): Promise<void> {
+		if (state.resuming) await state.resuming;
 		if (state.active) throw new Error(`Flow 正在运行: ${state.active.path}`);
 		const absolutePath = isAbsolute(path) ? path : resolve(ctx.cwd, path);
 		const cwd = ctx.cwd;
@@ -211,8 +224,14 @@ export default function flowExtension(pi: ExtensionAPI) {
 					? {
 							existingAgentReference: bridge.getSessionReference(),
 							cwd,
+							flowPath: absolutePath,
+							sessionReference: bridge.getSessionReference(),
 						}
-					: { cwd },
+					: {
+							cwd,
+							flowPath: absolutePath,
+							sessionReference: bridge.getSessionReference(),
+						},
 			)
 			.then(() => {
 				state.notify?.(`Flow 已完成: ${flow.name}`, "info");
@@ -230,6 +249,56 @@ export default function flowExtension(pi: ExtensionAPI) {
 			});
 		state.active = { path: absolutePath, promise };
 		await promise;
+	}
+
+	async function resumeFlow(ctx: ExtensionContext): Promise<void> {
+		const cwd = ctx.cwd;
+		const store = new JsonFileRunStore(join(cwd, ".pi", "flow-runs.json"));
+		const sessionReference = bridge.getSessionReference();
+		const candidates = (await store.listRunningRuns()).filter(
+			(run) =>
+				run.cwd === cwd &&
+				run.sessionReference === sessionReference &&
+				typeof run.flowPath === "string",
+		);
+		if (!candidates.length) return;
+		if (candidates.length > 1) {
+			state.notify?.("发现多个待恢复的 Flow，无法确定要继续的运行", "error");
+			return;
+		}
+
+		const run = candidates[0];
+		if (!run) return;
+		const flowPath = run.flowPath;
+		if (!flowPath) return;
+		const flow = await loadFlow(flowPath);
+		if (flow.id !== run.flowId) {
+			state.notify?.(`无法恢复 Flow: 文件与运行记录不匹配`, "error");
+			return;
+		}
+		const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
+		state.adapter = adapter;
+		const coordinator = new FlowCoordinator(
+			flow,
+			store,
+			new AgentRunModel(adapter),
+		);
+		const promise = coordinator
+			.resume(run.id, { existingAgentReference: sessionReference, cwd })
+			.then(() => {
+				state.notify?.(`Flow 已恢复并完成: ${flow.name}`, "info");
+			})
+			.catch((error) => {
+				state.notify?.(
+					`Flow 恢复失败: ${error instanceof Error ? error.message : String(error)}`,
+					"error",
+				);
+			})
+			.finally(() => {
+				state.active = undefined;
+				state.adapter = undefined;
+			});
+		state.active = { path: flowPath, promise };
 	}
 }
 

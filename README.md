@@ -46,7 +46,7 @@ In TUI, use `/flow run <文件> <任务>`. In RPC mode, send a normal `prompt` r
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi.
 
-Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, outcome, Pi session reference, and Pi entry range for every Agent-node visit.
+Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, outcome, Pi session reference, and Pi entry range for every Agent-node visit. When Pi resumes the same session, an unfinished CLI Flow is restored from this file and its interrupted Agent node is submitted again in that session. The interrupted node is recorded as a separate retry visit, so the original incomplete visit remains auditable. An interrupted custom-command node is marked failed rather than replayed, because its external side effect may already have occurred.
 
 ## Architecture
 
