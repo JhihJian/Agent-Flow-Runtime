@@ -193,6 +193,8 @@ Flow 标识
 
 TUI、CLI 查询、JSONL 事件或后续指标系统都只是这份运行事实的不同读取方式。它们不能修改 Run，也不能选择结果或下一节点。
 
+运行事实如何产生、如何推送到 TUI/CLI/JSON/RPC，以及断线和恢复语义见[Flow 运行观测设计](flow-observability-design.md)。
+
 ## 8. 数据保存
 
 当前实现使用`InMemoryRunStore`和`JsonFileRunStore`。JSON 文件适合 MVP 的本地运行记录，不应被当作高并发分析数据库或流程控制接口。
