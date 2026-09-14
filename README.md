@@ -37,6 +37,14 @@ pi install npm:@jhihjian/agent-flow-runtime@0.1.0
 
 Pi discovers `src/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Core Pi packages and `typebox` are peers, while `yaml` is installed as the runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
 
+To embed the runtime in your own Node.js program instead of the Pi CLI:
+
+```bash
+npm install @jhihjian/agent-flow-runtime
+```
+
+The package requires Node.js >= 22.19 and two peer dependencies, `@earendil-works/pi-coding-agent` and `typebox`. npm 7+ installs peers automatically; pnpm users need `auto-install-peers=true` or explicit installation.
+
 ## Run
 
 The Flow file follows [the Flow specification](docs/flow-spec.md). Start a Flow in the current Pi session:
@@ -56,9 +64,43 @@ pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
 
 In TUI, use `/flow run <文件> <任务>`. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC event streams include each `submit_flow_outcome` tool execution with `{ outcome, content }` in `details`.
 
-After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi.
+After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. The `./examples/*.md` paths above refer to a repository checkout; installed users point `--flow` at their own Flow files, such as `.flows/release.md`.
 
 Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, outcome, Pi session reference, and Pi entry range for every Agent-node visit. When Pi resumes the same session, an unfinished CLI Flow is restored from this file and its interrupted Agent node is submitted again in that session. The interrupted node is recorded as a separate retry visit, so the original incomplete visit remains auditable. An interrupted custom-command node is marked failed rather than replayed, because its external side effect may already have occurred.
+
+## SDK Quick Start
+
+Use the runtime as a library to parse a Flow file and drive it with Pi SDK sessions:
+
+```typescript
+import { readFile } from "node:fs/promises";
+import {
+  AgentRunModel,
+  FlowCoordinator,
+  JsonFileRunStore,
+  parseFlow,
+  PiAgentIntegrationAdapter,
+} from "@jhihjian/agent-flow-runtime";
+
+const flow = parseFlow(
+  await readFile("./.flows/code-change.md", "utf8"),
+  "code-change.md",
+);
+
+const adapter = new PiAgentIntegrationAdapter({ cwd: process.cwd() });
+const coordinator = new FlowCoordinator(
+  flow,
+  new JsonFileRunStore(".pi/flow-runs.json"),
+  new AgentRunModel(adapter),
+);
+
+const run = await coordinator.run("修复登录超时问题");
+console.log(run.status); // "completed"
+```
+
+`PiAgentIntegrationAdapter` creates a real Pi SDK session for each `新建Agent` action and injects the `submit_flow_outcome` tool automatically. Model auth follows Pi conventions (`~/.pi/agent/auth.json`, environment variables, or the settings default model). Sessions persist under `~/.pi/agent/sessions/` by default; pass `sessionDir` to choose another location. Run records go wherever the `RunStore` points.
+
+For the offline minimal example (no model required), resume and takeover, session storage details, and the API overview, see [SDK 快速开始](docs/sdk-quick-start.md).
 
 ## Architecture
 
@@ -68,7 +110,7 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `src/directory.ts` discovers and loads Flow files by filename identifier for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
-- `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge.
+- `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
 
 The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/flow-new-session` command and Pi's `ctx.newSession()` API. The command has a distinct name so it does not conflict with Pi's built-in interactive `/new`. The Flow coordinator survives extension reload through process-level handoff state, and the next node prompt is sent only after the replacement session is ready. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.

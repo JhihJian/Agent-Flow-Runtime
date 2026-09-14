@@ -13,6 +13,12 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | [Agent Flow Runtime 总体设计](agent-flow-runtime-design.md) | 理解 Flow 如何与一次具体任务、Agent 和命令结合。 |
 | [Agent Flow Runtime 架构设计](agent-flow-runtime-architecture.md) | 了解解释器、协调器、统一 Agent 运行模型和记录存储的职责边界。 |
 
+## SDK 接入
+
+| 文档 | 用途 |
+| --- | --- |
+| [SDK 快速开始](sdk-quick-start.md) | 在自己的 Node.js 程序中安装并组装运行时，用 Pi 会话执行 Agent 节点。 |
+
 ## Pi 接入
 
 | 文档 | 用途 |
