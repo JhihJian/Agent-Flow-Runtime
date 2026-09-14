@@ -9,6 +9,18 @@ Included examples:
 
 ## Install
 
+Install the published package through Pi:
+
+```bash
+pi install npm:@summ/agent-flow-runtime
+```
+
+Or install directly from GitHub without npm:
+
+```bash
+pi install git:github.com/JhihJian/Agent-Flow-Runtime
+```
+
 Build the package before installing it from a local checkout:
 
 ```bash

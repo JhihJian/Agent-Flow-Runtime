@@ -8,6 +8,18 @@
 		"flow",
 		"workflow"
 	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/JhihJian/Agent-Flow-Runtime.git"
+	},
+	"bugs": {
+		"url": "https://github.com/JhihJian/Agent-Flow-Runtime/issues"
+	},
+	"homepage": "https://github.com/JhihJian/Agent-Flow-Runtime#readme",
+	"publishConfig": {
+		"access": "public"
+	},
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
