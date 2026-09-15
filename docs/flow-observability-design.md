@@ -2,6 +2,8 @@
 
 ## 1. 目标
 
+本文是本次运行事实层开发的实现契约。文中的“必须”是实现和测试的约束，“当前实现”只描述现状，不代表契约已经落地。若源码与本文冲突，以本文的实体边界、状态语义和提交顺序为准。
+
 运行观测要让用户在 Flow 执行过程中看清四件事：
 
 ```text
@@ -138,7 +140,7 @@ running | completed | failed | interrupted
 `FlowRunInspector`是 Runtime 内部的应用能力，不绑定 Agent、CLI、Pi 或具体协议。它接收一个`runId`，返回一份可以直接分析的 Run 历史视图：
 
 ```text
-inspect(runId)
+inspectRun(runId)
   Run 摘要
     Task
     Flow 标识
@@ -310,3 +312,76 @@ MVP 不保证补发断线期间的全部事件。快照必须能够让用户重�
 - 事件推送失败不能影响 Flow 执行。
 - 断线后以快照恢复界面，不依赖事件缓存猜测状态。
 - 所有事件都必须关联 Run；节点事件还必须关联 NodeRun。
+
+## 11. 本次开发实现契约
+
+本节把前述原则收敛为实现和测试必须共同遵守的边界。它只定义运行事实层，不提前实现展示协议或外部事件日志。
+
+### 11.1 实体和完整历史
+
+- **Flow** 是可复用的静态路径。Run 创建时必须保存 `flowId` 和 Flow 版本或内容指纹；恢复和查询不得用当前文件反推历史。
+- **Task** 是本次问题的输入快照，或一个稳定的外部引用加摘要。它属于 Run，不属于 Flow。历史必须能得到快照，或者明确知道如何按权限取得引用指向的内容。
+- **Run** 是一次 Task 按一个 Flow 版本执行的实例。它保存当前快照和终态，但当前游标只是定位缓存，不能代替历史实体。
+- **NodeRun** 是一次实际进入节点的访问。每次首次进入、返工、循环和 Agent 恢复都创建新 ID，历史记录不可覆盖。必须保存：节点引用、动作类型、输入、显式状态、开始/结束时间、结果、错误分类与摘要、执行依据引用、恢复前驱（`retryOf` 或等价字段）、所属并行轮次（如有）以及 Run 内执行序号。
+- **RouteDecision** 是独立历史实体。必须保存来源 NodeRun、结果名、目标节点/并行轮次/结束、选择时间和 Run 内序号。Inspector 不得通过当前 Flow 的边临时推断路由原因。
+- **ParallelRound** 是独立历史实体。必须保存轮次输入、并行入口、分支引用到 NodeRun 的映射、各分支状态、汇合 NodeRun、汇合输入和结果、轮次状态及时间。轮次完成后仍可查询；重新进入入口必须产生新轮次。
+
+`FlowRunHistory` 是 Inspector 组装的统一只读投影，至少包含 Run 摘要、Task、Flow 版本、按事实提交顺序排列的全部 NodeRun、全部 RouteDecision、全部 ParallelRound、当前定位、错误摘要、版本水位和依据引用。它不是任意单表记录的别名。完整 Agent 对话、Prompt、stdout 和 stderr 通过依据引用按权限查询，不默认放入实时事件。
+
+### 11.2 状态机和失败分类
+
+Run `status` 只能是 `running | completed | failed | interrupted`，Run `phase` 只能是 `starting | executing_node | waiting_parallel | routing | completed | failed | interrupted`。NodeRun `status` 只能是 `running | completed | failed | interrupted`，不得再由 `completedAt` 或 `outcome` 是否存在推断。
+
+- 终态 Run 不能回退。正常完成、运行时失败和进程中断分别进入 `completed`、`failed` 和 `interrupted`。
+- 执行器异常、结果校验失败、路径不存在和无法提交事实，必须使关联 NodeRun 与 Run 显式失败，并保存稳定的错误分类和面向用户的摘要。
+- 命令进程正常退出但退出码非零，是已完成命令节点的业务结果，仍允许按 Flow 路由；它不是执行器异常，也不能直接把 NodeRun 或 Run 标为运行失败。
+- 进程中断必须先保留中断事实。Agent 恢复创建新的 NodeRun，并通过 `retryOf`/恢复引用关联旧记录，同时产生 `run.resumed`。已完成节点不得重复执行。未完成命令不得自动重放，恢复时必须将原 NodeRun 保持 `interrupted`，并把 Run 转为有明确原因的 `failed` 或等待人工处理的 `interrupted`。
+- 每个 Run 的 `sequence`/版本水位严格单调递增。NodeRun、RouteDecision、ParallelRound 和事件引用同一 Run 水位，按事实提交顺序排序；并行完成顺序不能改写已提交的事实顺序。
+
+### 11.3 RunStore、提交和事件
+
+RunStore 是 Run 当前状态和可查询历史的唯一持久事实来源，负责保存 Run、NodeRun、RouteDecision、ParallelRound、执行序号/版本和依据引用；它不解析 Flow、不选择路径。协调器是唯一写入者。
+
+一次状态变化必须作为一个原子事实提交：协调器计算变化，RunStore 在同一提交中保存所有关联记录、当前游标和递增水位，保存成功后才交给 Publisher。至少要能表达带 `expectedVersion` 的提交或等价的并发保护；保存失败不得发布对应成功事件，也不得让内存对象假装已提交。MVP 的 JSON Store 限定为单进程单实例，并采用串行写入和临时文件原子替换；不承诺跨进程并发。
+
+`FlowObservationPublisher` 只接受已持久化事实的瞬时通知，不保存第二套状态，不路由、不提交结果、不反向控制 Flow。最小事件为：`run.started`、`run.resumed`、`run.completed`、`run.failed`、`run.interrupted`、`node.started`、`node.completed`、`node.failed`、`node.interrupted`、`route.selected`、`parallel.started`、`parallel.completed`。每个事件必须包含 `runId`、`flowId`、事件类型、Run 内单调 `sequence`、`occurredAt`、相关 NodeRun/ParallelRound 引用、提交后的 status/phase 和摘要。
+
+Publisher 发布失败或订阅者抛错，只进入宿主诊断，不回滚、不阻断执行、不改变已保存终态。MVP 事件是实时通知，不承诺断线期间补发全部事件，事件也不是事件日志；客户端应按 `(runId, sequence)` 去重。
+
+### 11.4 Inspector、统一入口和快照水位
+
+应用能力的最小边界为：
+
+```ts
+interface FlowRunInspector {
+  inspectRun(runId: string): Promise<FlowRunHistory | undefined>;
+  inspectNodeEvidence(
+    runId: string,
+    nodeRunId: string,
+  ): Promise<FlowNodeEvidence | undefined>;
+}
+
+interface FlowObservationPublisher {
+  subscribe(
+    runId: string,
+    listener: (event: FlowObservationEvent) => void,
+  ): FlowObservationSubscription;
+}
+```
+
+`inspectNodeEvidence` 必须校验 `nodeRunId` 属于指定 Run，并按宿主权限返回完整依据或 `undefined`。Inspector 只读、只组织历史，不路由、不决策、不提交结果。
+
+Runtime 对外只暴露一个组装好的入口，至少提供上述 Inspector 和 Publisher；TUI、CLI、SDK、JSON、RPC 和 Agent 均通过这个入口调用，适配器只负责格式、传输和权限。适配器不得读取 RunStore、解析 `.pi/flow-runs.json`、拼接 `getRun`/`listNodeRuns`，也不得从 Agent 自然语言判断状态。CLI 退出码只表达 Run 终态，业务“通过”来自 Flow 结果。
+
+启动或重连必须先取得历史快照，再接收后续通知。为消除“快照读取和订阅注册之间”的空窗，统一入口必须定义订阅水位协议：推荐先注册订阅并缓冲事件，再读取带 `sequence` 的快照，应用快照后只处理水位更高的缓冲事件；或采用等价的订阅后重新检查快照协议。事件丢失时以最新快照纠正，不能靠事件缓存永久推断状态。
+
+### 11.5 六类契约验收
+
+1. **普通路径**：Inspector 能还原 Task、Flow 版本、NodeRun 顺序、输入、结果和最终 Run；历史中存在 `node.completed -> route.selected -> node.started` 的事实关系及最终 `run.completed`。
+2. **返工**：同一 `nodeRef` 的每次访问都有不同 NodeRun ID 和序号；前次结果明确指向返工目标，第二次输入和恢复/返工原因可查询，旧记录不被覆盖。
+3. **并行**：每次入口都有独立 ParallelRound；全部分支、分支状态、完成顺序、汇合 NodeRun、汇合输入和结果可还原；再次返工或再次进入并行不会混用上一轮记录。
+4. **失败**：分别验证执行器异常、路由错误、结果校验错误、命令中断和命令非零退出。前四类定位到 NodeRun/Run 并保存错误，非零退出作为已完成业务结果并可路由；Publisher 故障不影响执行和终态。
+5. **恢复**：恢复前 Agent NodeRun 为 `interrupted`，恢复创建带关联的新 NodeRun 并发布 `run.resumed`；未完成命令不重放，明确进入 `failed` 或人工处理的 `interrupted`；已完成节点不重复执行。
+6. **断线**：订阅断开不影响 Run 和持久化；重连通过统一入口先取得正确快照，再接收水位之后的通知；不要求 MVP 补发断线期间的全部事件。
+
+本节点只完成上述契约审查和文档修正。契约通过后，下一节点才实现类型、持久化事实模型、状态转换、Inspector/Publisher、快照水位协议和六类测试；不在本节点实现展示适配器、事件日志、数据库并发或外部可观测性平台。
