@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { renderCommandRequest } from "./parser.ts";
 import type {
@@ -10,29 +10,101 @@ import type {
 	CommandRequest,
 	CommandResult,
 	FlowDefinition,
+	FlowDestination,
+	FlowError,
+	FlowErrorCategory,
 	FlowNode,
 	FlowRunRecord,
 	FlowValue,
 	NodeOutcome,
 	NodeRunRecord,
+	NodeRunSource,
 	NodeSession,
 	OutcomeOption,
 	ParallelRoundRecord,
+	RouteDecisionRecord,
+	RunFactCommit,
+	RunRecoveryRecord,
 	RunStore,
 } from "./types.ts";
+
+type FactChanges = Omit<RunFactCommit, "run" | "expectedSequence">;
 
 export class InMemoryRunStore implements RunStore {
 	protected readonly runs = new Map<string, FlowRunRecord>();
 	protected readonly nodeRuns = new Map<string, NodeRunRecord>();
+	protected readonly routeDecisions = new Map<string, RouteDecisionRecord>();
+	protected readonly parallelRounds = new Map<string, ParallelRoundRecord>();
+	protected readonly recoveries = new Map<string, RunRecoveryRecord>();
 
 	async createRun(run: FlowRunRecord): Promise<void> {
 		if (this.runs.has(run.id)) throw new Error(`Flow 运行已存在: ${run.id}`);
-		this.runs.set(run.id, clone(run));
+		const normalized = normalizeRun(run);
+		this.runs.set(normalized.id, clone(normalized));
+		if (normalized.currentParallelRound) {
+			const round = normalizeParallelRound(
+				normalized.currentParallelRound,
+				normalized.id,
+			);
+			this.parallelRounds.set(round.id, clone(round));
+			normalized.currentParallelRoundId = round.id;
+			delete normalized.currentParallelRound;
+			this.runs.set(normalized.id, clone(normalized));
+		}
+	}
+
+	async commit(fact: RunFactCommit): Promise<void> {
+		const stored = this.runs.get(fact.run.id);
+		if (!stored) throw new Error(`Flow 运行不存在: ${fact.run.id}`);
+		if (stored.sequence !== fact.expectedSequence) {
+			throw new Error(
+				`Flow 运行版本冲突: ${fact.run.id}，期望 ${fact.expectedSequence}，实际 ${stored.sequence}`,
+			);
+		}
+		if (fact.run.sequence !== fact.expectedSequence + 1) {
+			throw new Error(`Flow 运行提交序号无效: ${fact.run.id}`);
+		}
+		this.validateFactRecords(fact);
+		this.runs.set(fact.run.id, clone(normalizeRun(fact.run)));
+		for (const record of fact.nodeRuns ?? []) {
+			this.nodeRuns.set(record.id, clone(normalizeNodeRun(record)));
+		}
+		for (const decision of fact.routeDecisions ?? []) {
+			this.routeDecisions.set(decision.id, clone(decision));
+		}
+		for (const round of fact.parallelRounds ?? []) {
+			this.parallelRounds.set(
+				round.id,
+				clone(normalizeParallelRound(round, fact.run.id)),
+			);
+		}
+		for (const recovery of fact.recoveries ?? []) {
+			this.recoveries.set(recovery.id, clone(recovery));
+		}
+	}
+
+	private validateFactRecords(fact: RunFactCommit): void {
+		for (const record of fact.nodeRuns ?? []) {
+			if (record.runId !== fact.run.id)
+				throw new Error(`NodeRun 不属于当前 Flow 运行: ${record.id}`);
+		}
+		for (const decision of fact.routeDecisions ?? []) {
+			if (decision.runId !== fact.run.id)
+				throw new Error(`路由记录不属于当前 Flow 运行: ${decision.id}`);
+		}
+		for (const round of fact.parallelRounds ?? []) {
+			if (round.runId !== fact.run.id)
+				throw new Error(`并行轮次不属于当前 Flow 运行: ${round.id}`);
+		}
+		for (const recovery of fact.recoveries ?? []) {
+			if (recovery.runId !== fact.run.id)
+				throw new Error(`恢复记录不属于当前 Flow 运行: ${recovery.id}`);
+		}
 	}
 
 	async updateRun(run: FlowRunRecord): Promise<void> {
 		if (!this.runs.has(run.id)) throw new Error(`Flow 运行不存在: ${run.id}`);
-		this.runs.set(run.id, clone(run));
+		this.runs.set(run.id, clone(normalizeRun(run)));
 	}
 
 	async getRun(runId: string): Promise<FlowRunRecord | undefined> {
@@ -55,18 +127,40 @@ export class InMemoryRunStore implements RunStore {
 	async createNodeRun(record: NodeRunRecord): Promise<void> {
 		if (this.nodeRuns.has(record.id))
 			throw new Error(`节点运行已存在: ${record.id}`);
-		this.nodeRuns.set(record.id, clone(record));
+		this.nodeRuns.set(record.id, clone(normalizeNodeRun(record)));
 	}
 
 	async updateNodeRun(record: NodeRunRecord): Promise<void> {
 		if (!this.nodeRuns.has(record.id))
 			throw new Error(`节点运行不存在: ${record.id}`);
-		this.nodeRuns.set(record.id, clone(record));
+		this.nodeRuns.set(record.id, clone(normalizeNodeRun(record)));
 	}
 
 	async listNodeRuns(runId: string): Promise<NodeRunRecord[]> {
 		return [...this.nodeRuns.values()]
 			.filter((record) => record.runId === runId)
+			.sort((left, right) => left.sequence - right.sequence)
+			.map(clone);
+	}
+
+	async listRouteDecisions(runId: string): Promise<RouteDecisionRecord[]> {
+		return [...this.routeDecisions.values()]
+			.filter((record) => record.runId === runId)
+			.sort((left, right) => left.sequence - right.sequence)
+			.map(clone);
+	}
+
+	async listParallelRounds(runId: string): Promise<ParallelRoundRecord[]> {
+		return [...this.parallelRounds.values()]
+			.filter((record) => record.runId === runId)
+			.sort((left, right) => left.sequence - right.sequence)
+			.map(clone);
+	}
+
+	async listRunRecoveries(runId: string): Promise<RunRecoveryRecord[]> {
+		return [...this.recoveries.values()]
+			.filter((record) => record.runId === runId)
+			.sort((left, right) => left.sequence - right.sequence)
 			.map(clone);
 	}
 }
@@ -74,11 +168,15 @@ export class InMemoryRunStore implements RunStore {
 interface PersistedRuns {
 	runs: FlowRunRecord[];
 	nodeRuns: NodeRunRecord[];
+	routeDecisions?: RouteDecisionRecord[];
+	parallelRounds?: ParallelRoundRecord[];
+	recoveries?: RunRecoveryRecord[];
 }
 
+/** Single-process JSON persistence. Each mutation writes one complete snapshot. */
 export class JsonFileRunStore extends InMemoryRunStore {
 	private initialized = false;
-	private writes = Promise.resolve();
+	private mutations = Promise.resolve();
 	private readonly file: string;
 
 	constructor(file: string) {
@@ -93,8 +191,18 @@ export class JsonFileRunStore extends InMemoryRunStore {
 			const saved = JSON.parse(
 				await readFile(this.file, "utf8"),
 			) as PersistedRuns;
-			for (const run of saved.runs) await super.createRun(run);
-			for (const nodeRun of saved.nodeRuns) await super.createNodeRun(nodeRun);
+			for (const run of saved.runs ?? []) await super.createRun(run);
+			for (const nodeRun of saved.nodeRuns ?? [])
+				await super.createNodeRun(nodeRun);
+			for (const decision of saved.routeDecisions ?? [])
+				this.routeDecisions.set(decision.id, clone(decision));
+			for (const round of saved.parallelRounds ?? [])
+				this.parallelRounds.set(
+					round.id,
+					clone(normalizeParallelRound(round, round.runId)),
+				);
+			for (const recovery of saved.recoveries ?? [])
+				this.recoveries.set(recovery.id, clone(recovery));
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 		}
@@ -104,20 +212,41 @@ export class JsonFileRunStore extends InMemoryRunStore {
 		const saved: PersistedRuns = {
 			runs: [...this.runs.values()].map(clone),
 			nodeRuns: [...this.nodeRuns.values()].map(clone),
+			routeDecisions: [...this.routeDecisions.values()].map(clone),
+			parallelRounds: [...this.parallelRounds.values()].map(clone),
+			recoveries: [...this.recoveries.values()].map(clone),
 		};
 		await mkdir(dirname(this.file), { recursive: true });
-		await writeFile(this.file, `${JSON.stringify(saved, null, 2)}\n`, "utf8");
+		const temporary = `${this.file}.${process.pid}.${randomUUID()}.tmp`;
+		await writeFile(temporary, `${JSON.stringify(saved, null, 2)}\n`, "utf8");
+		await rename(temporary, this.file);
 	}
 
-	private async mutate(operation: () => Promise<void>): Promise<void> {
+	private async mutate<T>(operation: () => Promise<T>): Promise<T> {
+		const mutation = this.mutations.then(async () => {
+			await this.load();
+			const result = await operation();
+			await this.persist();
+			return result;
+		});
+		this.mutations = mutation.then(
+			() => undefined,
+			() => undefined,
+		);
+		return mutation;
+	}
+
+	private async ready(): Promise<void> {
+		await this.mutations;
 		await this.load();
-		await operation();
-		this.writes = this.writes.then(() => this.persist());
-		await this.writes;
 	}
 
 	override async createRun(run: FlowRunRecord): Promise<void> {
 		await this.mutate(() => super.createRun(run));
+	}
+
+	override async commit(fact: RunFactCommit): Promise<void> {
+		await this.mutate(() => super.commit(fact));
 	}
 
 	override async updateRun(run: FlowRunRecord): Promise<void> {
@@ -125,17 +254,17 @@ export class JsonFileRunStore extends InMemoryRunStore {
 	}
 
 	override async getRun(runId: string): Promise<FlowRunRecord | undefined> {
-		await this.load();
+		await this.ready();
 		return super.getRun(runId);
 	}
 
 	override async listRuns(flowId: string): Promise<FlowRunRecord[]> {
-		await this.load();
+		await this.ready();
 		return super.listRuns(flowId);
 	}
 
 	override async listRunningRuns(): Promise<FlowRunRecord[]> {
-		await this.load();
+		await this.ready();
 		return super.listRunningRuns();
 	}
 
@@ -148,8 +277,29 @@ export class JsonFileRunStore extends InMemoryRunStore {
 	}
 
 	override async listNodeRuns(runId: string): Promise<NodeRunRecord[]> {
-		await this.load();
+		await this.ready();
 		return super.listNodeRuns(runId);
+	}
+
+	override async listRouteDecisions(
+		runId: string,
+	): Promise<RouteDecisionRecord[]> {
+		await this.ready();
+		return super.listRouteDecisions(runId);
+	}
+
+	override async listParallelRounds(
+		runId: string,
+	): Promise<ParallelRoundRecord[]> {
+		await this.ready();
+		return super.listParallelRounds(runId);
+	}
+
+	override async listRunRecoveries(
+		runId: string,
+	): Promise<RunRecoveryRecord[]> {
+		await this.ready();
+		return super.listRunRecoveries(runId);
 	}
 }
 
@@ -296,6 +446,7 @@ export class FlowCoordinator {
 	private readonly store: RunStore;
 	private readonly agentModel: AgentRunModel;
 	private readonly commandExecutor: CommandExecutor;
+	private writes = Promise.resolve();
 
 	constructor(
 		flow: FlowDefinition,
@@ -322,9 +473,13 @@ export class FlowCoordinator {
 		const run: FlowRunRecord = {
 			id: options.runId ?? randomUUID(),
 			flowId: this.flow.id,
+			flowVersion: fingerprintFlow(this.flow),
 			task,
 			status: "running",
-			startedAt: new Date().toISOString(),
+			phase: "starting",
+			sequence: 1,
+			historyCompleteness: "complete",
+			startedAt: now(),
 			flowPath: options.flowPath,
 			cwd: options.cwd,
 			sessionReference: options.sessionReference,
@@ -332,63 +487,28 @@ export class FlowCoordinator {
 			currentInput: task,
 		};
 		await this.store.createRun(run);
-		return this.continueRun(run, this.flow.startNodeRef, task, options);
+		return this.continueRun(run, this.flow.startNodeRef, task, options, {
+			kind: "start",
+		});
 	}
 
-	/** Continue a persisted running Flow after its Pi session has been resumed. */
+	/** Continue a persisted Run. Incomplete Agent work becomes a new NodeRun. */
 	async resume(
 		runId: string,
-		options: {
-			existingAgentReference?: string;
-			cwd?: string;
-		} = {},
+		options: { existingAgentReference?: string; cwd?: string } = {},
 	): Promise<FlowRunRecord> {
 		const run = await this.store.getRun(runId);
 		if (!run) throw new Error(`Flow 运行不存在: ${runId}`);
 		if (run.flowId !== this.flow.id)
 			throw new Error(`Flow 运行不属于当前 Flow: ${runId}`);
-		if (run.status !== "running")
-			throw new Error(`Flow 运行不是执行中状态: ${runId}`);
-		if (!run.currentNodeRef && !run.currentParallelRound) {
-			throw new Error(`Flow 运行缺少可恢复的执行位置: ${runId}`);
+		if (
+			run.historyCompleteness === "complete" &&
+			run.flowVersion !== fingerprintFlow(this.flow)
+		) {
+			throw new Error(`Flow 版本与运行记录不匹配: ${runId}`);
 		}
-
-		const nodeRuns = await this.store.listNodeRuns(run.id);
-		const completedCurrentNode = run.currentNodeRunId
-			? nodeRuns.find(
-					(record) =>
-						record.id === run.currentNodeRunId &&
-						record.completedAt &&
-						record.outcome,
-				)
-			: undefined;
-		const interrupted = run.currentParallelRound
-			? undefined
-			: [...nodeRuns]
-					.reverse()
-					.find(
-						(record) =>
-							record.nodeRef === run.currentNodeRef &&
-							!record.completedAt &&
-							!record.outcome,
-					);
-		const currentNodeRef =
-			completedCurrentNode?.nodeRef ??
-			interrupted?.nodeRef ??
-			run.currentNodeRef;
-		const currentInput =
-			completedCurrentNode?.input ??
-			interrupted?.input ??
-			run.currentInput ??
-			run.task;
-		if (!currentNodeRef && !run.currentParallelRound) {
-			throw new Error(`Flow 运行缺少当前节点: ${runId}`);
-		}
-		const interruptedNode = currentNodeRef
-			? this.flow.nodes.get(currentNodeRef)
-			: undefined;
-		if (interrupted && interruptedNode?.action.kind === "执行自定义命令") {
-			return this.failInterruptedCommand(run, interrupted.nodeRef);
+		if (run.status !== "running" && run.status !== "interrupted") {
+			throw new Error(`Flow 运行不可恢复: ${runId}`);
 		}
 
 		const resumedOptions = {
@@ -396,34 +516,82 @@ export class FlowCoordinator {
 				options.existingAgentReference ?? run.sessionReference,
 			cwd: options.cwd ?? run.cwd,
 		};
+		if (run.currentParallelRoundId) {
+			await this.agentModel.start(
+				run.id,
+				resumedOptions.existingAgentReference,
+				resumedOptions.cwd,
+			);
+			return this.continueRun(
+				run,
+				run.currentNodeRef ?? this.flow.startNodeRef,
+				run.currentInput ?? run.task,
+				resumedOptions,
+				{ kind: "start" },
+				true,
+			);
+		}
+
+		const nodeRuns = await this.store.listNodeRuns(run.id);
+		const current = run.currentNodeRunId
+			? nodeRuns.find((record) => record.id === run.currentNodeRunId)
+			: [...nodeRuns]
+					.reverse()
+					.find(
+						(record) =>
+							record.nodeRef === run.currentNodeRef &&
+							record.status === "running",
+					);
+		const nodeRef = current?.nodeRef ?? run.currentNodeRef;
+		if (!nodeRef) throw new Error(`Flow 运行缺少可恢复的执行位置: ${runId}`);
+		const node = this.flow.nodes.get(nodeRef);
+		if (!node) throw new Error(`工作节点不存在: ${nodeRef}`);
+
+		if (current?.status === "running") {
+			await this.interruptNode(run, current);
+			if (node.action.kind === "执行自定义命令") {
+				return this.failInterruptedCommand(run, current);
+			}
+			await this.agentModel.start(
+				run.id,
+				resumedOptions.existingAgentReference,
+				resumedOptions.cwd,
+			);
+			return this.continueRun(
+				run,
+				nodeRef,
+				current.input,
+				resumedOptions,
+				{ kind: "recovery", nodeRunId: current.id },
+				true,
+				undefined,
+				current,
+			);
+		}
+
 		await this.agentModel.start(
 			run.id,
 			resumedOptions.existingAgentReference,
 			resumedOptions.cwd,
 		);
-		return this.continueRun(
-			run,
-			currentNodeRef ?? this.flow.startNodeRef,
-			currentInput,
-			resumedOptions,
-			interruptedNode?.action.kind === "执行自定义命令"
-				? undefined
-				: interrupted?.nodeRef,
-			true,
-			completedCurrentNode?.outcome,
-		);
-	}
-
-	private async failInterruptedCommand(
-		run: FlowRunRecord,
-		nodeRef: string,
-	): Promise<never> {
-		const error = `自定义命令节点“${nodeRef}”在完成前中断，无法安全自动重试`;
-		run.status = "failed";
-		run.error = error;
-		run.completedAt = new Date().toISOString();
-		await this.store.updateRun(run);
-		throw new Error(error);
+		if (current?.status === "completed" && current.outcome) {
+			await this.recordRecovery(
+				run,
+				current.id,
+				"continue_routing",
+				"从已完成节点继续路由",
+			);
+			return this.continueRun(
+				run,
+				nodeRef,
+				current.input,
+				resumedOptions,
+				current.enteredFrom,
+				true,
+				{ record: current, outcome: current.outcome },
+			);
+		}
+		throw new Error(`Flow 运行没有可恢复的节点事实: ${runId}`);
 	}
 
 	private async continueRun(
@@ -431,9 +599,10 @@ export class FlowCoordinator {
 		initialNodeRef: string,
 		initialInput: FlowValue,
 		options: { existingAgentReference?: string; cwd?: string },
-		resumeInterruptedNodeRef?: string,
+		initialSource: NodeRunSource,
 		agentStarted = false,
-		initialOutcome?: NodeOutcome,
+		initialResult?: { record: NodeRunRecord; outcome: NodeOutcome },
+		retryOf?: NodeRunRecord,
 	): Promise<FlowRunRecord> {
 		if (!agentStarted) {
 			await this.agentModel.start(
@@ -442,119 +611,106 @@ export class FlowCoordinator {
 				options.cwd,
 			);
 		}
+		let nodeRef = initialNodeRef;
+		let input = initialInput;
+		let source = initialSource;
+		let result = initialResult;
+		let retry = retryOf;
+		let branchOutcomes = new Map<string, NodeOutcome>();
 		try {
-			let currentNodeRef = initialNodeRef;
-			let input = initialInput;
-			let branchOutcomes = new Map<string, NodeOutcome>();
-			let outcome = initialOutcome;
-			let actionOverride: "新建Agent" | "复用Agent" | undefined =
-				resumeInterruptedNodeRef ? "复用Agent" : undefined;
 			while (true) {
-				if (run.currentParallelRound) {
-					const round = run.currentParallelRound;
+				if (run.currentParallelRoundId) {
+					const round = await this.requireParallelRound(
+						run,
+						run.currentParallelRoundId,
+					);
 					const parallel = this.flow.parallels.get(round.parallelRef);
 					if (!parallel)
-						throw new Error(`并行开始点不存在: ${round.parallelRef}`);
+						throw new FlowRuntimeError(
+							"parallel_configuration",
+							`并行开始点不存在: ${round.parallelRef}`,
+						);
 					const branchResults = await this.executeParallel(
 						run,
-						parallel.ref,
-						round.input,
-						options.cwd,
 						round,
+						parallel,
+						options.cwd,
 					);
-					currentNodeRef = parallel.joinRef;
+					nodeRef = parallel.joinRef;
 					input = branchResults.input;
 					branchOutcomes = branchResults.outcomes;
-					run.currentNodeRef = currentNodeRef;
-					run.currentInput = input;
-					run.currentNodeRunId = undefined;
-					run.currentParallelRound = undefined;
-					await this.store.updateRun(run);
+					source = {
+						kind: "parallel",
+						parallelRoundId: round.id,
+						branchNodeRunIds: Object.values(round.branchNodeRunIds),
+					};
+					result = undefined;
+					retry = undefined;
 				}
-				const result = outcome
-					? { outcome }
-					: await this.executeNode(
-							run,
-							currentNodeRef,
-							input,
-							options.cwd,
-							branchOutcomes,
-							actionOverride,
-						);
-				outcome = undefined;
+
+				const executed =
+					result ??
+					(await this.executeNode(
+						run,
+						nodeRef,
+						input,
+						options.cwd,
+						branchOutcomes,
+						source,
+						retry,
+					));
+				result = undefined;
+				retry = undefined;
 				branchOutcomes = new Map();
-				actionOverride = undefined;
-				const destination = this.destination(
-					currentNodeRef,
-					result.outcome.result,
+
+				let destination: FlowDestination;
+				try {
+					destination = this.destination(nodeRef, executed.outcome.result);
+				} catch (error) {
+					await this.failNode(
+						run,
+						executed.record,
+						toFlowError(error, "route_not_found"),
+					);
+					throw error;
+				}
+
+				const nextRoundId =
+					destination.kind === "parallel" ? randomUUID() : undefined;
+				const decision = await this.selectRoute(
+					run,
+					executed.record,
+					executed.outcome.result,
+					destination,
+					nextRoundId,
 				);
 				if (destination.kind === "finish") {
-					run.status = "completed";
-					run.completedAt = new Date().toISOString();
-					run.currentNodeRef = undefined;
-					run.currentNodeRunId = undefined;
-					await this.store.updateRun(run);
+					await this.completeRun(run);
 					await this.agentModel.end(run.id);
 					return clone(run);
 				}
 				if (destination.kind === "node") {
-					currentNodeRef = destination.ref;
-					input = result.outcome.content;
-					run.currentNodeRef = currentNodeRef;
-					run.currentInput = input;
-					run.currentNodeRunId = undefined;
-					await this.store.updateRun(run);
+					nodeRef = destination.ref;
+					input = executed.outcome.content;
+					source = {
+						kind: "route",
+						routeDecisionId: decision.id,
+						sourceNodeRunId: executed.record.id,
+					};
 					continue;
 				}
-				const parallel = this.flow.parallels.get(destination.ref);
-				if (!parallel) throw new Error(`并行开始点不存在: ${destination.ref}`);
-				const branchResults = await this.executeParallel(
+				await this.enterParallel(
 					run,
-					parallel.ref,
-					input,
-					options.cwd,
+					destination.ref,
+					executed.outcome.content,
+					executed.record.id,
+					nextRoundId ?? randomUUID(),
 				);
-				currentNodeRef = parallel.joinRef;
-				input = branchResults.input;
-				run.currentNodeRef = currentNodeRef;
-				run.currentInput = input;
-				run.currentNodeRunId = undefined;
-				run.currentParallelRound = undefined;
-				await this.store.updateRun(run);
-				const joinResult = await this.executeNode(
-					run,
-					currentNodeRef,
-					input,
-					options.cwd,
-					branchResults.outcomes,
-				);
-				const joinDestination = this.destination(
-					currentNodeRef,
-					joinResult.outcome.result,
-				);
-				if (joinDestination.kind === "finish") {
-					run.status = "completed";
-					run.completedAt = new Date().toISOString();
-					run.currentNodeRef = undefined;
-					run.currentNodeRunId = undefined;
-					await this.store.updateRun(run);
-					await this.agentModel.end(run.id);
-					return clone(run);
-				}
-				if (joinDestination.kind === "parallel")
-					throw new Error("汇合节点不能直接进入另一个并行开始点");
-				currentNodeRef = joinDestination.ref;
-				input = joinResult.outcome.content;
-				run.currentNodeRef = currentNodeRef;
-				run.currentInput = input;
-				run.currentNodeRunId = undefined;
-				await this.store.updateRun(run);
 			}
 		} catch (error) {
-			run.status = "failed";
-			run.error = error instanceof Error ? error.message : String(error);
-			run.completedAt = new Date().toISOString();
-			await this.store.updateRun(run);
+			if (run.status !== "failed") {
+				await this.failRun(run, toFlowError(error, "unknown"));
+			}
 			await this.agentModel.end(run.id);
 			throw error;
 		}
@@ -562,136 +718,659 @@ export class FlowCoordinator {
 
 	private async executeParallel(
 		run: FlowRunRecord,
-		parallelRef: string,
-		input: FlowValue,
+		round: ParallelRoundRecord,
+		parallel: { branches: string[]; joinRef: string },
 		cwd?: string,
-		existingRound?: ParallelRoundRecord,
-	) {
-		const parallel = this.flow.parallels.get(parallelRef);
-		if (!parallel) throw new Error(`并行开始点不存在: ${parallelRef}`);
-		const round: ParallelRoundRecord = existingRound ?? {
-			id: randomUUID(),
-			parallelRef,
-			input,
-			branchNodeRunIds: {},
-		};
-		run.currentNodeRef = undefined;
-		run.currentInput = input;
-		run.currentNodeRunId = undefined;
-		run.currentParallelRound = round;
-		await this.store.updateRun(run);
-		const records = await this.store.listNodeRuns(run.id);
+	): Promise<{ input: FlowValue; outcomes: Map<string, NodeOutcome> }> {
+		const existing = new Map(
+			(await this.store.listNodeRuns(run.id)).map((record) => [
+				record.id,
+				record,
+			]),
+		);
+		const branchRecords = new Map<string, NodeRunRecord>();
 		for (const branchRef of parallel.branches) {
-			let recordId = round.branchNodeRunIds[branchRef];
-			if (!recordId) {
-				recordId = randomUUID();
-				round.branchNodeRunIds[branchRef] = recordId;
-				await this.store.updateRun(run);
-			}
-			const existingRecord = records.find((record) => record.id === recordId);
-			if (existingRecord && !existingRecord.outcome) {
-				await this.failInterruptedCommand(run, branchRef);
-			}
-		}
-		const results = await Promise.all(
-			parallel.branches.map(async (branchRef) => {
-				const recordId = round.branchNodeRunIds[branchRef];
-				if (!recordId) throw new Error(`并行分支缺少执行记录: ${branchRef}`);
-				const existingRecord = records.find((record) => record.id === recordId);
-				if (existingRecord?.outcome) {
-					return [branchRef, existingRecord.outcome] as const;
+			const existingId = round.branchNodeRunIds[branchRef];
+			const record = existingId ? existing.get(existingId) : undefined;
+			if (record) {
+				if (record.status !== "completed") {
+					await this.interruptNode(run, record, round, branchRef);
+					return this.failInterruptedCommand(run, record, round);
 				}
-				const result = await this.executeNode(
+				branchRecords.set(branchRef, record);
+				continue;
+			}
+			branchRecords.set(
+				branchRef,
+				await this.startNode(
 					run,
 					branchRef,
-					input,
+					round.input,
+					{
+						kind: "parallel",
+						parallelRoundId: round.id,
+					},
+					undefined,
+					round,
+					branchRef,
+				),
+			);
+		}
+
+		const completed = await Promise.all(
+			parallel.branches.map(async (branchRef) => {
+				const record = branchRecords.get(branchRef);
+				if (!record) throw new Error(`并行分支缺少执行记录: ${branchRef}`);
+				if (record.status === "completed" && record.outcome) {
+					return [branchRef, record.outcome] as const;
+				}
+				const result = await this.executePreparedNode(
+					run,
+					record,
 					cwd,
 					new Map(),
+					round,
+					branchRef,
+				);
+				const destination = this.destination(branchRef, result.outcome.result);
+				await this.selectRoute(
+					run,
+					result.record,
+					result.outcome.result,
+					destination,
 					undefined,
 					false,
-					recordId,
 				);
 				return [branchRef, result.outcome] as const;
 			}),
 		);
-		return { input, outcomes: new Map(results) };
+		const persistedRound = (await this.store.listParallelRounds(run.id)).find(
+			(record) => record.id === round.id,
+		);
+		if (persistedRound) {
+			const finalizedRound = clone(persistedRound);
+			for (const branchRef of parallel.branches) {
+				finalizedRound.branchStatuses[branchRef] = "completed";
+			}
+			await this.commit(run, () => ({ parallelRounds: [finalizedRound] }));
+			replaceObject(round, finalizedRound);
+		}
+		return { input: round.input, outcomes: new Map(completed) };
 	}
 
 	private async executeNode(
 		run: FlowRunRecord,
 		nodeRef: string,
 		input: FlowValue,
-		cwd?: string,
-		branchOutcomes: ReadonlyMap<string, NodeOutcome> = new Map(),
-		actionOverride?: "新建Agent" | "复用Agent",
-		trackAsCurrentNode = true,
-		recordId: string = randomUUID(),
+		cwd: string | undefined,
+		branchOutcomes: ReadonlyMap<string, NodeOutcome>,
+		source: NodeRunSource,
+		retryOf?: NodeRunRecord,
 	): Promise<{ record: NodeRunRecord; outcome: NodeOutcome }> {
-		const node = this.flow.nodes.get(nodeRef);
-		if (!node) throw new Error(`工作节点不存在: ${nodeRef}`);
-		const record: NodeRunRecord = {
-			id: recordId,
-			runId: run.id,
+		const round =
+			source.kind === "parallel"
+				? await this.requireParallelRound(run, source.parallelRoundId)
+				: undefined;
+		const record = await this.startNode(
+			run,
 			nodeRef,
 			input,
-			startedAt: new Date().toISOString(),
-		};
-		await this.store.createNodeRun(record);
-		if (trackAsCurrentNode) {
-			run.currentNodeRef = nodeRef;
-			run.currentInput = input;
-			run.currentNodeRunId = record.id;
-			await this.store.updateRun(run);
-		}
-		let outcome: NodeOutcome;
-		if (node.action.kind === "执行自定义命令") {
-			const request = {
-				...renderCommandRequest(node.action.request, input, branchOutcomes),
-				cwd,
-			};
-			const commandResult = await this.commandExecutor.execute(request);
-			outcome = {
-				result: "已执行",
-				content: {
-					status: commandResult.status,
-					exitCode: commandResult.exitCode,
-					stdout: commandResult.stdout,
-					stderr: commandResult.stderr,
-				},
-			};
-		} else {
-			const result = await this.agentModel.executeNode({
-				runId: run.id,
-				action: actionOverride ?? node.action.kind,
-				nodeExecutionReference: record.id,
-				prompt: renderAgentPrompt(node.action.prompt, input, node),
-				outcomes: [...node.results].map(([name, description]) => ({
-					name,
-					description,
-				})),
-				cwd,
-				onConnection: async (connection) => {
-					if (run.sessionReference === connection.sessionReference) return;
-					run.sessionReference = connection.sessionReference;
-					await this.store.updateRun(run);
-				},
-			});
-			outcome = result.outcome;
-			record.session = result.session;
-		}
-		record.outcome = outcome;
-		record.completedAt = new Date().toISOString();
-		await this.store.updateNodeRun(record);
-		return { record, outcome };
+			source,
+			retryOf,
+			round,
+		);
+		return this.executePreparedNode(run, record, cwd, branchOutcomes, round);
 	}
 
-	private destination(nodeRef: string, resultName: string) {
+	private async startNode(
+		run: FlowRunRecord,
+		nodeRef: string,
+		input: FlowValue,
+		source: NodeRunSource,
+		retryOf?: NodeRunRecord,
+		round?: ParallelRoundRecord,
+		branchRef?: string,
+	): Promise<NodeRunRecord> {
+		const node = this.flow.nodes.get(nodeRef);
+		if (!node) {
+			const error = new FlowRuntimeError(
+				"route_not_found",
+				`工作节点不存在: ${nodeRef}`,
+			);
+			await this.failRun(run, toFlowError(error, "route_not_found"));
+			throw error;
+		}
+		const record: NodeRunRecord = {
+			id: randomUUID(),
+			runId: run.id,
+			sequence: 0,
+			nodeRef,
+			actionKind: node.action.kind,
+			input,
+			status: "running",
+			startedAt: now(),
+			enteredFrom: source,
+			retryOf: retryOf?.id,
+			parallelRoundId: round?.id,
+		};
+		const recovery =
+			source.kind === "recovery" && retryOf
+				? {
+						id: randomUUID(),
+						runId: run.id,
+						sequence: 0,
+						interruptedNodeRunId: retryOf.id,
+						strategy: "retry_agent" as const,
+						resumedAt: now(),
+						summary: `从中断节点“${retryOf.nodeRef}”创建新的 Agent 访问`,
+					}
+				: undefined;
+		await this.commit(run, (next, sequence) => {
+			record.sequence = sequence;
+			if (recovery) recovery.sequence = sequence;
+			next.status = "running";
+			next.phase = "executing_node";
+			delete next.error;
+			next.currentNodeRef = nodeRef;
+			next.currentInput = input;
+			next.currentNodeRunId = record.id;
+			delete next.currentParallelRoundId;
+			if (round) {
+				if (branchRef) {
+					round.branchNodeRunIds[branchRef] = record.id;
+					round.branchStatuses[branchRef] = "running";
+					next.phase = "waiting_parallel";
+					delete next.currentNodeRef;
+					delete next.currentNodeRunId;
+					next.currentParallelRoundId = round.id;
+				} else {
+					round.status = "joining";
+					round.joinNodeRunId = record.id;
+					round.joinInput = input;
+					next.currentParallelRoundId = round.id;
+				}
+			}
+			return {
+				nodeRuns: [record],
+				parallelRounds: round ? [round] : undefined,
+				recoveries: recovery ? [recovery] : undefined,
+			};
+		});
+		return record;
+	}
+
+	private async executePreparedNode(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		cwd: string | undefined,
+		branchOutcomes: ReadonlyMap<string, NodeOutcome>,
+		round?: ParallelRoundRecord,
+		branchRef?: string,
+	): Promise<{ record: NodeRunRecord; outcome: NodeOutcome }> {
+		const node = this.flow.nodes.get(record.nodeRef);
+		if (!node) {
+			const error = new FlowRuntimeError(
+				"route_not_found",
+				`工作节点不存在: ${record.nodeRef}`,
+			);
+			await this.failNode(
+				run,
+				record,
+				toFlowError(error, "route_not_found"),
+				round,
+				branchRef,
+			);
+			throw error;
+		}
+		try {
+			let outcome: NodeOutcome;
+			if (node.action.kind === "执行自定义命令") {
+				const request = {
+					...renderCommandRequest(
+						node.action.request,
+						record.input,
+						branchOutcomes,
+					),
+					cwd,
+				};
+				const commandResult = await this.commandExecutor.execute(request);
+				outcome = {
+					result: "已执行",
+					content: {
+						status: commandResult.status,
+						exitCode: commandResult.exitCode,
+						stdout: commandResult.stdout,
+						stderr: commandResult.stderr,
+					},
+				};
+			} else {
+				const result = await this.agentModel.executeNode({
+					runId: run.id,
+					action: record.retryOf ? "复用Agent" : node.action.kind,
+					nodeExecutionReference: record.id,
+					prompt: renderAgentPrompt(node.action.prompt, record.input, node),
+					outcomes: [...node.results].map(([name, description]) => ({
+						name,
+						description,
+					})),
+					cwd,
+					onConnection: async (connection) => {
+						if (run.sessionReference === connection.sessionReference) return;
+						await this.commit(run, (next) => {
+							next.sessionReference = connection.sessionReference;
+							return {};
+						});
+					},
+				});
+				outcome = result.outcome;
+				record.session = result.session;
+			}
+			await this.completeNode(run, record, outcome, round, branchRef);
+			return { record, outcome };
+		} catch (error) {
+			if (record.status !== "failed") {
+				await this.failNode(
+					run,
+					record,
+					toFlowError(
+						error,
+						node.action.kind === "执行自定义命令"
+							? "command_execution"
+							: "agent_execution",
+					),
+					round,
+					branchRef,
+				);
+			}
+			throw error;
+		}
+	}
+
+	private async completeNode(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		outcome: NodeOutcome,
+		round?: ParallelRoundRecord,
+		branchRef?: string,
+	): Promise<void> {
+		record.status = "completed";
+		record.outcome = outcome;
+		record.completedAt = now();
+		await this.commit(run, (next) => {
+			next.phase = branchRef ? "waiting_parallel" : "routing";
+			const updatedRound = round ? clone(round) : undefined;
+			if (updatedRound && !branchRef) {
+				updatedRound.status = "completed";
+				updatedRound.joinOutcome = outcome;
+				updatedRound.completedAt = record.completedAt;
+				delete next.currentParallelRoundId;
+			}
+			return {
+				nodeRuns: [record],
+				parallelRounds: updatedRound ? [updatedRound] : undefined,
+			};
+		});
+	}
+
+	private async selectRoute(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		result: string,
+		destination: FlowDestination,
+		parallelRoundId?: string,
+		affectRun = true,
+	): Promise<RouteDecisionRecord> {
+		const decision: RouteDecisionRecord = {
+			id: randomUUID(),
+			runId: run.id,
+			sequence: 0,
+			sourceNodeRunId: record.id,
+			result,
+			destination,
+			parallelRoundId,
+			selectedAt: now(),
+		};
+		await this.commit(run, (next, sequence) => {
+			decision.sequence = sequence;
+			if (affectRun) next.phase = "routing";
+			return { routeDecisions: [decision] };
+		});
+		return decision;
+	}
+
+	private async enterParallel(
+		run: FlowRunRecord,
+		parallelRef: string,
+		input: FlowValue,
+		sourceNodeRunId: string,
+		roundId: string,
+	): Promise<void> {
+		if (!this.flow.parallels.has(parallelRef)) {
+			const error = new FlowRuntimeError(
+				"parallel_configuration",
+				`并行开始点不存在: ${parallelRef}`,
+			);
+			await this.failRun(run, toFlowError(error, "parallel_configuration"));
+			throw error;
+		}
+		const round: ParallelRoundRecord = {
+			id: roundId,
+			runId: run.id,
+			sequence: 0,
+			parallelRef,
+			input,
+			status: "running",
+			startedAt: now(),
+			branchNodeRunIds: {},
+			branchStatuses: {},
+			sourceNodeRunId,
+		};
+		await this.commit(run, (next, sequence) => {
+			round.sequence = sequence;
+			next.phase = "waiting_parallel";
+			delete next.currentNodeRef;
+			delete next.currentNodeRunId;
+			next.currentInput = input;
+			next.currentParallelRoundId = round.id;
+			return { parallelRounds: [round] };
+		});
+	}
+
+	private async completeRun(run: FlowRunRecord): Promise<void> {
+		await this.commit(run, (next) => {
+			next.status = "completed";
+			next.phase = "completed";
+			next.completedAt = now();
+			delete next.currentNodeRef;
+			delete next.currentNodeRunId;
+			delete next.currentParallelRoundId;
+			delete next.currentInput;
+			return {};
+		});
+	}
+
+	private async interruptNode(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		round?: ParallelRoundRecord,
+		branchRef?: string,
+	): Promise<void> {
+		record.status = "interrupted";
+		record.completedAt = now();
+		record.error = {
+			category: "recovery",
+			summary: "运行进程在节点完成前中断",
+		};
+		await this.commit(run, (next) => {
+			next.status = "interrupted";
+			next.phase = "interrupted";
+			if (round) {
+				round.status = "interrupted";
+				round.error = record.error;
+				if (branchRef) round.branchStatuses[branchRef] = "interrupted";
+			}
+			return {
+				nodeRuns: [record],
+				parallelRounds: round ? [round] : undefined,
+			};
+		});
+	}
+
+	private async failInterruptedCommand(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		round?: ParallelRoundRecord,
+	): Promise<never> {
+		const error: FlowError = {
+			category: "command_interrupted",
+			summary: `自定义命令节点“${record.nodeRef}”在完成前中断，无法安全自动重试`,
+		};
+		const recovery: RunRecoveryRecord = {
+			id: randomUUID(),
+			runId: run.id,
+			sequence: 0,
+			interruptedNodeRunId: record.id,
+			strategy: "fail_command",
+			resumedAt: now(),
+			summary: error.summary,
+		};
+		await this.commit(run, (next, sequence) => {
+			recovery.sequence = sequence;
+			next.status = "failed";
+			next.phase = "failed";
+			next.error = error;
+			next.completedAt = now();
+			if (round) {
+				round.status = "failed";
+				round.error = error;
+			}
+			return {
+				parallelRounds: round ? [round] : undefined,
+				recoveries: [recovery],
+			};
+		});
+		throw new FlowRuntimeError(error.category, error.summary);
+	}
+
+	private async failNode(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		error: FlowError,
+		round?: ParallelRoundRecord,
+		branchRef?: string,
+	): Promise<void> {
+		record.status = "failed";
+		record.error = error;
+		record.completedAt ??= now();
+		await this.commit(run, (next) => {
+			next.status = "failed";
+			next.phase = "failed";
+			next.error = error;
+			next.completedAt = now();
+			if (round) {
+				round.status = "failed";
+				round.error = error;
+				if (branchRef) round.branchStatuses[branchRef] = "failed";
+			}
+			return {
+				nodeRuns: [record],
+				parallelRounds: round ? [round] : undefined,
+			};
+		});
+	}
+
+	private async failRun(run: FlowRunRecord, error: FlowError): Promise<void> {
+		await this.commit(run, (next) => {
+			next.status = "failed";
+			next.phase = "failed";
+			next.error = error;
+			next.completedAt = now();
+			return {};
+		});
+	}
+
+	private async recordRecovery(
+		run: FlowRunRecord,
+		interruptedNodeRunId: string | undefined,
+		strategy: RunRecoveryRecord["strategy"],
+		summary: string,
+	): Promise<void> {
+		const recovery: RunRecoveryRecord = {
+			id: randomUUID(),
+			runId: run.id,
+			sequence: 0,
+			interruptedNodeRunId,
+			strategy,
+			resumedAt: now(),
+			summary,
+		};
+		await this.commit(run, (next, sequence) => {
+			recovery.sequence = sequence;
+			next.status = "running";
+			next.phase = "routing";
+			delete next.error;
+			return { recoveries: [recovery] };
+		});
+	}
+
+	private async requireParallelRound(
+		run: FlowRunRecord,
+		roundId: string,
+	): Promise<ParallelRoundRecord> {
+		const round = (await this.store.listParallelRounds(run.id)).find(
+			(record) => record.id === roundId,
+		);
+		if (!round) {
+			const error = new FlowRuntimeError(
+				"parallel_configuration",
+				`并行轮次不存在: ${roundId}`,
+			);
+			await this.failRun(run, toFlowError(error, "parallel_configuration"));
+			throw error;
+		}
+		return round;
+	}
+
+	private destination(nodeRef: string, resultName: string): FlowDestination {
 		const node = this.flow.nodes.get(nodeRef);
 		const destination = node?.successors.get(resultName);
 		if (!destination)
-			throw new Error(`节点 ${nodeRef} 没有结果“${resultName}”的去向`);
+			throw new FlowRuntimeError(
+				"route_not_found",
+				`节点 ${nodeRef} 没有结果“${resultName}”的去向`,
+			);
 		return destination;
 	}
+
+	private async commit(
+		run: FlowRunRecord,
+		prepare: (next: FlowRunRecord, sequence: number) => FactChanges,
+	): Promise<void> {
+		const write = this.writes.then(async () => {
+			const expectedSequence = run.sequence;
+			const next = clone(run);
+			const sequence = expectedSequence + 1;
+			const changes = prepare(next, sequence);
+			next.sequence = sequence;
+			await this.store.commit({
+				run: next,
+				expectedSequence,
+				...changes,
+			});
+			replaceObject(run, next);
+		});
+		this.writes = write.then(
+			() => undefined,
+			() => undefined,
+		);
+		return write;
+	}
+}
+
+class FlowRuntimeError extends Error {
+	readonly category: FlowErrorCategory;
+
+	constructor(category: FlowErrorCategory, message: string) {
+		super(message);
+		this.category = category;
+	}
+}
+
+function now(): string {
+	return new Date().toISOString();
+}
+
+function toFlowError(error: unknown, fallback: FlowErrorCategory): FlowError {
+	if (error instanceof FlowRuntimeError)
+		return { category: error.category, summary: error.message };
+	const summary = error instanceof Error ? error.message : String(error);
+	if (
+		/节点不允许结果|必须通过结果提交工具|只能提交一次结果|引用不匹配/.test(
+			summary,
+		)
+	) {
+		return { category: "outcome_validation", summary };
+	}
+	return { category: fallback, summary };
+}
+
+function fingerprintFlow(flow: FlowDefinition): string {
+	const definition = {
+		id: flow.id,
+		name: flow.name,
+		description: flow.description,
+		startNodeRef: flow.startNodeRef,
+		nodes: [...flow.nodes.values()].map((node) => ({
+			ref: node.ref,
+			name: node.name,
+			action: node.action,
+			results: [...node.results.entries()],
+			successors: [...node.successors.entries()],
+		})),
+		parallels: [...flow.parallels.values()],
+	};
+	return `sha256:${createHash("sha256").update(JSON.stringify(definition)).digest("hex")}`;
+}
+
+function normalizeRun(run: FlowRunRecord): FlowRunRecord {
+	const legacy = run as Partial<FlowRunRecord> & { error?: FlowError | string };
+	const status = legacy.status ?? "running";
+	const phase =
+		legacy.phase ??
+		(status === "completed" || status === "failed" || status === "interrupted"
+			? status
+			: legacy.currentParallelRound || legacy.currentParallelRoundId
+				? "waiting_parallel"
+				: legacy.currentNodeRef
+					? "executing_node"
+					: "starting");
+	return {
+		...run,
+		flowVersion: legacy.flowVersion ?? "legacy:unknown",
+		status,
+		phase,
+		sequence: legacy.sequence ?? 1,
+		historyCompleteness:
+			legacy.historyCompleteness ??
+			(legacy.flowVersion ? "complete" : "legacy"),
+		error:
+			typeof legacy.error === "string"
+				? { category: "legacy", summary: legacy.error }
+				: legacy.error,
+	} as FlowRunRecord;
+}
+
+function normalizeNodeRun(record: NodeRunRecord): NodeRunRecord {
+	const legacy = record as Partial<NodeRunRecord>;
+	return {
+		...record,
+		sequence: legacy.sequence ?? 0,
+		actionKind: legacy.actionKind ?? "执行自定义命令",
+		status:
+			legacy.status ??
+			(legacy.completedAt || legacy.outcome ? "completed" : "running"),
+		enteredFrom: legacy.enteredFrom ?? { kind: "start" },
+	} as NodeRunRecord;
+}
+
+function normalizeParallelRound(
+	round: ParallelRoundRecord,
+	runId: string,
+): ParallelRoundRecord {
+	const legacy = round as Partial<ParallelRoundRecord>;
+	const branchStatuses = { ...(legacy.branchStatuses ?? {}) };
+	for (const branchRef of Object.keys(legacy.branchNodeRunIds ?? {})) {
+		branchStatuses[branchRef] ??= "running";
+	}
+	return {
+		...round,
+		runId: legacy.runId ?? runId,
+		sequence: legacy.sequence ?? 0,
+		status: legacy.status ?? "running",
+		startedAt: legacy.startedAt ?? now(),
+		branchNodeRunIds: { ...(legacy.branchNodeRunIds ?? {}) },
+		branchStatuses,
+	} as ParallelRoundRecord;
 }
 
 function renderAgentPrompt(
@@ -705,6 +1384,13 @@ function renderAgentPrompt(
 		.map(([name, description]) => `- ${name}: ${description}`)
 		.join("\n");
 	return `${prompt.replaceAll("{outcome}", renderedInput)}\n\n本节点只允许提交以下一个结果：\n${outcomes}\n\n完成工作后必须调用 submit_flow_outcome，并提供 outcome 和 content。`;
+}
+
+function replaceObject<T extends object>(target: T, source: T): void {
+	for (const key of Object.keys(target)) {
+		if (!(key in source)) delete (target as Record<string, unknown>)[key];
+	}
+	Object.assign(target, source);
 }
 
 function clone<T>(value: T): T {

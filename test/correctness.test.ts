@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,6 +9,7 @@ import {
 	AgentRunModel,
 	FlowCoordinator,
 	InMemoryRunStore,
+	JsonFileRunStore,
 	ProcessCommandExecutor,
 } from "../src/runtime.ts";
 import type {
@@ -241,4 +242,233 @@ test("多会话并发且缺少会话上下文时拒绝猜测归属", async () =>
 	);
 	assert.equal(a.submittedTo.length, 0);
 	assert.equal(b.submittedTo.length, 0);
+});
+
+test("运行事实保存 Flow 指纹、节点顺序和每次路由决定", async () => {
+	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const store = new InMemoryRunStore();
+	const run = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "已分析", content: "analysis" },
+				{ result: "已完成", content: "done" },
+			]),
+		),
+	).run("task");
+
+	const records = await store.listNodeRuns(run.id);
+	const routes = await store.listRouteDecisions(run.id);
+	assert.equal(run.historyCompleteness, "complete");
+	assert.match(run.flowVersion, /^sha256:/);
+	assert.deepEqual(
+		records.map((record) => [record.sequence, record.nodeRef, record.status]),
+		[
+			[2, "analyze", "completed"],
+			[5, "finishNode", "completed"],
+		],
+	);
+	assert.deepEqual(
+		routes.map((route) => [
+			route.sourceNodeRunId,
+			route.result,
+			route.destination.kind,
+		]),
+		[
+			[records[0]?.id, "已分析", "node"],
+			[records[1]?.id, "已完成", "finish"],
+		],
+	);
+	assert.equal(run.sequence, 8);
+});
+
+test("命令非零退出仍是已完成业务结果并继续路由", async () => {
+	const flow = parseFlow(
+		await fixture("command-parallel.md"),
+		"command-parallel.md",
+	);
+	const commands: CommandExecutor = {
+		async execute(request) {
+			return {
+				status: "failure",
+				exitCode: 2,
+				stdout: request.command,
+				stderr: "business failure",
+			};
+		},
+	};
+	const store = new InMemoryRunStore();
+	const run = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "执行检查", content: "check" },
+				{ result: "通过", content: "approved" },
+			]),
+		),
+		commands,
+	).run("task");
+
+	assert.equal(run.status, "completed");
+	const records = await store.listNodeRuns(run.id);
+	const commandResults = records
+		.filter((record) => record.actionKind === "执行自定义命令")
+		.map((record) => record.outcome?.content);
+	assert.equal(commandResults.length, 3);
+	assert.ok(
+		commandResults.every(
+			(result) =>
+				typeof result === "object" &&
+				result !== null &&
+				(result as { status: string }).status === "failure",
+		),
+	);
+	const [round] = await store.listParallelRounds(run.id);
+	assert.equal(round?.status, "completed");
+	assert.deepEqual(Object.keys(round?.branchNodeRunIds ?? {}).sort(), [
+		"lint",
+		"test",
+	]);
+	assert.equal(
+		round?.joinNodeRunId,
+		records.find((record) => record.nodeRef === "merge")?.id,
+	);
+	assert.ok((round?.sequence ?? 0) > 0);
+});
+
+test("Agent 执行异常同时终结 NodeRun 和 Run", async () => {
+	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const store = new InMemoryRunStore();
+	const adapter: AgentIntegrationAdapter = {
+		async createAgent() {
+			return { id: "agent", platformReference: "agent" };
+		},
+		async takeOverAgent() {
+			throw new Error("unused");
+		},
+		async executeNode() {
+			throw new Error("agent crashed");
+		},
+		async getNodeSession() {
+			return [];
+		},
+		async releaseAgent() {},
+	};
+
+	await assert.rejects(
+		() =>
+			new FlowCoordinator(flow, store, new AgentRunModel(adapter)).run("task"),
+		/agent crashed/,
+	);
+	const [record] = await store.listNodeRuns(
+		(await store.listRuns(flow.id))[0]?.id ?? "",
+	);
+	assert.equal(record?.status, "failed");
+	assert.equal(record?.error?.category, "agent_execution");
+	assert.equal((await store.listRuns(flow.id))[0]?.status, "failed");
+});
+
+test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async () => {
+	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const store = new InMemoryRunStore();
+	await store.createRun({
+		id: "recoverable-run",
+		flowId: flow.id,
+		flowVersion: "legacy:unknown",
+		task: "task",
+		status: "running",
+		phase: "executing_node",
+		sequence: 1,
+		historyCompleteness: "legacy",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		sessionReference: "saved-session",
+		currentNodeRef: "analyze",
+		currentInput: "task",
+	});
+	await store.createNodeRun({
+		id: "old-agent-node",
+		runId: "recoverable-run",
+		sequence: 2,
+		nodeRef: "analyze",
+		actionKind: "新建Agent",
+		input: "task",
+		status: "running",
+		startedAt: "2026-01-01T00:01:00.000Z",
+		enteredFrom: { kind: "start" },
+	});
+
+	const result = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "已分析", content: "analysis" },
+				{ result: "已完成", content: "done" },
+			]),
+		),
+	).resume("recoverable-run");
+	const records = await store.listNodeRuns(result.id);
+	assert.equal(
+		records.find((record) => record.id === "old-agent-node")?.status,
+		"interrupted",
+	);
+	const retry = records.find((record) => record.retryOf === "old-agent-node");
+	assert.equal(retry?.status, "completed");
+	assert.equal(result.status, "completed");
+});
+
+test("JSON Store 持久化全部事实并将旧快照标记为 legacy", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "flow-facts-"));
+	const file = join(directory, "runs.json");
+	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const store = new JsonFileRunStore(file);
+	const run = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "已分析", content: "analysis" },
+				{ result: "已完成", content: "done" },
+			]),
+		),
+	).run("task");
+	const saved = JSON.parse(await readFile(file, "utf8")) as {
+		runs: unknown[];
+		nodeRuns: unknown[];
+		routeDecisions: unknown[];
+		parallelRounds: unknown[];
+	};
+	assert.equal(saved.runs.length, 1);
+	assert.equal(saved.nodeRuns.length, 2);
+	assert.equal(saved.routeDecisions.length, 2);
+	assert.equal(saved.parallelRounds.length, 0);
+	assert.equal(
+		(await new JsonFileRunStore(file).getRun(run.id))?.sequence,
+		run.sequence,
+	);
+
+	const legacyFile = join(directory, "legacy.json");
+	await writeFile(
+		legacyFile,
+		JSON.stringify({
+			runs: [
+				{
+					id: "legacy",
+					flowId: flow.id,
+					task: "task",
+					status: "completed",
+					startedAt: "2026-01-01T00:00:00.000Z",
+				},
+			],
+			nodeRuns: [],
+		}),
+		"utf8",
+	);
+	assert.equal(
+		(await new JsonFileRunStore(legacyFile).getRun("legacy"))
+			?.historyCompleteness,
+		"legacy",
+	);
 });

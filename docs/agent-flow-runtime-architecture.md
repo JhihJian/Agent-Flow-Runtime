@@ -197,7 +197,7 @@ TUI、CLI 查询、JSONL 事件或后续指标系统都只是这份运行事实�
 
 ## 8. 数据保存
 
-当前实现使用`InMemoryRunStore`和`JsonFileRunStore`，但尚未满足本契约的完整历史要求。目标 JSON Store 仅用于 MVP 的单进程单实例本地运行记录，应串行写入并采用临时文件原子替换，不作为高并发分析数据库、跨进程协调器或事件日志。
+运行事实层现在由`InMemoryRunStore`和`JsonFileRunStore`保存 Run、NodeRun、RouteDecision、ParallelRound、恢复记录和版本水位。旧 JSON 记录会被兼容读取并标记为`legacy`，不能伪造缺失历史。JSON Store 仅用于 MVP 的单进程单实例本地运行记录，采用串行写入和临时文件原子替换，不作为高并发分析数据库、跨进程协调器或事件日志。
 
 运行时应区分三类数据：
 

@@ -81,7 +81,7 @@ NodeRun 需要有明确状态：
 running | completed | failed | interrupted
 ```
 
-当前实现通过是否存在`completedAt`和`outcome`判断节点是否完成，Run 只有`running`、`completed`和`failed`三种状态。后续应把上述状态显式加入记录，避免观测端依赖字段缺失来猜测。
+运行事实层现在为 Run 和 NodeRun 保存显式状态与阶段；旧 JSON 记录读取时会补齐可推导字段并标记为`legacy`，不能据此声称缺失的路由、版本或并行历史完整。观测端不得再通过字段缺失猜测新记录的状态。
 
 ## 4. 运行事实如何产生
 

@@ -157,8 +157,12 @@ describe("FlowCoordinator", () => {
 		await store.createRun({
 			id: "interrupted-run",
 			flowId: flow.id,
+			flowVersion: "legacy:unknown",
 			task: "task",
 			status: "running",
+			phase: "executing_node",
+			sequence: 1,
+			historyCompleteness: "legacy",
 			startedAt: "2026-01-01T00:00:00.000Z",
 			flowPath: "/flows/ordinary.md",
 			cwd: "/work",
@@ -169,9 +173,13 @@ describe("FlowCoordinator", () => {
 		await store.createNodeRun({
 			id: "interrupted-node",
 			runId: "interrupted-run",
+			sequence: 2,
 			nodeRef: "analyze",
+			actionKind: "新建Agent",
 			input: "task",
+			status: "running",
 			startedAt: "2026-01-01T00:01:00.000Z",
+			enteredFrom: { kind: "start" },
 		});
 
 		const result = await new FlowCoordinator(
