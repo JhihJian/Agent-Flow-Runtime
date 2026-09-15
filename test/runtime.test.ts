@@ -123,6 +123,10 @@ describe("FlowCoordinator", () => {
 		expect(result.status).toBe("completed");
 		const records = await store.listNodeRuns(result.id);
 		expect(records).toHaveLength(2);
+		expect(records.map((record) => record.nodeName)).toEqual([
+			"分析任务",
+			"完成任务",
+		]);
 		expect(records.map((record) => record.input)).toEqual(["task", "analysis"]);
 		expect(adapter.released).toHaveLength(1);
 	});

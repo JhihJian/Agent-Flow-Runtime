@@ -491,7 +491,7 @@ function renderRunSnapshot(
 	if (!history || ctx.mode !== "tui") return;
 	const current =
 		history.current.kind === "node"
-			? `node:${history.current.nodeRef}`
+			? `node:${history.current.nodeName ?? history.current.nodeRef}`
 			: history.current.kind === "parallel"
 				? `parallel:${history.current.parallelRef}`
 				: "none";

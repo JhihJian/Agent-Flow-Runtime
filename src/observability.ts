@@ -160,6 +160,7 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 		const evidence: FlowNodeEvidence = {
 			runId,
 			nodeRunId: record.id,
+			nodeName: record.nodeName,
 			nodeRef: record.nodeRef,
 			status: record.status,
 			input: record.input,
@@ -263,7 +264,9 @@ export function formatFlowRunHistory(history: FlowRunHistory): string {
 	];
 	for (const node of history.nodeRuns) {
 		const result = node.result ? ` -> ${node.result}` : "";
-		lines.push(`  ${node.sequence}. ${node.nodeRef} [${node.status}]${result}`);
+		lines.push(
+			`  ${node.sequence}. ${node.nodeName ?? node.nodeRef} [${node.status}]${result}`,
+		);
 	}
 	for (const route of history.routeDecisions) {
 		lines.push(
@@ -328,6 +331,7 @@ function toNodeRunView(record: NodeRunRecord): FlowNodeRunView {
 		id: record.id,
 		runId: record.runId,
 		sequence: record.sequence,
+		nodeName: record.nodeName,
 		nodeRef: record.nodeRef,
 		actionKind: record.actionKind,
 		input: record.input,
@@ -367,6 +371,7 @@ function locateCurrent(
 		return {
 			kind: "node",
 			nodeRunId: nodeRun?.id,
+			nodeName: nodeRun?.nodeName,
 			nodeRef: nodeRun?.nodeRef ?? run.currentNodeRef,
 		};
 	}

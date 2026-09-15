@@ -256,6 +256,7 @@ JSON/RPC 通过薄适配器输出正式的`flow_event`消息：
     "type": "node.started",
     "runId": "run-id",
     "sequence": 6,
+    "nodeName": "验证结果",
     "nodeRef": "verify",
     "phase": "executing_node"
   }
@@ -263,6 +264,8 @@ JSON/RPC 通过薄适配器输出正式的`flow_event`消息：
 ```
 
 自动化客户端按`runId`订阅，并在`run.completed`、`run.failed`或`run.interrupted`时结束订阅。不能要求客户端解析 Pi 的自然语言消息来判断 Flow 状态，也不能只依赖`submit_flow_outcome`，因为命令节点和节点开始事件不会经过该工具。
+
+节点事件同时提供`nodeName`和`nodeRef`。展示端必须优先显示运行时保存的`nodeName`，`nodeRef`仅用于程序关联和诊断；旧运行记录缺少名称时才回退显示引用名。
 
 ## 8. 断线和恢复
 

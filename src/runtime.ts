@@ -36,6 +36,7 @@ type ObservationSpec = {
 	type: FlowObservationEvent["type"];
 	summary: string;
 	nodeRunId?: string;
+	nodeName?: string;
 	nodeRef?: string;
 	parallelRoundId?: string;
 	result?: string;
@@ -522,10 +523,14 @@ export class FlowCoordinator {
 			currentInput: task,
 		};
 		await this.store.createRun(run);
+		const startNodeName =
+			this.flow.nodes.get(this.flow.startNodeRef)?.name ??
+			this.flow.startNodeRef;
 		this.publishObservation(run, {
 			type: "run.started",
 			nodeRef: run.currentNodeRef,
-			summary: `Flow 运行已开始，首节点为“${run.currentNodeRef}”`,
+			nodeName: startNodeName,
+			summary: `Flow 运行已开始，首节点为“${startNodeName}”`,
 		});
 		return this.continueRun(run, this.flow.startNodeRef, task, options, {
 			kind: "start",
@@ -891,6 +896,7 @@ export class FlowCoordinator {
 			id: randomUUID(),
 			runId: run.id,
 			sequence: 0,
+			nodeName: node.name,
 			nodeRef,
 			actionKind: node.action.kind,
 			input,
@@ -909,7 +915,7 @@ export class FlowCoordinator {
 						interruptedNodeRunId: retryOf.id,
 						strategy: "retry_agent" as const,
 						resumedAt: now(),
-						summary: `从中断节点“${retryOf.nodeRef}”创建新的 Agent 访问`,
+						summary: `从中断节点“${displayNodeName(retryOf)}”创建新的 Agent 访问`,
 					}
 				: undefined;
 		await this.commit(
@@ -951,16 +957,18 @@ export class FlowCoordinator {
 							{
 								type: "run.resumed" as const,
 								nodeRunId: record.id,
+								nodeName: record.nodeName,
 								nodeRef,
-								summary: `Flow 运行已恢复，创建节点“${nodeRef}”的新访问`,
+								summary: `Flow 运行已恢复，创建节点“${displayNodeName(record)}”的新访问`,
 							},
 						]
 					: []),
 				{
 					type: "node.started",
 					nodeRunId: record.id,
+					nodeName: record.nodeName,
 					nodeRef,
-					summary: `节点“${nodeRef}”开始执行`,
+					summary: `节点“${displayNodeName(record)}”开始执行`,
 				},
 			],
 		);
@@ -1084,9 +1092,10 @@ export class FlowCoordinator {
 				{
 					type: "node.completed",
 					nodeRunId: record.id,
+					nodeName: record.nodeName,
 					nodeRef: record.nodeRef,
 					nodeStatus: "completed",
-					summary: `节点“${record.nodeRef}”已完成，结果为“${outcome.result}”`,
+					summary: `节点“${displayNodeName(record)}”已完成，结果为“${outcome.result}”`,
 				},
 			],
 		);
@@ -1121,10 +1130,11 @@ export class FlowCoordinator {
 				{
 					type: "route.selected",
 					nodeRunId: record.id,
+					nodeName: record.nodeName,
 					nodeRef: record.nodeRef,
 					result,
 					destination,
-					summary: `节点“${record.nodeRef}”选择结果“${result}”的去向`,
+					summary: `节点“${displayNodeName(record)}”选择结果“${result}”的去向`,
 				},
 			],
 		);
@@ -1233,13 +1243,17 @@ export class FlowCoordinator {
 				{
 					type: "node.interrupted",
 					nodeRunId: record.id,
+					nodeName: record.nodeName,
 					nodeRef: record.nodeRef,
 					nodeStatus: "interrupted",
-					summary: `节点“${record.nodeRef}”已中断`,
+					summary: `节点“${displayNodeName(record)}”已中断`,
 				},
 				{
 					type: "run.interrupted",
-					summary: "Flow 运行已中断",
+					nodeRunId: record.id,
+					nodeName: record.nodeName,
+					nodeRef: record.nodeRef,
+					summary: `节点“${displayNodeName(record)}”执行中断，Flow 运行已中断`,
 				},
 			],
 		);
@@ -1252,7 +1266,7 @@ export class FlowCoordinator {
 	): Promise<never> {
 		const error: FlowError = {
 			category: "command_interrupted",
-			summary: `自定义命令节点“${record.nodeRef}”在完成前中断，无法安全自动重试`,
+			summary: `自定义命令节点“${displayNodeName(record)}”在完成前中断，无法安全自动重试`,
 		};
 		const recovery: RunRecoveryRecord = {
 			id: randomUUID(),
@@ -1263,21 +1277,33 @@ export class FlowCoordinator {
 			resumedAt: now(),
 			summary: error.summary,
 		};
-		await this.commit(run, (next, sequence) => {
-			recovery.sequence = sequence;
-			next.status = "failed";
-			next.phase = "failed";
-			next.error = error;
-			next.completedAt = now();
-			if (round) {
-				round.status = "failed";
-				round.error = error;
-			}
-			return {
-				parallelRounds: round ? [round] : undefined,
-				recoveries: [recovery],
-			};
-		});
+		await this.commit(
+			run,
+			(next, sequence) => {
+				recovery.sequence = sequence;
+				next.status = "failed";
+				next.phase = "failed";
+				next.error = error;
+				next.completedAt = now();
+				if (round) {
+					round.status = "failed";
+					round.error = error;
+				}
+				return {
+					parallelRounds: round ? [round] : undefined,
+					recoveries: [recovery],
+				};
+			},
+			[
+				{
+					type: "run.failed",
+					nodeRunId: record.id,
+					nodeName: record.nodeName,
+					nodeRef: record.nodeRef,
+					summary: error.summary,
+				},
+			],
+		);
 		throw new FlowRuntimeError(error.category, error.summary);
 	}
 
@@ -1391,12 +1417,13 @@ export class FlowCoordinator {
 				specs.push({
 					type,
 					nodeRunId: record.id,
+					nodeName: record.nodeName,
 					nodeRef: record.nodeRef,
 					nodeStatus: record.status,
 					summary:
 						type === "node.started"
-							? `节点“${record.nodeRef}”开始执行`
-							: `节点“${record.nodeRef}”状态为 ${record.status}`,
+							? `节点“${displayNodeName(record)}”开始执行`
+							: `节点“${displayNodeName(record)}”状态为 ${record.status}`,
 				});
 			}
 			for (const decision of changes.routeDecisions ?? []) {
@@ -1433,11 +1460,20 @@ export class FlowCoordinator {
 			if (previous.status !== next.status) {
 				if (next.status === "completed")
 					specs.push({ type: "run.completed", summary: "Flow 运行已完成" });
-				if (next.status === "failed")
+				if (next.status === "failed") {
+					const failedNode = [...(changes.nodeRuns ?? [])]
+						.reverse()
+						.find((record) => record.status === "failed");
 					specs.push({
 						type: "run.failed",
-						summary: next.error?.summary ?? "Flow 运行失败",
+						nodeRunId: failedNode?.id,
+						nodeName: failedNode?.nodeName,
+						nodeRef: failedNode?.nodeRef,
+						summary: failedNode
+							? `节点“${displayNodeName(failedNode)}”执行失败：${next.error?.summary ?? "未知错误"}`
+							: (next.error?.summary ?? "Flow 运行失败"),
 					});
+				}
 				if (next.status === "interrupted")
 					specs.push({ type: "run.interrupted", summary: "Flow 运行已中断" });
 			}
@@ -1456,6 +1492,7 @@ export class FlowCoordinator {
 			status: run.status,
 			phase: run.phase,
 			nodeRunId: spec.nodeRunId,
+			nodeName: spec.nodeName,
 			nodeRef: spec.nodeRef,
 			parallelRoundId: spec.parallelRoundId,
 			result: spec.result,
@@ -1587,6 +1624,12 @@ function normalizeNodeRun(record: NodeRunRecord): NodeRunRecord {
 			(legacy.completedAt || legacy.outcome ? "completed" : "running"),
 		enteredFrom: legacy.enteredFrom ?? { kind: "start" },
 	} as NodeRunRecord;
+}
+
+function displayNodeName(
+	record: Pick<NodeRunRecord, "nodeName" | "nodeRef">,
+): string {
+	return record.nodeName ?? record.nodeRef;
 }
 
 function normalizeParallelRound(

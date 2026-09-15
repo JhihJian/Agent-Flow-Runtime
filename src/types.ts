@@ -180,6 +180,9 @@ export interface NodeRunRecord {
 	runId: string;
 	/** Stable fact order within the Run. */
 	sequence: number;
+	/** Human-readable node name captured from the Flow definition for display. */
+	nodeName?: string;
+	/** Stable internal reference used for routing and programmatic association. */
 	nodeRef: string;
 	actionKind: FlowAction["kind"];
 	input: FlowValue;
@@ -314,6 +317,7 @@ export type FlowRunLocation =
 	| {
 			kind: "node";
 			nodeRunId?: string;
+			nodeName?: string;
 			nodeRef: string;
 	  }
 	| {
@@ -333,6 +337,7 @@ export interface FlowNodeRunView {
 	id: string;
 	runId: string;
 	sequence: number;
+	nodeName?: string;
 	nodeRef: string;
 	actionKind: FlowAction["kind"];
 	input: FlowValue;
@@ -361,6 +366,7 @@ export interface FlowRunHistory {
 export interface FlowNodeEvidence {
 	runId: string;
 	nodeRunId: string;
+	nodeName?: string;
 	nodeRef: string;
 	status: NodeRunStatus;
 	input: FlowValue;
@@ -422,6 +428,8 @@ export interface FlowObservationEvent {
 	status: RunStatus;
 	phase: RunPhase;
 	nodeRunId?: string;
+	/** User-facing name. `nodeRef` remains available as a stable internal key. */
+	nodeName?: string;
 	nodeRef?: string;
 	parallelRoundId?: string;
 	result?: string;

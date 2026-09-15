@@ -7,6 +7,7 @@ import {
 	FlowObservationPublisher,
 	FlowRunInspector,
 	FlowRuntime,
+	formatFlowRunHistory,
 	toFlowEventEnvelope,
 } from "../src/observability.ts";
 import { parseFlow } from "../src/parser.ts";
@@ -348,6 +349,9 @@ test("命令非零退出仍是已完成业务结果并继续路由", async () =>
 test("Agent 执行异常同时终结 NodeRun 和 Run", async () => {
 	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
 	const store = new InMemoryRunStore();
+	const publisher = new FlowObservationPublisher();
+	const events: FlowObservationEvent[] = [];
+	publisher.subscribe("failed-event-run", (event) => events.push(event));
 	const adapter: AgentIntegrationAdapter = {
 		async createAgent() {
 			return { id: "agent", platformReference: "agent" };
@@ -366,7 +370,13 @@ test("Agent 执行异常同时终结 NodeRun 和 Run", async () => {
 
 	await assert.rejects(
 		() =>
-			new FlowCoordinator(flow, store, new AgentRunModel(adapter)).run("task"),
+			new FlowCoordinator(
+				flow,
+				store,
+				new AgentRunModel(adapter),
+				undefined,
+				publisher,
+			).run("task", { runId: "failed-event-run" }),
 		/agent crashed/,
 	);
 	const [record] = await store.listNodeRuns(
@@ -375,6 +385,9 @@ test("Agent 执行异常同时终结 NodeRun 和 Run", async () => {
 	assert.equal(record?.status, "failed");
 	assert.equal(record?.error?.category, "agent_execution");
 	assert.equal((await store.listRuns(flow.id))[0]?.status, "failed");
+	const runFailed = events.find((event) => event.type === "run.failed");
+	assert.equal(runFailed?.nodeName, "分析任务");
+	assert.match(runFailed?.summary ?? "", /节点“分析任务”执行失败/);
 });
 
 test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async () => {
@@ -616,9 +629,57 @@ test("Coordinator 在事实保存成功后发布普通路径事件", async () =>
 		),
 	);
 	assert.ok(events.every((event) => event.summary.length > 0));
+	const started = events.find((event) => event.type === "node.started");
+	assert.equal(started?.nodeRef, "analyze");
+	assert.equal(started?.nodeName, "分析任务");
+	assert.equal(started?.summary, "节点“分析任务”开始执行");
 	subscription.unsubscribe();
 	publisher.publish(events[0]);
 	assert.equal(events.length, 8);
+});
+
+test("观测历史优先展示持久化的节点名称，并兼容旧记录", async () => {
+	const store = new InMemoryRunStore();
+	await store.createRun({
+		id: "legacy-name-run",
+		flowId: "flow",
+		flowVersion: "legacy:unknown",
+		task: "task",
+		status: "completed",
+		phase: "completed",
+		sequence: 1,
+		historyCompleteness: "legacy",
+		startedAt: "2026-01-01T00:00:00.000Z",
+	});
+	await store.createNodeRun({
+		id: "named-node",
+		runId: "legacy-name-run",
+		sequence: 1,
+		nodeRef: "corroborate",
+		nodeName: "交叉验证",
+		actionKind: "新建Agent",
+		input: "task",
+		status: "completed",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		enteredFrom: { kind: "start" },
+	});
+	await store.createNodeRun({
+		id: "unnamed-node",
+		runId: "legacy-name-run",
+		sequence: 2,
+		nodeRef: "legacy-ref",
+		actionKind: "新建Agent",
+		input: "task",
+		status: "completed",
+		startedAt: "2026-01-01T00:00:01.000Z",
+		enteredFrom: { kind: "start" },
+	});
+	const history = await new FlowRunInspector(store).inspectRun(
+		"legacy-name-run",
+	);
+	assert.ok(history);
+	assert.match(formatFlowRunHistory(history), /交叉验证 \[completed\]/);
+	assert.match(formatFlowRunHistory(history), /legacy-ref \[completed\]/);
 });
 
 test("并行事件带有独立轮次引用，订阅者异常不影响 Run", async () => {
