@@ -1,7 +1,10 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { FlowRuntime } from "./observability.ts";
 import type { PiAgentIntegrationAdapter } from "./pi.ts";
-import type { FlowObservationSubscription } from "./types.ts";
+import type {
+	FlowObservationEvent,
+	FlowObservationSubscription,
+} from "./types.ts";
 
 interface PendingSessionReplacement {
 	resolve: () => void;
@@ -21,6 +24,8 @@ export interface CliFlowState {
 	sessionReference: string;
 	sendNodePrompt?: (prompt: string) => void;
 	sendCommand?: (command: string) => void;
+	publishObservation?: (event: FlowObservationEvent) => void;
+	clearFlowUi?: () => void;
 	pendingSessionReplacement?: PendingSessionReplacement;
 	notify?: (message: string, level: "info" | "warning" | "error") => void;
 }

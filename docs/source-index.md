@@ -8,10 +8,10 @@
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `PendingSessionReplacement` | 接口 | 否 | [src/cli-state.ts:6-9](../src/cli-state.ts#L6) |
-| `CliFlowState` | 接口 | 是 | [src/cli-state.ts:11-26](../src/cli-state.ts#L11) |
-| `getCliFlowState` | 函数 | 是 | [src/cli-state.ts:32-39](../src/cli-state.ts#L32) |
-| `rejectPendingSessionReplacement` | 函数 | 是 | [src/cli-state.ts:41-46](../src/cli-state.ts#L41) |
+| `PendingSessionReplacement` | 接口 | 否 | [src/cli-state.ts:9-12](../src/cli-state.ts#L9) |
+| `CliFlowState` | 接口 | 是 | [src/cli-state.ts:14-31](../src/cli-state.ts#L14) |
+| `getCliFlowState` | 函数 | 是 | [src/cli-state.ts:37-44](../src/cli-state.ts#L37) |
+| `rejectPendingSessionReplacement` | 函数 | 是 | [src/cli-state.ts:46-51](../src/cli-state.ts#L46) |
 
 ## [src/directory.ts](../src/directory.ts)
 
@@ -27,17 +27,41 @@
 
 ## [src/extension.ts](../src/extension.ts)
 
-依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./observability.ts`、`./parser.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`
+依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./flow-run-visualization.ts`、`./flow-run-visualization-tui.ts`、`./observability.ts`、`./parser.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:35-445](../src/extension.ts#L35) |
-| `loadFlow` | 函数 | 否 | [src/extension.ts:447-449](../src/extension.ts#L447) |
-| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:451-457](../src/extension.ts#L451) |
-| `publishHostObservation` | 函数 | 否 | [src/extension.ts:459-485](../src/extension.ts#L459) |
-| `renderRunSnapshot` | 函数 | 否 | [src/extension.ts:487-507](../src/extension.ts#L487) |
-| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:509-511](../src/extension.ts#L509) |
-| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:513-518](../src/extension.ts#L513) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:37-517](../src/extension.ts#L37) |
+| `loadFlow` | 函数 | 否 | [src/extension.ts:519-521](../src/extension.ts#L519) |
+| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:523-529](../src/extension.ts#L523) |
+| `publishHostObservation` | 函数 | 否 | [src/extension.ts:531-545](../src/extension.ts#L531) |
+| `flowEventMessage` | 函数 | 否 | [src/extension.ts:547-554](../src/extension.ts#L547) |
+| `renderRunSnapshot` | 函数 | 否 | [src/extension.ts:556-576](../src/extension.ts#L556) |
+| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:578-580](../src/extension.ts#L578) |
+| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:582-587](../src/extension.ts#L582) |
+
+## [src/flow-run-visualization-tui.ts](../src/flow-run-visualization-tui.ts)
+
+依赖：`@earendil-works/pi-tui`、`./flow-run-visualization.ts`、`./types.ts`
+
+| 符号 | 类别 | 外部可见 | 位置 |
+| --- | --- | --- | --- |
+| `FlowRunVisualizationTui` | 类 | 是 | [src/flow-run-visualization-tui.ts:16-172](../src/flow-run-visualization-tui.ts#L16) |
+| `FlowRunVisualizationTui.render` | 方法 | 是 | [src/flow-run-visualization-tui.ts:42-105](../src/flow-run-visualization-tui.ts#L42) |
+| `FlowRunVisualizationTui.handleInput` | 方法 | 是 | [src/flow-run-visualization-tui.ts:107-137](../src/flow-run-visualization-tui.ts#L107) |
+| `FlowRunVisualizationTui.invalidate` | 方法 | 是 | [src/flow-run-visualization-tui.ts:139-141](../src/flow-run-visualization-tui.ts#L139) |
+| `FlowRunVisualizationTui.dispose` | 方法 | 是 | [src/flow-run-visualization-tui.ts:143-145](../src/flow-run-visualization-tui.ts#L143) |
+| `FlowRunVisualizationTui.timeline` | 方法 | 否 | [src/flow-run-visualization-tui.ts:147-149](../src/flow-run-visualization-tui.ts#L147) |
+| `FlowRunVisualizationTui.selectIndex` | 方法 | 否 | [src/flow-run-visualization-tui.ts:151-157](../src/flow-run-visualization-tui.ts#L151) |
+| `FlowRunVisualizationTui.syncSelectedIndex` | 方法 | 否 | [src/flow-run-visualization-tui.ts:159-171](../src/flow-run-visualization-tui.ts#L159) |
+| `selectionFor` | 函数 | 否 | [src/flow-run-visualization-tui.ts:174-190](../src/flow-run-visualization-tui.ts#L174) |
+| `sameSelection` | 函数 | 否 | [src/flow-run-visualization-tui.ts:192-213](../src/flow-run-visualization-tui.ts#L192) |
+| `describeItem` | 函数 | 否 | [src/flow-run-visualization-tui.ts:215-228](../src/flow-run-visualization-tui.ts#L215) |
+| `describeCurrent` | 函数 | 否 | [src/flow-run-visualization-tui.ts:230-234](../src/flow-run-visualization-tui.ts#L230) |
+| `describeDestination` | 函数 | 否 | [src/flow-run-visualization-tui.ts:236-243](../src/flow-run-visualization-tui.ts#L236) |
+| `describeEvidence` | 函数 | 否 | [src/flow-run-visualization-tui.ts:245-256](../src/flow-run-visualization-tui.ts#L245) |
+| `summarize` | 函数 | 否 | [src/flow-run-visualization-tui.ts:258-261](../src/flow-run-visualization-tui.ts#L258) |
+| `line` | 函数 | 否 | [src/flow-run-visualization-tui.ts:263-265](../src/flow-run-visualization-tui.ts#L263) |
 
 ## [src/flow-run-visualization.ts](../src/flow-run-visualization.ts)
 

@@ -9,6 +9,8 @@ import {
 	getCliFlowState,
 	rejectPendingSessionReplacement,
 } from "./cli-state.ts";
+import { FlowRunVisualizationController } from "./flow-run-visualization.ts";
+import { FlowRunVisualizationTui } from "./flow-run-visualization-tui.ts";
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
@@ -43,6 +45,11 @@ export default function flowExtension(pi: ExtensionAPI) {
 		sendCommand: (command: string) => void = (command) => {
 			pi.sendUserMessage(command, { expandPromptTemplates: true });
 		},
+		sendHostEvent: (event: FlowObservationEvent) => void | Promise<void> = (
+			event,
+		) => {
+			pi.sendMessage(flowEventMessage(event), { triggerTurn: false });
+		},
 	): void => {
 		state.currentContext = ctx;
 		state.sessionReference =
@@ -50,6 +57,20 @@ export default function flowExtension(pi: ExtensionAPI) {
 		state.notify = (message, level) => ctx.ui.notify(message, level);
 		state.sendNodePrompt = sendPrompt;
 		state.sendCommand = sendCommand;
+		state.publishObservation = (event) => {
+			publishHostObservation(event, ctx);
+			if (ctx.mode !== "json" && ctx.mode !== "rpc") return;
+			void Promise.resolve(sendHostEvent(event)).catch((error) => {
+				state.notify?.(
+					`Flow 观测发送异常: ${error instanceof Error ? error.message : String(error)}`,
+					"warning",
+				);
+			});
+		};
+		state.clearFlowUi = () => {
+			ctx.ui.setStatus("flow-runtime", undefined);
+			ctx.ui.setWidget("flow-runtime", undefined);
+		};
 	};
 
 	const bridge: PiCliBridge = {
@@ -138,6 +159,44 @@ export default function flowExtension(pi: ExtensionAPI) {
 		);
 	};
 
+	const viewRun = async (
+		runId: string,
+		ctx: ExtensionContext,
+	): Promise<void> => {
+		if (ctx.mode !== "tui") {
+			await showRun(runId, ctx);
+			return;
+		}
+		const runtime = state.runtime ?? createRuntimeForContext(ctx);
+		const controller = new FlowRunVisualizationController(runtime);
+		await controller.openRun(runId);
+		if (!controller.getState().detail?.snapshot) {
+			ctx.ui.notify(
+				controller.getState().detail?.error ?? `Flow 运行不存在: ${runId}`,
+				"warning",
+			);
+			controller.dispose();
+			return;
+		}
+		try {
+			await ctx.ui.custom<void>(
+				(tui, _theme, _keybindings, done) =>
+					new FlowRunVisualizationTui(tui, controller, () => done()),
+				{
+					overlay: true,
+					overlayOptions: {
+						width: "90%",
+						minWidth: 60,
+						maxHeight: "80%",
+						anchor: "center",
+					},
+				},
+			);
+		} finally {
+			controller.dispose();
+		}
+	};
+
 	pi.registerCommand("flow-new-session", {
 		description: "Start a fresh Pi session for an injected Flow transition",
 		handler: async (_args, ctx) => {
@@ -161,6 +220,10 @@ export default function flowExtension(pi: ExtensionAPI) {
 									expandPromptTemplates: true,
 								});
 							},
+							(event) =>
+								replacementContext.sendMessage(flowEventMessage(event), {
+									triggerTurn: false,
+								}),
 						);
 					},
 				});
@@ -210,7 +273,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 		) {
 			const observation = await state.runtime.openRunObservation(
 				state.activeRunId,
-				(event) => publishHostObservation(pi, event, ctx),
+				(event) => state.publishObservation?.(event),
 			);
 			if (observation) {
 				state.observation = observation.subscription;
@@ -245,12 +308,17 @@ export default function flowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("flow", {
-		description: "Run a Flow: /flow run <file> <task>",
+		description: "Run or view a Flow: /flow run <file> <task>",
 		handler: async (args, ctx) => {
 			bindContext(ctx);
 			const show = /^show\s+(\S+)$/.exec(args.trim());
 			if (show) {
 				await showRun(show[1], ctx);
+				return;
+			}
+			const view = /^view\s+(\S+)$/.exec(args.trim());
+			if (view) {
+				await viewRun(view[1], ctx);
 				return;
 			}
 			const list = /^list(?:\s+(\d+))?$/.exec(args.trim());
@@ -267,7 +335,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 					const labels = recent.map(formatRunSummaryOption);
 					const selected = await ctx.ui.select("选择 Flow 运行", labels);
 					const index = selected ? labels.indexOf(selected) : -1;
-					if (index >= 0) await showRun(recent[index].id, ctx);
+					if (index >= 0) await viewRun(recent[index].id, ctx);
 					return;
 				}
 				ctx.ui.notify(formatRecentRuns(recent), "info");
@@ -285,6 +353,12 @@ export default function flowExtension(pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => {
 		state.observation?.unsubscribe();
 		state.observation = undefined;
+		state.currentContext = undefined;
+		state.notify = undefined;
+		state.sendNodePrompt = undefined;
+		state.sendCommand = undefined;
+		state.publishObservation = undefined;
+		state.clearFlowUi = undefined;
 	});
 
 	async function startFlow(
@@ -315,7 +389,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 		const runId = randomUUID();
 		state.activeRunId = runId;
 		state.observation = runtime.subscribe(runId, (event) => {
-			publishHostObservation(pi, event, ctx);
+			state.publishObservation?.(event);
 		});
 		const coordinator = new FlowCoordinator(
 			flow,
@@ -358,8 +432,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 				state.observation?.unsubscribe();
 				state.observation = undefined;
 				state.activeRunId = undefined;
-				ctx.ui.setStatus("flow-runtime", undefined);
-				ctx.ui.setWidget("flow-runtime", undefined);
+				state.clearFlowUi?.();
 				state.active = undefined;
 				state.adapter = undefined;
 			});
@@ -408,7 +481,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 		state.runtime = runtime;
 		state.activeRunId = run.id;
 		const observation = await runtime.openRunObservation(run.id, (event) => {
-			publishHostObservation(pi, event, ctx);
+			state.publishObservation?.(event);
 		});
 		if (!observation) return;
 		state.observation = observation.subscription;
@@ -435,8 +508,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 				state.observation?.unsubscribe();
 				state.observation = undefined;
 				state.activeRunId = undefined;
-				ctx.ui.setStatus("flow-runtime", undefined);
-				ctx.ui.setWidget("flow-runtime", undefined);
+				state.clearFlowUi?.();
 				state.active = undefined;
 				state.adapter = undefined;
 			});
@@ -457,7 +529,6 @@ function createRuntimeForContext(ctx: ExtensionContext): FlowRuntime {
 }
 
 function publishHostObservation(
-	pi: ExtensionAPI,
 	event: FlowObservationEvent,
 	ctx: ExtensionContext,
 ): void {
@@ -471,17 +542,15 @@ function publishHostObservation(
 			`${event.type}: ${event.summary}`,
 		]);
 	}
-	if (ctx.mode === "json" || ctx.mode === "rpc") {
-		pi.sendMessage(
-			{
-				customType: "flow_event",
-				content: [],
-				display: false,
-				details: toFlowEventEnvelope(event),
-			},
-			{ triggerTurn: false },
-		);
-	}
+}
+
+function flowEventMessage(event: FlowObservationEvent) {
+	return {
+		customType: "flow_event",
+		content: [],
+		display: false,
+		details: toFlowEventEnvelope(event),
+	};
 }
 
 function renderRunSnapshot(

@@ -63,7 +63,7 @@ When testing a checkout before installing it, load the built extension explicitl
 pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
 ```
 
-In TUI, use `/flow run <文件> <任务>`, then `/flow list` to select a recent Run or `/flow show <runId>` to inspect it directly. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
+In TUI, use `/flow run <文件> <任务>`, then `/flow list` to select a recent Run, `/flow view <runId>` to open the interactive fact timeline, or `/flow show <runId>` for plain-text history. The preview supports timeline navigation, expandable parallel rounds, on-demand node evidence, refresh, and close actions. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. The `./examples/*.md` paths above refer to a repository checkout; installed users point `--flow` at their own Flow files, such as `.flows/release.md`.
 
@@ -135,10 +135,11 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
 - `src/flow-run-visualization.ts` provides a renderer-neutral, read-only controller for recent Runs, Run detail snapshots, fact timelines, observation lifecycles, and on-demand evidence. It only consumes `FlowRuntime`.
+- `src/flow-run-visualization-tui.ts` renders the controller as Pi's read-only interactive Run preview.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
 
-The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/flow-new-session` command and Pi's `ctx.newSession()` API. The command has a distinct name so it does not conflict with Pi's built-in interactive `/new`. The Flow coordinator survives extension reload through process-level handoff state, and the next node prompt is sent only after the replacement session is ready. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
+The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/flow-new-session` command and Pi's `ctx.newSession()` API. The command has a distinct name so it does not conflict with Pi's built-in interactive `/new`. The Flow coordinator survives extension reload through process-level handoff state, and the next node prompt is sent only after the replacement session is ready. Session-bound UI and event publishing callbacks are rebound to the replacement context, so Flow completion never uses a stale context. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
 
 ## Development
 
