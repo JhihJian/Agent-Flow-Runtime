@@ -63,7 +63,7 @@ When testing a checkout before installing it, load the built extension explicitl
 pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
 ```
 
-In TUI, use `/flow run <文件> <任务>` and `/flow show <runId>` to inspect the same persisted history returned by the SDK. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
+In TUI, use `/flow run <文件> <任务>`, then `/flow list` to select a recent Run or `/flow show <runId>` to inspect it directly. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. The `./examples/*.md` paths above refer to a repository checkout; installed users point `--flow` at their own Flow files, such as `.flows/release.md`.
 
@@ -113,6 +113,7 @@ const runtime = new FlowRuntime(
 	new FlowObservationPublisher(),
 );
 const history = await runtime.inspectRun(run.id);
+const recentRuns = await runtime.listRecentRuns(10);
 const subscription = runtime.subscribe(run.id, (event) => {
 	console.log(event.type, event.sequence, event.summary);
 });

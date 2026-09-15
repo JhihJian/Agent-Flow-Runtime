@@ -99,6 +99,14 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 		}
 	}
 
+	async listRecentRuns(limit = 10): Promise<FlowRunSummary[]> {
+		const runs = await this.store.listAllRuns();
+		return runs
+			.sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+			.slice(0, Math.max(0, limit))
+			.map(toRunSummary);
+	}
+
 	async inspectRun(runId: string): Promise<FlowRunHistory | undefined> {
 		const run = await this.store.getRun(runId);
 		if (!run) return undefined;
@@ -190,6 +198,10 @@ export class FlowRuntime implements FlowRunInspectorApi {
 	) {
 		this.inspector = inspector;
 		this.publisher = publisher;
+	}
+
+	listRecentRuns(limit?: number): Promise<FlowRunSummary[]> {
+		return this.inspector.listRecentRuns(limit);
 	}
 
 	inspectRun(runId: string): Promise<FlowRunHistory | undefined> {

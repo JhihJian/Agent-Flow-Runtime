@@ -224,4 +224,4 @@ Run 创建时必须保存 Flow 内容版本或稳定指纹，否则恢复和历�
 
 当前实现包含 Flow 解析、普通节点流转、Agent 新建和复用、命令执行、单层命令并行、显式汇合、Pi 会话关联、本地运行记录，以及 Pi CLI 恢复执行中的 Run。
 
-当前 Runtime 已提供只读的`FlowRunInspector`、进程内尽力而为的`FlowObservationPublisher`和统一的`FlowRuntime`门面。Pi 宿主已通过同一入口接入 `/flow show`、TUI 状态、JSON/RPC `flow_event` 和 Agent 查询工具；严格事件回放与跨进程共享仍不在 MVP 范围内。
+当前 Runtime 已提供只读的`FlowRunInspector`、进程内尽力而为的`FlowObservationPublisher`和统一的`FlowRuntime`门面。Pi 宿主已通过同一入口接入 `/flow list`、`/flow show`、TUI 状态、JSON/RPC `flow_event` 和 Agent 查询工具；严格事件回放与跨进程共享仍不在 MVP 范围内。

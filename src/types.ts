@@ -283,6 +283,7 @@ export interface RunStore {
 	createRun(run: FlowRunRecord): Promise<void>;
 	commit(fact: RunFactCommit): Promise<void>;
 	getRun(runId: string): Promise<FlowRunRecord | undefined>;
+	listAllRuns(): Promise<FlowRunRecord[]>;
 	listRuns(flowId: string): Promise<FlowRunRecord[]>;
 	listRunningRuns(): Promise<FlowRunRecord[]>;
 	listNodeRuns(runId: string): Promise<NodeRunRecord[]>;
@@ -389,6 +390,7 @@ export type FlowNodeEvidenceAuthorizer = (
 ) => boolean | Promise<boolean>;
 
 export interface FlowRunInspectorApi {
+	listRecentRuns(limit?: number): Promise<FlowRunSummary[]>;
 	inspectRun(runId: string): Promise<FlowRunHistory | undefined>;
 	inspectNodeEvidence(
 		runId: string,

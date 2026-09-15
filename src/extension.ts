@@ -27,6 +27,7 @@ import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
 import type {
 	FlowDefinition,
 	FlowObservationEvent,
+	FlowRunSummary,
 	UnifiedMessage,
 } from "./types.ts";
 
@@ -124,6 +125,18 @@ export default function flowExtension(pi: ExtensionAPI) {
 		}),
 	);
 	pi.registerTool(createFlowInspectionTool(() => state.runtime));
+
+	const showRun = async (
+		runId: string,
+		ctx: ExtensionContext,
+	): Promise<void> => {
+		const runtime = state.runtime ?? createRuntimeForContext(ctx);
+		const history = await runtime.inspectRun(runId);
+		ctx.ui.notify(
+			history ? formatFlowRunHistory(history) : `Flow 运行不存在: ${runId}`,
+			history ? "info" : "warning",
+		);
+	};
 
 	pi.registerCommand("flow-new-session", {
 		description: "Start a fresh Pi session for an injected Flow transition",
@@ -237,14 +250,27 @@ export default function flowExtension(pi: ExtensionAPI) {
 			bindContext(ctx);
 			const show = /^show\s+(\S+)$/.exec(args.trim());
 			if (show) {
+				await showRun(show[1], ctx);
+				return;
+			}
+			const list = /^list(?:\s+(\d+))?$/.exec(args.trim());
+			if (list) {
 				const runtime = state.runtime ?? createRuntimeForContext(ctx);
-				const history = await runtime.inspectRun(show[1]);
-				ctx.ui.notify(
-					history
-						? formatFlowRunHistory(history)
-						: `Flow 运行不存在: ${show[1]}`,
-					history ? "info" : "warning",
+				const recent = await runtime.listRecentRuns(
+					list[1] ? Number(list[1]) : 10,
 				);
+				if (!recent.length) {
+					ctx.ui.notify("暂无 Flow 运行记录", "info");
+					return;
+				}
+				if (ctx.hasUI) {
+					const labels = recent.map(formatRunSummaryOption);
+					const selected = await ctx.ui.select("选择 Flow 运行", labels);
+					const index = selected ? labels.indexOf(selected) : -1;
+					if (index >= 0) await showRun(recent[index].id, ctx);
+					return;
+				}
+				ctx.ui.notify(formatRecentRuns(recent), "info");
 				return;
 			}
 			const match = /^run\s+(\S+)\s+([\s\S]+)$/.exec(args.trim());
@@ -478,4 +504,15 @@ function renderRunSnapshot(
 		`Current: ${current}`,
 		`Nodes: ${history.nodeRuns.length}  Parallel rounds: ${history.parallelRounds.length}`,
 	]);
+}
+
+function formatRunSummaryOption(summary: FlowRunSummary): string {
+	return `${summary.id} | ${summary.flowId} | ${summary.status}/${summary.phase} | ${summary.startedAt}`;
+}
+
+function formatRecentRuns(runs: FlowRunSummary[]): string {
+	return [
+		"Recent Flow runs:",
+		...runs.map((run) => `- ${formatRunSummaryOption(run)}`),
+	].join("\n");
 }

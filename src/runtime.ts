@@ -132,6 +132,10 @@ export class InMemoryRunStore implements RunStore {
 			.map(clone);
 	}
 
+	async listAllRuns(): Promise<FlowRunRecord[]> {
+		return [...this.runs.values()].map(clone);
+	}
+
 	async listRunningRuns(): Promise<FlowRunRecord[]> {
 		return [...this.runs.values()]
 			.filter((run) => run.status === "running")
@@ -275,6 +279,11 @@ export class JsonFileRunStore extends InMemoryRunStore {
 	override async listRuns(flowId: string): Promise<FlowRunRecord[]> {
 		await this.ready();
 		return super.listRuns(flowId);
+	}
+
+	override async listAllRuns(): Promise<FlowRunRecord[]> {
+		await this.ready();
+		return super.listAllRuns();
 	}
 
 	override async listRunningRuns(): Promise<FlowRunRecord[]> {

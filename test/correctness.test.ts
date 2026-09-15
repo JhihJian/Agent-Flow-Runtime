@@ -717,6 +717,9 @@ test("统一 Runtime 门面先建立订阅再应用快照，不丢失水位之�
 		evidence: {},
 	};
 	const inspector = {
+		async listRecentRuns() {
+			return [];
+		},
 		async inspectRun() {
 			publisher.publish({
 				type: "node.started",
@@ -751,4 +754,35 @@ test("统一 Runtime 门面先建立订阅再应用快照，不丢失水位之�
 		event: events[0],
 	});
 	observation.subscription.unsubscribe();
+});
+
+test("Inspector 返回按开始时间倒序排列的近期运行摘要", async () => {
+	const store = new InMemoryRunStore();
+	const base = {
+		flowId: "flow",
+		flowVersion: "sha256:test",
+		task: "task",
+		status: "completed" as const,
+		phase: "completed" as const,
+		sequence: 1,
+		historyCompleteness: "complete" as const,
+	};
+	await store.createRun({
+		...base,
+		id: "older",
+		startedAt: "2026-01-01T00:00:00.000Z",
+	});
+	await store.createRun({
+		...base,
+		id: "newer",
+		startedAt: "2026-01-02T00:00:00.000Z",
+	});
+	const runtime = new FlowRuntime(
+		new FlowRunInspector(store),
+		new FlowObservationPublisher(),
+	);
+	assert.deepEqual(
+		(await runtime.listRecentRuns(1)).map((run) => run.id),
+		["newer"],
+	);
 });
