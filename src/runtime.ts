@@ -17,6 +17,7 @@ import type {
 	FlowObservationEvent,
 	FlowObservationPublisherApi,
 	FlowRunRecord,
+	FlowRunSnapshot,
 	FlowValue,
 	NodeOutcome,
 	NodeRunRecord,
@@ -127,6 +128,28 @@ export class InMemoryRunStore implements RunStore {
 		return run && clone(run);
 	}
 
+	async getRunSnapshot(runId: string): Promise<FlowRunSnapshot | undefined> {
+		const run = this.runs.get(runId);
+		if (!run) return undefined;
+		return {
+			run: clone(run),
+			nodeRuns: this.recordsFor(this.nodeRuns, runId),
+			routeDecisions: this.recordsFor(this.routeDecisions, runId),
+			parallelRounds: this.recordsFor(this.parallelRounds, runId),
+			recoveries: this.recordsFor(this.recoveries, runId),
+		};
+	}
+
+	private recordsFor<T extends { runId: string; sequence: number }>(
+		records: ReadonlyMap<string, T>,
+		runId: string,
+	): T[] {
+		return [...records.values()]
+			.filter((record) => record.runId === runId)
+			.sort((left, right) => left.sequence - right.sequence)
+			.map(clone);
+	}
+
 	async listRuns(flowId: string): Promise<FlowRunRecord[]> {
 		return [...this.runs.values()]
 			.filter((run) => run.flowId === flowId)
@@ -195,6 +218,7 @@ interface PersistedRuns {
 /** Single-process JSON persistence. Each mutation writes one complete snapshot. */
 export class JsonFileRunStore extends InMemoryRunStore {
 	private initialized = false;
+	private loadPromise?: Promise<void>;
 	private mutations = Promise.resolve();
 	private readonly file: string;
 
@@ -205,7 +229,21 @@ export class JsonFileRunStore extends InMemoryRunStore {
 
 	private async load(): Promise<void> {
 		if (this.initialized) return;
-		this.initialized = true;
+		if (!this.loadPromise) {
+			this.loadPromise = this.loadPersisted().then(
+				() => {
+					this.initialized = true;
+				},
+				(error: unknown) => {
+					this.loadPromise = undefined;
+					throw error;
+				},
+			);
+		}
+		await this.loadPromise;
+	}
+
+	private async loadPersisted(): Promise<void> {
 		try {
 			const saved = JSON.parse(
 				await readFile(this.file, "utf8"),
@@ -275,6 +313,13 @@ export class JsonFileRunStore extends InMemoryRunStore {
 	override async getRun(runId: string): Promise<FlowRunRecord | undefined> {
 		await this.ready();
 		return super.getRun(runId);
+	}
+
+	override async getRunSnapshot(
+		runId: string,
+	): Promise<FlowRunSnapshot | undefined> {
+		await this.ready();
+		return super.getRunSnapshot(runId);
 	}
 
 	override async listRuns(flowId: string): Promise<FlowRunRecord[]> {

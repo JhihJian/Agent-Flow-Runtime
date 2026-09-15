@@ -22,6 +22,8 @@ src/flow-run-visualization.ts
 
 该模块输出稳定的视图模型和状态变化，TUI、Web、CLI 或其他宿主只负责渲染和用户输入转发。
 
+当前实现已提供`FlowRunVisualizationController`、`buildFlowTimeline`和近期运行筛选函数，并从包公共入口导出。控制器的状态机、快照水位、订阅释放、冷启动快照一致性和证据隔离由独立单元测试覆盖。
+
 ```text
 FlowCoordinator
   -> RunStore

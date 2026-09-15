@@ -134,6 +134,7 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `src/directory.ts` discovers and loads Flow files by filename identifier for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
+- `src/flow-run-visualization.ts` provides a renderer-neutral, read-only controller for recent Runs, Run detail snapshots, fact timelines, observation lifecycles, and on-demand evidence. It only consumes `FlowRuntime`.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
 

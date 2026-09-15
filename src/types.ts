@@ -282,10 +282,20 @@ export interface RunFactCommit {
 	recoveries?: RunRecoveryRecord[];
 }
 
+/** A read-consistent persisted aggregate for one Run. */
+export interface FlowRunSnapshot {
+	run: FlowRunRecord;
+	nodeRuns: NodeRunRecord[];
+	routeDecisions: RouteDecisionRecord[];
+	parallelRounds: ParallelRoundRecord[];
+	recoveries: RunRecoveryRecord[];
+}
+
 export interface RunStore {
 	createRun(run: FlowRunRecord): Promise<void>;
 	commit(fact: RunFactCommit): Promise<void>;
 	getRun(runId: string): Promise<FlowRunRecord | undefined>;
+	getRunSnapshot(runId: string): Promise<FlowRunSnapshot | undefined>;
 	listAllRuns(): Promise<FlowRunRecord[]>;
 	listRuns(flowId: string): Promise<FlowRunRecord[]>;
 	listRunningRuns(): Promise<FlowRunRecord[]>;

@@ -47,7 +47,7 @@
 		"docs:source-index": "tsx tools/generate-source-index.ts --write",
 		"docs:source-index:check": "tsx tools/generate-source-index.ts --check",
 		"format": "biome format --write .",
-		"test": "npm run docs:source-index:check && npm run build && node --import tsx --test test/runtime-smoke.mjs test/source-index.test.ts test/correctness.test.ts",
+		"test": "npm run docs:source-index:check && npm run build && node --import tsx --test test/runtime-smoke.mjs test/source-index.test.ts test/correctness.test.ts test/flow-run-visualization.test.ts",
 		"test:vitest": "vitest --run",
 		"test:integration": "npm run build && node test/pi-sdk-smoke.mjs"
 	},

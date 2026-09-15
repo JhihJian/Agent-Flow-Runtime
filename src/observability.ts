@@ -108,15 +108,10 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 	}
 
 	async inspectRun(runId: string): Promise<FlowRunHistory | undefined> {
-		const run = await this.store.getRun(runId);
-		if (!run) return undefined;
-		const [nodeRuns, routeDecisions, parallelRounds, recoveries] =
-			await Promise.all([
-				this.store.listNodeRuns(runId),
-				this.store.listRouteDecisions(runId),
-				this.store.listParallelRounds(runId),
-				this.store.listRunRecoveries(runId),
-			]);
+		const persisted = await this.store.getRunSnapshot(runId);
+		if (!persisted) return undefined;
+		const { run, nodeRuns, routeDecisions, parallelRounds, recoveries } =
+			persisted;
 		const orderedNodeRuns = nodeRuns
 			.filter((record) => record.runId === runId)
 			.sort(bySequence);
