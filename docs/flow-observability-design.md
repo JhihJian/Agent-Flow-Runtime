@@ -13,7 +13,7 @@
 
 这里的观测对象是一次 Run 的执行过程。Flow 仍然只是可复用的工作路径，Task 才是本次具体问题。
 
-## 2. 一条观测链路
+## 2. 两个内部入口
 
 ```text
 FlowCoordinator
@@ -22,20 +22,36 @@ FlowCoordinator
         +--> RunStore
         |       保存 Run、NodeRun 和并行轮次快照
         |
-        +--> FlowObservationSink
+        +--> FlowRunInspector
+        |       查询一次 Run 的完整执行历史
+        |
+        +--> FlowObservationPublisher
                 推送运行变化
-                    |
-                    +--> TUI / CLI
-                    +--> JSON / RPC
 ```
 
-职责只有三层：
+Runtime 内部只需要提供两个与传输方式无关的能力：
 
-- **Coordinator** 决定流程怎么走，并产生事实。
-- **RunStore** 保存事实，提供重连后的当前快照。
-- **ObservationSink** 把变化通知给展示端。
+- **FlowRunInspector**：按`runId`读取并组织一次 Run 的完整历史。
+- **FlowObservationPublisher**：在运行事实变化后发布实时通知。
 
-TUI、CLI、JSON 和 RPC 都是展示端。它们不能自己推断流程状态，也不能修改 Run 或选择下一节点。
+`FlowRunInspector`只读，`FlowObservationPublisher`只发布，两者都不参与路由。TUI、CLI、SDK、Agent、JSON 和 RPC 都通过这两个内部入口接入，而不是各自读取存储或实现一套历史分析逻辑。
+
+```text
+FlowRunInspector
+    -> SDK 方法
+    -> CLI /flow show
+    -> RPC flow.inspect
+    -> Agent 查询接口
+    -> TUI 详情视图
+
+FlowObservationPublisher
+    -> TUI 实时状态
+    -> CLI 状态行
+    -> JSONL flow_event
+    -> RPC flow_event
+```
+
+因此“Agent 能否查看历史”不是 Agent 工具设计问题，而是 Runtime 是否有统一的 Run 历史查询入口。
 
 ## 3. 当前状态
 
@@ -72,7 +88,7 @@ running | completed | failed | interrupted
 ```text
 协调器计算状态变化
     -> RunStore 保存成功
-    -> ObservationSink 推送事件
+    -> FlowObservationPublisher 推送事件
 ```
 
 保存失败时不能推送“成功完成”的事件。推送失败时不能改变已经保存的 Run 状态，也不能让 Flow 停止执行。
@@ -115,13 +131,67 @@ running | completed | failed | interrupted
 
 事件只携带状态、引用和摘要。Task 正文、完整 Agent 对话、Prompt、stdout 和 stderr 仍通过受保护的运行记录或 Pi 会话查询，不默认进入实时通道。
 
-## 5. 当前状态和事件的关系
+## 5. Run 历史查询入口
+
+### FlowRunInspector
+
+`FlowRunInspector`是 Runtime 内部的应用能力，不绑定 Agent、CLI、Pi 或具体协议。它接收一个`runId`，返回一份可以直接分析的 Run 历史视图：
+
+```text
+inspect(runId)
+  Run 摘要
+    Task
+    Flow 标识
+    状态、阶段、当前节点
+    开始时间、结束时间、错误
+  执行路径
+    按顺序排列的全部 NodeRun
+    每次节点访问的输入摘要、结果、状态和耗时
+    结果导致的下一去向
+  并行信息
+    每个并行轮次
+    分支 NodeRun 和汇合结果
+  执行依据
+    Pi 交互引用
+    命令执行摘要
+```
+
+它返回的是 Flow 运行历史，不是未经整理的数据库记录。它负责把 NodeRun、并行轮次和结果边组织成一条可读路径，但不负责替用户判断业务结论。
+
+完整 Agent 会话和命令输出属于执行依据。`inspect`默认返回引用和摘要；需要深入查看时，通过同一应用层提供的节点依据查询读取：
+
+```text
+inspectNodeEvidence(runId, nodeRunId)
+```
+
+查询入口必须位于 Runtime 内部。外部形态只是薄适配器：
+
+| 外部形态 | 调用方式 |
+| --- | --- |
+| SDK | `runtime.inspectRun(runId)` |
+| CLI | `/flow show <runId>` |
+| RPC | `flow.inspect` 请求 |
+| Agent | 一个查询能力的工具或函数调用 |
+| TUI | 当前 Run 详情视图 |
+
+所有形态必须得到同一份历史模型，不能让 Agent、CLI 和 TUI 各自拼接`getRun`、`listNodeRuns`或读取 JSON 文件。
+
+### FlowRunInspector 和实时通知的关系
+
+历史查询和实时通知不能合并：
+
+- `FlowRunInspector`回答“截至现在，这次 Run 的完整历史是什么”。
+- `FlowObservationPublisher`回答“刚刚发生了什么变化”。
+
+用户打开页面、Agent 开始分析或客户端重连时，先调用`inspect`获得完整快照，再订阅后续事件。这样事件丢失不会破坏历史视图，展示端也不需要维护第二套状态。
+
+## 6. 当前状态和事件的关系
 
 两者职责不同，但只能有一个事实来源：
 
 ```text
 RunStore 快照 = 当前事实
-ObservationSink 事件 = 当前事实发生变化的通知
+FlowObservationPublisher 事件 = 当前事实发生变化的通知
 ```
 
 事件不是第二套状态库。展示端收到事件后可以更新界面，但重新连接时必须重新读取 RunStore 快照。
@@ -135,11 +205,11 @@ ObservationSink 事件 = 当前事实发生变化的通知
 
 如果未来需要严格补发所有事件，再为 RunStore 增加追加式事件日志。MVP 不把现有`.pi/flow-runs.json`当作事件日志，因为它保存的是整体快照。
 
-## 6. 用户如何实时看到
+## 7. 用户如何实时看到
 
 ### TUI
 
-Pi 扩展维护一个当前 Run 的展示区域，内容来自事件和 RunStore 快照：
+Pi 扩展维护一个当前 Run 的展示区域。启动或重连时通过`FlowRunInspector`取得快照，运行期间通过`FlowObservationPublisher`接收变化：
 
 ```text
 Flow: code-change    Run: 8f31
@@ -157,11 +227,11 @@ Flow: code-change    Run: 8f31
   等待  1 个分支
 ```
 
-通知只展示状态变化和摘要。完整结果通过`/flow status`读取，避免把长文本和敏感输出塞进通知区域。
+通知只展示状态变化和摘要。完整结果通过`FlowRunInspector`读取，避免把长文本和敏感输出塞进通知区域。
 
 ### CLI
 
-CLI 使用同一套事件转换器输出简短状态行：
+CLI 使用同一个`FlowRunInspector`读取初始状态，并使用同一个事件转换器输出简短状态行：
 
 ```text
 [8f31] 开始：代码修改与验证
@@ -175,7 +245,7 @@ CLI 退出码只表示 Run 的执行终态。业务上的“通过”仍由 Flow
 
 ### JSON 和 RPC
 
-JSON/RPC 输出正式的`flow_event`消息：
+JSON/RPC 通过薄适配器输出正式的`flow_event`消息：
 
 ```json
 {
@@ -192,7 +262,7 @@ JSON/RPC 输出正式的`flow_event`消息：
 
 自动化客户端按`runId`订阅，并在`run.completed`、`run.failed`或`run.interrupted`时结束订阅。不能要求客户端解析 Pi 的自然语言消息来判断 Flow 状态，也不能只依赖`submit_flow_outcome`，因为命令节点和节点开始事件不会经过该工具。
 
-## 7. 断线和恢复
+## 8. 断线和恢复
 
 ### 展示端断线
 
@@ -201,7 +271,7 @@ JSON/RPC 输出正式的`flow_event`消息：
     -> Run 继续执行
     -> RunStore 继续保存
     -> 展示端重连
-    -> 读取当前 Run 快照
+    -> 调用 FlowRunInspector 读取当前 Run 快照
     -> 继续接收后续事件
 ```
 
@@ -216,24 +286,26 @@ MVP 不保证补发断线期间的全部事件。快照必须能够让用户重�
 
 恢复本身也是可观测事实，应显示原位置、新访问记录和恢复结果。
 
-## 8. MVP 落地顺序
+## 9. MVP 落地顺序
 
 1. 给 Run 增加`phase`和显式中断状态。
 2. 给 NodeRun 增加显式状态和错误信息。
-3. 定义`FlowObservationSink`和最小事件类型。
-4. 在协调器的状态提交边界发送事件。
-5. 实现 TUI 当前节点和路径展示。
-6. 实现`/flow status`，始终从 RunStore 读取快照。
-7. 为 JSON/RPC 输出`flow_event`。
-8. 测试节点顺序、并行事件、恢复事件、断线快照和观测推送失败。
+3. 定义`FlowRunInspector`，返回一次 Run 的完整执行历史。
+4. 定义`FlowObservationPublisher`和最小事件类型。
+5. 在协调器的状态提交边界发送事件。
+6. 让 TUI、CLI、SDK、Agent、JSON 和 RPC 复用`FlowRunInspector`。
+7. 实现 TUI 当前节点、路径展示和`/flow show`。
+8. 为 JSON/RPC 输出`flow_event`。
+9. 测试节点顺序、并行事件、恢复事件、断线快照和观测推送失败。
 
 第一版不接入 Prometheus、OpenTelemetry 或外部告警平台，也不采集模型 token、内部推理和每一行工具输出。先保证用户能实时看懂一次 Run 的执行路径。
 
-## 9. 必须保持的规则
+## 10. 必须保持的规则
 
 - FlowCoordinator 是运行事实的产生者和流程状态的唯一所有者。
 - RunStore 是当前状态的事实来源。
-- ObservationSink 只通知，不决策、不路由、不提交结果。
+- FlowRunInspector 只查询和组织历史，不决策、不路由、不提交结果。
+- FlowObservationPublisher 只通知，不决策、不路由、不提交结果。
 - 展示端只展示，不维护第二套流程状态。
 - 事件推送失败不能影响 Flow 执行。
 - 断线后以快照恢复界面，不依赖事件缓存猜测状态。
