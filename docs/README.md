@@ -14,6 +14,7 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | [Agent Flow Runtime 架构设计](agent-flow-runtime-architecture.md) | 了解解释器、协调器、统一 Agent 运行模型和记录存储的职责边界。 |
 | [Flow 运行观测设计](flow-observability-design.md) | 了解运行事实如何产生，以及 TUI、CLI、JSON 和 RPC 如何实时展示。 |
 | [Flow 运行记录可视化设计](flow-observability-visual-design.md) | 了解运行中心、Run 详情、事实时间线、并行轮次和证据面板的展示层级。 |
+| [Flow 运行记录可视化实现设计](flow-run-visualization-implementation-design.md) | 了解独立展示状态层、快照与事件、订阅生命周期、权限和测试边界。 |
 
 ## SDK 接入
 
