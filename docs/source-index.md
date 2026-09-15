@@ -31,8 +31,8 @@
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:21-303](../src/extension.ts#L21) |
-| `loadFlow` | 函数 | 否 | [src/extension.ts:305-307](../src/extension.ts#L305) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:21-312](../src/extension.ts#L21) |
+| `loadFlow` | 函数 | 否 | [src/extension.ts:314-316](../src/extension.ts#L314) |
 
 ## [src/index.ts](../src/index.ts)
 

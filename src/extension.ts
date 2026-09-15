@@ -48,11 +48,20 @@ export default function flowExtension(pi: ExtensionAPI) {
 			if (state.pendingSessionReplacement) {
 				throw new Error("Pi Flow 已有正在进行的会话替换");
 			}
+			const model = state.currentContext?.model;
 			const promise = new Promise<void>((resolve, reject) => {
 				state.pendingSessionReplacement = { resolve, reject };
 			});
 			state.sendCommand("/flow-new-session");
 			await promise;
+			if (model) {
+				const restored = await pi.setModel(model);
+				if (!restored) {
+					throw new Error(
+						`无法在新 Pi 会话中恢复模型: ${model.provider}/${model.id}`,
+					);
+				}
+			}
 		},
 		getSessionReference() {
 			return state.sessionReference;
