@@ -9,9 +9,9 @@
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
 | `PendingSessionReplacement` | 接口 | 否 | [src/cli-state.ts:4-7](../src/cli-state.ts#L4) |
-| `CliFlowState` | 接口 | 是 | [src/cli-state.ts:9-20](../src/cli-state.ts#L9) |
-| `getCliFlowState` | 函数 | 是 | [src/cli-state.ts:26-33](../src/cli-state.ts#L26) |
-| `rejectPendingSessionReplacement` | 函数 | 是 | [src/cli-state.ts:35-40](../src/cli-state.ts#L35) |
+| `CliFlowState` | 接口 | 是 | [src/cli-state.ts:9-21](../src/cli-state.ts#L9) |
+| `getCliFlowState` | 函数 | 是 | [src/cli-state.ts:27-34](../src/cli-state.ts#L27) |
+| `rejectPendingSessionReplacement` | 函数 | 是 | [src/cli-state.ts:36-41](../src/cli-state.ts#L36) |
 
 ## [src/directory.ts](../src/directory.ts)
 
@@ -31,8 +31,8 @@
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:21-312](../src/extension.ts#L21) |
-| `loadFlow` | 函数 | 否 | [src/extension.ts:314-316](../src/extension.ts#L314) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:21-326](../src/extension.ts#L21) |
+| `loadFlow` | 函数 | 否 | [src/extension.ts:328-330](../src/extension.ts#L328) |
 
 ## [src/index.ts](../src/index.ts)
 

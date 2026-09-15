@@ -12,6 +12,7 @@ export interface CliFlowState {
 	resuming?: Promise<void>;
 	configuredPath?: string;
 	currentContext?: ExtensionContext;
+	pendingModel?: NonNullable<ExtensionContext["model"]>;
 	sessionReference: string;
 	sendNodePrompt?: (prompt: string) => void;
 	sendCommand?: (command: string) => void;

@@ -48,19 +48,16 @@ export default function flowExtension(pi: ExtensionAPI) {
 			if (state.pendingSessionReplacement) {
 				throw new Error("Pi Flow 已有正在进行的会话替换");
 			}
-			const model = state.currentContext?.model;
+			state.pendingModel = state.currentContext?.model;
 			const promise = new Promise<void>((resolve, reject) => {
 				state.pendingSessionReplacement = { resolve, reject };
 			});
-			state.sendCommand("/flow-new-session");
-			await promise;
-			if (model) {
-				const restored = await pi.setModel(model);
-				if (!restored) {
-					throw new Error(
-						`无法在新 Pi 会话中恢复模型: ${model.provider}/${model.id}`,
-					);
-				}
+			try {
+				state.sendCommand("/flow-new-session");
+				await promise;
+			} catch (error) {
+				state.pendingModel = undefined;
+				throw error;
 			}
 		},
 		getSessionReference() {
@@ -154,8 +151,25 @@ export default function flowExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("session_start", (event, ctx) => {
+	pi.on("session_start", async (event, ctx) => {
 		bindContext(ctx);
+		if (event.reason === "new" && state.pendingModel) {
+			const model = state.pendingModel;
+			state.pendingModel = undefined;
+			try {
+				const restored = await pi.setModel(model);
+				if (!restored) {
+					throw new Error(
+						`无法在新 Pi 会话中恢复模型: ${model.provider}/${model.id}`,
+					);
+				}
+			} catch (error) {
+				rejectPendingSessionReplacement(
+					error instanceof Error ? error : new Error(String(error)),
+				);
+				throw error;
+			}
+		}
 		const flag = pi.getFlag("flow");
 		if (!state.active) {
 			state.configuredPath =
