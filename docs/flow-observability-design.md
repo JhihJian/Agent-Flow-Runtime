@@ -371,6 +371,8 @@ interface FlowObservationPublisher {
 
 `inspectNodeEvidence` 必须校验 `nodeRunId` 属于指定 Run，并按宿主权限返回完整依据或 `undefined`。Inspector 只读、只组织历史，不路由、不决策、不提交结果。
 
+当前 Runtime 由`FlowRunInspector`提供上述查询能力。它只依赖`RunStore`和可选的`FlowNodeEvidenceReader`：历史投影默认返回会话/交互引用和命令输出可用性，`inspectNodeEvidence`才按权限读取完整 Agent 消息；没有证据读取器时仍返回已持久化的节点结果和引用。调用方不需要、也不得直接组合 Store 查询。
+
 Runtime 对外只暴露一个组装好的入口，至少提供上述 Inspector 和 Publisher；TUI、CLI、SDK、JSON、RPC 和 Agent 均通过这个入口调用，适配器只负责格式、传输和权限。适配器不得读取 RunStore、解析 `.pi/flow-runs.json`、拼接 `getRun`/`listNodeRuns`，也不得从 Agent 自然语言判断状态。CLI 退出码只表达 Run 终态，业务“通过”来自 Flow 结果。
 
 启动或重连必须先取得历史快照，再接收后续通知。为消除“快照读取和订阅注册之间”的空窗，统一入口必须定义订阅水位协议：推荐先注册订阅并缓冲事件，再读取带 `sequence` 的快照，应用快照后只处理水位更高的缓冲事件；或采用等价的订阅后重新检查快照协议。事件丢失时以最新快照纠正，不能靠事件缓存永久推断状态。

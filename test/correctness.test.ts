@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { FlowRunInspector } from "../src/observability.ts";
 import { parseFlow } from "../src/parser.ts";
 import { PiAgentIntegrationAdapter } from "../src/pi.ts";
 import {
@@ -471,4 +472,96 @@ test("JSON Store 持久化全部事实并将旧快照标记为 legacy", async ()
 			?.historyCompleteness,
 		"legacy",
 	);
+});
+
+test("Inspector 用同一份投影还原普通路径、路由和并行轮次", async () => {
+	const flow = parseFlow(
+		await fixture("command-parallel.md"),
+		"command-parallel.md",
+	);
+	const store = new InMemoryRunStore();
+	const run = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "执行检查", content: "check" },
+				{ result: "通过", content: "approved" },
+			]),
+		),
+		new RecordingCommandExecutor(),
+	).run("task");
+
+	const history = await new FlowRunInspector(store).inspectRun(run.id);
+	assert.ok(history);
+	assert.equal(history.run.id, run.id);
+	assert.equal(history.run.flowId, flow.id);
+	assert.equal(history.run.task, "task");
+	assert.deepEqual(
+		history.nodeRuns.map((record) => record.nodeRef),
+		["plan", "test", "lint", "merge", "judge"],
+	);
+	assert.ok(
+		history.nodeRuns.every(
+			(record, index, records) =>
+				index === 0 || record.sequence > records[index - 1].sequence,
+		),
+	);
+	assert.equal(history.routeDecisions.length, 5);
+	assert.equal(history.parallelRounds.length, 1);
+	assert.equal(
+		history.parallelRounds[0]?.joinNodeRunId,
+		history.nodeRuns[3]?.id,
+	);
+	assert.deepEqual(history.current, { kind: "none" });
+	assert.equal(
+		await new FlowRunInspector(store).inspectRun("missing-run"),
+		undefined,
+	);
+});
+
+test("Inspector 按 Run 校验 NodeRun，并按权限读取 Agent 证据", async () => {
+	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const store = new InMemoryRunStore();
+	const run = await new FlowCoordinator(
+		flow,
+		store,
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "已分析", content: "analysis" },
+				{ result: "已完成", content: "done" },
+			]),
+		),
+	).run("task");
+	const [node] = await store.listNodeRuns(run.id);
+	if (!node) throw new Error("expected an Agent NodeRun");
+	node.session = {
+		id: "session-1",
+		sessionReference: "pi-session",
+		interactionReference: "interaction-1",
+	};
+	await store.updateNodeRun(node);
+	const messages = [
+		{ id: "message-1", role: "assistant" as const, content: "evidence" },
+	];
+	const inspector = new FlowRunInspector(store, {
+		evidenceReader: {
+			async getNodeSession() {
+				return messages;
+			},
+		},
+		authorizeEvidence: ({ nodeRun }) => nodeRun.id === node.id,
+	});
+	const evidence = await inspector.inspectNodeEvidence(run.id, node.id);
+	assert.deepEqual(evidence?.messages, messages);
+	assert.equal(evidence?.session?.interactionReference, "interaction-1");
+	assert.equal(
+		await inspector.inspectNodeEvidence(run.id, "not-in-this-run"),
+		undefined,
+	);
+
+	const denied = new FlowRunInspector(store, {
+		authorizeEvidence: () => false,
+	});
+	assert.equal(await denied.inspectNodeEvidence(run.id, node.id), undefined);
 });

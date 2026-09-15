@@ -294,3 +294,86 @@ export interface RunStore {
 	createNodeRun(record: NodeRunRecord): Promise<void>;
 	updateNodeRun(record: NodeRunRecord): Promise<void>;
 }
+
+export interface FlowRunSummary {
+	id: string;
+	flowId: string;
+	flowVersion: string;
+	task: FlowValue;
+	status: RunStatus;
+	phase: RunPhase;
+	sequence: number;
+	historyCompleteness: "complete" | "legacy";
+	startedAt: string;
+	completedAt?: string;
+	error?: FlowError;
+}
+
+export type FlowRunLocation =
+	| {
+			kind: "node";
+			nodeRunId?: string;
+			nodeRef: string;
+	  }
+	| {
+			kind: "parallel";
+			parallelRoundId: string;
+			parallelRef: string;
+	  }
+	| { kind: "none" };
+
+export interface FlowNodeEvidenceSummary {
+	sessionReference?: string;
+	interactionReference?: string;
+	commandOutputAvailable: boolean;
+}
+
+/** Stable, adapter-independent projection of one Run's persisted facts. */
+export interface FlowRunHistory {
+	run: FlowRunSummary;
+	nodeRuns: NodeRunRecord[];
+	routeDecisions: RouteDecisionRecord[];
+	parallelRounds: ParallelRoundRecord[];
+	recoveries: RunRecoveryRecord[];
+	current: FlowRunLocation;
+	evidence: Record<string, FlowNodeEvidenceSummary>;
+}
+
+export interface FlowNodeEvidence {
+	runId: string;
+	nodeRunId: string;
+	nodeRef: string;
+	status: NodeRunStatus;
+	input: FlowValue;
+	outcome?: NodeOutcome;
+	error?: FlowError;
+	session?: NodeSession;
+	messages?: UnifiedMessage[];
+	commandResult?: {
+		status: "success" | "failure";
+		exitCode: number | null;
+		stdout: string;
+		stderr: string;
+	};
+}
+
+export interface FlowNodeEvidenceReader {
+	getNodeSession(session: NodeSession): Promise<UnifiedMessage[]>;
+}
+
+export interface FlowNodeEvidenceAccessRequest {
+	runId: string;
+	nodeRun: NodeRunRecord;
+}
+
+export type FlowNodeEvidenceAuthorizer = (
+	request: FlowNodeEvidenceAccessRequest,
+) => boolean | Promise<boolean>;
+
+export interface FlowRunInspectorApi {
+	inspectRun(runId: string): Promise<FlowRunHistory | undefined>;
+	inspectNodeEvidence(
+		runId: string,
+		nodeRunId: string,
+	): Promise<FlowNodeEvidence | undefined>;
+}

@@ -42,6 +42,24 @@
 | --- | --- | --- | --- |
 | 无 | - | - | - |
 
+## [src/observability.ts](../src/observability.ts)
+
+依赖：`./types.ts`
+
+| 符号 | 类别 | 外部可见 | 位置 |
+| --- | --- | --- | --- |
+| `FlowRunInspectorOptions` | 接口 | 是 | [src/observability.ts:16-19](../src/observability.ts#L16) |
+| `FlowRunInspector` | 类 | 是 | [src/observability.ts:26-117](../src/observability.ts#L26) |
+| `FlowRunInspector.inspectRun` | 方法 | 是 | [src/observability.ts:45-79](../src/observability.ts#L45) |
+| `FlowRunInspector.inspectNodeEvidence` | 方法 | 是 | [src/observability.ts:81-116](../src/observability.ts#L81) |
+| `isEvidenceReader` | 函数 | 否 | [src/observability.ts:119-123](../src/observability.ts#L119) |
+| `bySequence` | 函数 | 否 | [src/observability.ts:125-127](../src/observability.ts#L125) |
+| `toRunSummary` | 函数 | 否 | [src/observability.ts:129-143](../src/observability.ts#L129) |
+| `locateCurrent` | 函数 | 否 | [src/observability.ts:145-173](../src/observability.ts#L145) |
+| `evidenceSummary` | 函数 | 否 | [src/observability.ts:175-183](../src/observability.ts#L175) |
+| `toCommandResult` | 函数 | 否 | [src/observability.ts:185-203](../src/observability.ts#L185) |
+| `isRecord` | 函数 | 否 | [src/observability.ts:205-209](../src/observability.ts#L205) |
+
 ## [src/parser.ts](../src/parser.ts)
 
 依赖：`node:path`、`./types.ts`
@@ -218,3 +236,12 @@
 | `FlowRunRecord` | 接口 | 是 | [src/types.ts:245-270](../src/types.ts#L245) |
 | `RunFactCommit` | 接口 | 是 | [src/types.ts:273-280](../src/types.ts#L273) |
 | `RunStore` | 接口 | 是 | [src/types.ts:282-296](../src/types.ts#L282) |
+| `FlowRunSummary` | 接口 | 是 | [src/types.ts:298-310](../src/types.ts#L298) |
+| `FlowRunLocation` | 类型 | 是 | [src/types.ts:312-323](../src/types.ts#L312) |
+| `FlowNodeEvidenceSummary` | 接口 | 是 | [src/types.ts:325-329](../src/types.ts#L325) |
+| `FlowRunHistory` | 接口 | 是 | [src/types.ts:332-340](../src/types.ts#L332) |
+| `FlowNodeEvidence` | 接口 | 是 | [src/types.ts:342-358](../src/types.ts#L342) |
+| `FlowNodeEvidenceReader` | 接口 | 是 | [src/types.ts:360-362](../src/types.ts#L360) |
+| `FlowNodeEvidenceAccessRequest` | 接口 | 是 | [src/types.ts:364-367](../src/types.ts#L364) |
+| `FlowNodeEvidenceAuthorizer` | 类型 | 是 | [src/types.ts:369-371](../src/types.ts#L369) |
+| `FlowRunInspectorApi` | 接口 | 是 | [src/types.ts:373-379](../src/types.ts#L373) |

@@ -224,4 +224,4 @@ Run 创建时必须保存 Flow 内容版本或稳定指纹，否则恢复和历�
 
 当前实现包含 Flow 解析、普通节点流转、Agent 新建和复用、命令执行、单层命令并行、显式汇合、Pi 会话关联、本地运行记录，以及 Pi CLI 恢复执行中的 Run。
 
-当前运行记录查询仍直接通过`RunStore`接口提供，扩展层主要在流程结束或失败时通知用户，尚未实现本契约要求的统一 Runtime 入口、FlowRunInspector、FlowObservationPublisher、快照水位协议和持续进度展示。它们是下一阶段的实现范围，不应在各展示端重复拼接历史。
+当前 Runtime 已提供只读的`FlowRunInspector`，可统一投影一次 Run 的完整历史，并按 NodeRun 查询执行依据。扩展层主要在流程结束或失败时通知用户；`FlowObservationPublisher`、快照水位协议和持续进度展示仍是下一阶段实现范围，不应在各展示端重复拼接历史。
