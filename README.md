@@ -6,6 +6,7 @@ Included examples:
 
 - `examples/code-change.md`: code change and verification loop.
 - `examples/simplify.md`: project simplification with a self-gated loop that continues until the remaining complexity has a documented reason.
+- `examples/flow-observability-implementation.md`: implementation and acceptance gates for Flow runtime observability.
 
 ## Install
 
