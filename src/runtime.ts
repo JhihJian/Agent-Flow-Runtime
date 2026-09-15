@@ -14,6 +14,8 @@ import type {
 	FlowError,
 	FlowErrorCategory,
 	FlowNode,
+	FlowObservationEvent,
+	FlowObservationPublisherApi,
 	FlowRunRecord,
 	FlowValue,
 	NodeOutcome,
@@ -29,6 +31,18 @@ import type {
 } from "./types.ts";
 
 type FactChanges = Omit<RunFactCommit, "run" | "expectedSequence">;
+
+type ObservationSpec = {
+	type: FlowObservationEvent["type"];
+	summary: string;
+	nodeRunId?: string;
+	nodeRef?: string;
+	parallelRoundId?: string;
+	result?: string;
+	destination?: FlowDestination;
+	nodeStatus?: NodeRunRecord["status"];
+	parallelStatus?: ParallelRoundRecord["status"];
+};
 
 export class InMemoryRunStore implements RunStore {
 	protected readonly runs = new Map<string, FlowRunRecord>();
@@ -446,6 +460,11 @@ export class FlowCoordinator {
 	private readonly store: RunStore;
 	private readonly agentModel: AgentRunModel;
 	private readonly commandExecutor: CommandExecutor;
+	private readonly publisher?: FlowObservationPublisherApi;
+	private readonly onObservationError: (
+		error: unknown,
+		event: FlowObservationEvent,
+	) => void;
 	private writes = Promise.resolve();
 
 	constructor(
@@ -453,11 +472,18 @@ export class FlowCoordinator {
 		store: RunStore,
 		agentModel: AgentRunModel,
 		commandExecutor: CommandExecutor = new ProcessCommandExecutor(),
+		publisher?: FlowObservationPublisherApi,
+		onObservationError: (
+			error: unknown,
+			event: FlowObservationEvent,
+		) => void = () => undefined,
 	) {
 		this.flow = flow;
 		this.store = store;
 		this.agentModel = agentModel;
 		this.commandExecutor = commandExecutor;
+		this.publisher = publisher;
+		this.onObservationError = onObservationError;
 	}
 
 	async run(
@@ -487,6 +513,11 @@ export class FlowCoordinator {
 			currentInput: task,
 		};
 		await this.store.createRun(run);
+		this.publishObservation(run, {
+			type: "run.started",
+			nodeRef: run.currentNodeRef,
+			summary: `Flow 运行已开始，首节点为“${run.currentNodeRef}”`,
+		});
 		return this.continueRun(run, this.flow.startNodeRef, task, options, {
 			kind: "start",
 		});
@@ -792,7 +823,14 @@ export class FlowCoordinator {
 			for (const branchRef of parallel.branches) {
 				finalizedRound.branchStatuses[branchRef] = "completed";
 			}
-			await this.commit(run, () => ({ parallelRounds: [finalizedRound] }));
+			await this.commit(run, () => ({ parallelRounds: [finalizedRound] }), [
+				{
+					type: "parallel.completed",
+					parallelRoundId: finalizedRound.id,
+					parallelStatus: "completed",
+					summary: `并行轮次“${finalizedRound.parallelRef}”的分支已全部完成，准备汇合`,
+				},
+			]);
 			replaceObject(round, finalizedRound);
 		}
 		return { input: round.input, outcomes: new Map(completed) };
@@ -865,37 +903,58 @@ export class FlowCoordinator {
 						summary: `从中断节点“${retryOf.nodeRef}”创建新的 Agent 访问`,
 					}
 				: undefined;
-		await this.commit(run, (next, sequence) => {
-			record.sequence = sequence;
-			if (recovery) recovery.sequence = sequence;
-			next.status = "running";
-			next.phase = "executing_node";
-			delete next.error;
-			next.currentNodeRef = nodeRef;
-			next.currentInput = input;
-			next.currentNodeRunId = record.id;
-			delete next.currentParallelRoundId;
-			if (round) {
-				if (branchRef) {
-					round.branchNodeRunIds[branchRef] = record.id;
-					round.branchStatuses[branchRef] = "running";
-					next.phase = "waiting_parallel";
-					delete next.currentNodeRef;
-					delete next.currentNodeRunId;
-					next.currentParallelRoundId = round.id;
-				} else {
-					round.status = "joining";
-					round.joinNodeRunId = record.id;
-					round.joinInput = input;
-					next.currentParallelRoundId = round.id;
+		await this.commit(
+			run,
+			(next, sequence) => {
+				record.sequence = sequence;
+				if (recovery) recovery.sequence = sequence;
+				next.status = "running";
+				next.phase = "executing_node";
+				delete next.error;
+				next.currentNodeRef = nodeRef;
+				next.currentInput = input;
+				next.currentNodeRunId = record.id;
+				delete next.currentParallelRoundId;
+				if (round) {
+					if (branchRef) {
+						round.branchNodeRunIds[branchRef] = record.id;
+						round.branchStatuses[branchRef] = "running";
+						next.phase = "waiting_parallel";
+						delete next.currentNodeRef;
+						delete next.currentNodeRunId;
+						next.currentParallelRoundId = round.id;
+					} else {
+						round.status = "joining";
+						round.joinNodeRunId = record.id;
+						round.joinInput = input;
+						next.currentParallelRoundId = round.id;
+					}
 				}
-			}
-			return {
-				nodeRuns: [record],
-				parallelRounds: round ? [round] : undefined,
-				recoveries: recovery ? [recovery] : undefined,
-			};
-		});
+				return {
+					nodeRuns: [record],
+					parallelRounds: round ? [round] : undefined,
+					recoveries: recovery ? [recovery] : undefined,
+				};
+			},
+			[
+				...(recovery
+					? [
+							{
+								type: "run.resumed" as const,
+								nodeRunId: record.id,
+								nodeRef,
+								summary: `Flow 运行已恢复，创建节点“${nodeRef}”的新访问`,
+							},
+						]
+					: []),
+				{
+					type: "node.started",
+					nodeRunId: record.id,
+					nodeRef,
+					summary: `节点“${nodeRef}”开始执行`,
+				},
+			],
+		);
 		return record;
 	}
 
@@ -996,20 +1055,32 @@ export class FlowCoordinator {
 		record.status = "completed";
 		record.outcome = outcome;
 		record.completedAt = now();
-		await this.commit(run, (next) => {
-			next.phase = branchRef ? "waiting_parallel" : "routing";
-			const updatedRound = round ? clone(round) : undefined;
-			if (updatedRound && !branchRef) {
-				updatedRound.status = "completed";
-				updatedRound.joinOutcome = outcome;
-				updatedRound.completedAt = record.completedAt;
-				delete next.currentParallelRoundId;
-			}
-			return {
-				nodeRuns: [record],
-				parallelRounds: updatedRound ? [updatedRound] : undefined,
-			};
-		});
+		await this.commit(
+			run,
+			(next) => {
+				next.phase = branchRef ? "waiting_parallel" : "routing";
+				const updatedRound = round ? clone(round) : undefined;
+				if (updatedRound && !branchRef) {
+					updatedRound.status = "completed";
+					updatedRound.joinOutcome = outcome;
+					updatedRound.completedAt = record.completedAt;
+					delete next.currentParallelRoundId;
+				}
+				return {
+					nodeRuns: [record],
+					parallelRounds: updatedRound ? [updatedRound] : undefined,
+				};
+			},
+			[
+				{
+					type: "node.completed",
+					nodeRunId: record.id,
+					nodeRef: record.nodeRef,
+					nodeStatus: "completed",
+					summary: `节点“${record.nodeRef}”已完成，结果为“${outcome.result}”`,
+				},
+			],
+		);
 	}
 
 	private async selectRoute(
@@ -1030,11 +1101,24 @@ export class FlowCoordinator {
 			parallelRoundId,
 			selectedAt: now(),
 		};
-		await this.commit(run, (next, sequence) => {
-			decision.sequence = sequence;
-			if (affectRun) next.phase = "routing";
-			return { routeDecisions: [decision] };
-		});
+		await this.commit(
+			run,
+			(next, sequence) => {
+				decision.sequence = sequence;
+				if (affectRun) next.phase = "routing";
+				return { routeDecisions: [decision] };
+			},
+			[
+				{
+					type: "route.selected",
+					nodeRunId: record.id,
+					nodeRef: record.nodeRef,
+					result,
+					destination,
+					summary: `节点“${record.nodeRef}”选择结果“${result}”的去向`,
+				},
+			],
+		);
 		return decision;
 	}
 
@@ -1065,28 +1149,48 @@ export class FlowCoordinator {
 			branchStatuses: {},
 			sourceNodeRunId,
 		};
-		await this.commit(run, (next, sequence) => {
-			round.sequence = sequence;
-			next.phase = "waiting_parallel";
-			delete next.currentNodeRef;
-			delete next.currentNodeRunId;
-			next.currentInput = input;
-			next.currentParallelRoundId = round.id;
-			return { parallelRounds: [round] };
-		});
+		await this.commit(
+			run,
+			(next, sequence) => {
+				round.sequence = sequence;
+				next.phase = "waiting_parallel";
+				delete next.currentNodeRef;
+				delete next.currentNodeRunId;
+				next.currentInput = input;
+				next.currentParallelRoundId = round.id;
+				return { parallelRounds: [round] };
+			},
+			[
+				{
+					type: "parallel.started",
+					parallelRoundId: round.id,
+					parallelStatus: "running",
+					summary: `并行轮次“${parallelRef}”已开始`,
+				},
+			],
+		);
 	}
 
 	private async completeRun(run: FlowRunRecord): Promise<void> {
-		await this.commit(run, (next) => {
-			next.status = "completed";
-			next.phase = "completed";
-			next.completedAt = now();
-			delete next.currentNodeRef;
-			delete next.currentNodeRunId;
-			delete next.currentParallelRoundId;
-			delete next.currentInput;
-			return {};
-		});
+		await this.commit(
+			run,
+			(next) => {
+				next.status = "completed";
+				next.phase = "completed";
+				next.completedAt = now();
+				delete next.currentNodeRef;
+				delete next.currentNodeRunId;
+				delete next.currentParallelRoundId;
+				delete next.currentInput;
+				return {};
+			},
+			[
+				{
+					type: "run.completed",
+					summary: "Flow 运行已完成",
+				},
+			],
+		);
 	}
 
 	private async interruptNode(
@@ -1101,19 +1205,35 @@ export class FlowCoordinator {
 			category: "recovery",
 			summary: "运行进程在节点完成前中断",
 		};
-		await this.commit(run, (next) => {
-			next.status = "interrupted";
-			next.phase = "interrupted";
-			if (round) {
-				round.status = "interrupted";
-				round.error = record.error;
-				if (branchRef) round.branchStatuses[branchRef] = "interrupted";
-			}
-			return {
-				nodeRuns: [record],
-				parallelRounds: round ? [round] : undefined,
-			};
-		});
+		await this.commit(
+			run,
+			(next) => {
+				next.status = "interrupted";
+				next.phase = "interrupted";
+				if (round) {
+					round.status = "interrupted";
+					round.error = record.error;
+					if (branchRef) round.branchStatuses[branchRef] = "interrupted";
+				}
+				return {
+					nodeRuns: [record],
+					parallelRounds: round ? [round] : undefined,
+				};
+			},
+			[
+				{
+					type: "node.interrupted",
+					nodeRunId: record.id,
+					nodeRef: record.nodeRef,
+					nodeStatus: "interrupted",
+					summary: `节点“${record.nodeRef}”已中断`,
+				},
+				{
+					type: "run.interrupted",
+					summary: "Flow 运行已中断",
+				},
+			],
+		);
 	}
 
 	private async failInterruptedCommand(
@@ -1242,9 +1362,114 @@ export class FlowCoordinator {
 		return destination;
 	}
 
+	private publishObservationChanges(
+		previous: FlowRunRecord,
+		next: FlowRunRecord,
+		changes: FactChanges,
+		observationSpecs: ObservationSpec[] = [],
+	): void {
+		const specs: ObservationSpec[] = [...observationSpecs];
+		if (specs.length === 0) {
+			for (const record of changes.nodeRuns ?? []) {
+				const type =
+					record.status === "running"
+						? "node.started"
+						: record.status === "completed"
+							? "node.completed"
+							: record.status === "failed"
+								? "node.failed"
+								: "node.interrupted";
+				specs.push({
+					type,
+					nodeRunId: record.id,
+					nodeRef: record.nodeRef,
+					nodeStatus: record.status,
+					summary:
+						type === "node.started"
+							? `节点“${record.nodeRef}”开始执行`
+							: `节点“${record.nodeRef}”状态为 ${record.status}`,
+				});
+			}
+			for (const decision of changes.routeDecisions ?? []) {
+				specs.push({
+					type: "route.selected",
+					nodeRunId: decision.sourceNodeRunId,
+					result: decision.result,
+					destination: decision.destination,
+					summary: `节点选择结果“${decision.result}”的去向`,
+				});
+			}
+			for (const round of changes.parallelRounds ?? []) {
+				if (round.sequence === next.sequence) {
+					specs.push({
+						type: "parallel.started",
+						parallelRoundId: round.id,
+						parallelStatus: round.status,
+						summary: `并行轮次“${round.parallelRef}”已开始`,
+					});
+				} else if (round.status === "completed") {
+					specs.push({
+						type: "parallel.completed",
+						parallelRoundId: round.id,
+						parallelStatus: round.status,
+						summary: `并行轮次“${round.parallelRef}”已完成并准备汇合`,
+					});
+				}
+			}
+			for (const recovery of changes.recoveries ?? []) {
+				if (recovery.strategy !== "fail_command") {
+					specs.push({ type: "run.resumed", summary: recovery.summary });
+				}
+			}
+			if (previous.status !== next.status) {
+				if (next.status === "completed")
+					specs.push({ type: "run.completed", summary: "Flow 运行已完成" });
+				if (next.status === "failed")
+					specs.push({
+						type: "run.failed",
+						summary: next.error?.summary ?? "Flow 运行失败",
+					});
+				if (next.status === "interrupted")
+					specs.push({ type: "run.interrupted", summary: "Flow 运行已中断" });
+			}
+		}
+		for (const spec of specs) this.publishObservation(next, spec);
+	}
+
+	private publishObservation(run: FlowRunRecord, spec: ObservationSpec): void {
+		if (!this.publisher) return;
+		const event: FlowObservationEvent = {
+			type: spec.type,
+			runId: run.id,
+			flowId: run.flowId,
+			sequence: run.sequence,
+			occurredAt: now(),
+			status: run.status,
+			phase: run.phase,
+			nodeRunId: spec.nodeRunId,
+			nodeRef: spec.nodeRef,
+			parallelRoundId: spec.parallelRoundId,
+			result: spec.result,
+			destination: spec.destination,
+			nodeStatus: spec.nodeStatus,
+			parallelStatus: spec.parallelStatus,
+			summary: spec.summary,
+		};
+		try {
+			this.publisher.publish(event);
+		} catch (error) {
+			try {
+				this.onObservationError(error, event);
+			} catch {
+				// Diagnostics must never affect a persisted Run.
+			}
+		}
+	}
+
 	private async commit(
 		run: FlowRunRecord,
 		prepare: (next: FlowRunRecord, sequence: number) => FactChanges,
+		observationSpecs: ObservationSpec[] = [],
 	): Promise<void> {
 		const write = this.writes.then(async () => {
 			const expectedSequence = run.sequence;
@@ -1257,7 +1482,9 @@ export class FlowCoordinator {
 				expectedSequence,
 				...changes,
 			});
+			const previous = clone(run);
 			replaceObject(run, next);
+			this.publishObservationChanges(previous, next, changes, observationSpecs);
 		});
 		this.writes = write.then(
 			() => undefined,

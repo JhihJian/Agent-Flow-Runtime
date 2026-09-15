@@ -3,7 +3,10 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { FlowRunInspector } from "../src/observability.ts";
+import {
+	FlowObservationPublisher,
+	FlowRunInspector,
+} from "../src/observability.ts";
 import { parseFlow } from "../src/parser.ts";
 import { PiAgentIntegrationAdapter } from "../src/pi.ts";
 import {
@@ -18,6 +21,7 @@ import type {
 	CommandExecutor,
 	CommandRequest,
 	CommandResult,
+	FlowObservationEvent,
 } from "../src/types.ts";
 
 const fixture = (name: string) =>
@@ -564,4 +568,126 @@ test("Inspector 按 Run 校验 NodeRun，并按权限读取 Agent 证据", async
 		authorizeEvidence: () => false,
 	});
 	assert.equal(await denied.inspectNodeEvidence(run.id, node.id), undefined);
+});
+
+test("Coordinator 在事实保存成功后发布普通路径事件", async () => {
+	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const events: FlowObservationEvent[] = [];
+	const publisher = new FlowObservationPublisher();
+	const subscription = publisher.subscribe("event-run", (event) => {
+		events.push(event);
+	});
+	const run = await new FlowCoordinator(
+		flow,
+		new InMemoryRunStore(),
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "已分析", content: "analysis" },
+				{ result: "已完成", content: "done" },
+			]),
+		),
+		new RecordingCommandExecutor(),
+		publisher,
+	).run("task", { runId: "event-run" });
+
+	assert.equal(run.status, "completed");
+	assert.deepEqual(
+		events.map((event) => event.type),
+		[
+			"run.started",
+			"node.started",
+			"node.completed",
+			"route.selected",
+			"node.started",
+			"node.completed",
+			"route.selected",
+			"run.completed",
+		],
+	);
+	assert.ok(
+		events.every(
+			(event, index) =>
+				event.runId === run.id &&
+				event.flowId === flow.id &&
+				(index === 0 || event.sequence >= events[index - 1].sequence),
+		),
+	);
+	assert.ok(events.every((event) => event.summary.length > 0));
+	subscription.unsubscribe();
+	publisher.publish(events[0]);
+	assert.equal(events.length, 8);
+});
+
+test("并行事件带有独立轮次引用，订阅者异常不影响 Run", async () => {
+	const flow = parseFlow(
+		await fixture("command-parallel.md"),
+		"command-parallel.md",
+	);
+	const errors: unknown[] = [];
+	const events: FlowObservationEvent[] = [];
+	const publisher = new FlowObservationPublisher({
+		onError: (error) => errors.push(error),
+	});
+	publisher.subscribe("parallel-events", () => {
+		throw new Error("render failed");
+	});
+	publisher.subscribe("parallel-events", (event) => events.push(event));
+	const run = await new FlowCoordinator(
+		flow,
+		new InMemoryRunStore(),
+		new AgentRunModel(
+			new SequencedAdapter([
+				{ result: "执行检查", content: "check" },
+				{ result: "通过", content: "approved" },
+			]),
+		),
+		new RecordingCommandExecutor(),
+		publisher,
+	).run("task", { runId: "parallel-events" });
+
+	assert.equal(run.status, "completed");
+	assert.ok(events.some((event) => event.type === "parallel.started"));
+	assert.ok(events.some((event) => event.type === "parallel.completed"));
+	assert.ok(
+		events
+			.filter((event) => event.type.startsWith("parallel."))
+			.every((event) => event.parallelRoundId),
+	);
+	assert.ok(errors.length > 0);
+});
+
+test("RunStore 保存失败时不会发布未保存的节点成功事件", async () => {
+	class FailingStore extends InMemoryRunStore {
+		private failNextCommit = true;
+
+		override async commit(fact: Parameters<InMemoryRunStore["commit"]>[0]) {
+			if (this.failNextCommit) {
+				this.failNextCommit = false;
+				throw new Error("store unavailable");
+			}
+			return super.commit(fact);
+		}
+	}
+	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const publisher = new FlowObservationPublisher();
+	const events: FlowObservationEvent[] = [];
+	publisher.subscribe("failed-save", (event) => events.push(event));
+	const store = new FailingStore();
+	await assert.rejects(
+		() =>
+			new FlowCoordinator(
+				flow,
+				store,
+				new AgentRunModel(
+					new SequencedAdapter([{ result: "已完成", content: "done" }]),
+				),
+				new RecordingCommandExecutor(),
+				publisher,
+			).run("task", { runId: "failed-save" }),
+		/store unavailable/,
+	);
+	assert.deepEqual(
+		events.map((event) => event.type),
+		["run.started", "run.failed"],
+	);
 });

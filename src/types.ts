@@ -377,3 +377,52 @@ export interface FlowRunInspectorApi {
 		nodeRunId: string,
 	): Promise<FlowNodeEvidence | undefined>;
 }
+
+export type FlowObservationEventType =
+	| "run.started"
+	| "run.resumed"
+	| "run.completed"
+	| "run.failed"
+	| "run.interrupted"
+	| "node.started"
+	| "node.completed"
+	| "node.failed"
+	| "node.interrupted"
+	| "route.selected"
+	| "parallel.started"
+	| "parallel.completed";
+
+export interface FlowObservationEvent {
+	type: FlowObservationEventType;
+	runId: string;
+	flowId: string;
+	/** Run-local commit water mark. Events are ordered by this value. */
+	sequence: number;
+	occurredAt: string;
+	status: RunStatus;
+	phase: RunPhase;
+	nodeRunId?: string;
+	nodeRef?: string;
+	parallelRoundId?: string;
+	result?: string;
+	destination?: FlowDestination;
+	nodeStatus?: NodeRunStatus;
+	parallelStatus?: ParallelRoundStatus;
+	summary: string;
+}
+
+export interface FlowObservationSubscription {
+	unsubscribe(): void;
+}
+
+export interface FlowObservationPublisherApi {
+	publish(event: FlowObservationEvent): void;
+	subscribe(
+		runId: string,
+		listener: (event: FlowObservationEvent) => void,
+	): FlowObservationSubscription;
+}
+
+export interface FlowObservationPublisherOptions {
+	onError?: (error: unknown, event: FlowObservationEvent) => void;
+}

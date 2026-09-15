@@ -346,6 +346,8 @@ RunStore 是 Run 当前状态和可查询历史的唯一持久事实来源，负
 
 `FlowObservationPublisher` 只接受已持久化事实的瞬时通知，不保存第二套状态，不路由、不提交结果、不反向控制 Flow。最小事件为：`run.started`、`run.resumed`、`run.completed`、`run.failed`、`run.interrupted`、`node.started`、`node.completed`、`node.failed`、`node.interrupted`、`route.selected`、`parallel.started`、`parallel.completed`。每个事件必须包含 `runId`、`flowId`、事件类型、Run 内单调 `sequence`、`occurredAt`、相关 NodeRun/ParallelRound 引用、提交后的 status/phase 和摘要。
 
+当前 Runtime 已提供进程内的`FlowObservationPublisher`。它只向当前订阅者尽力分发事件，订阅者异常和诊断回调异常均被隔离；它不缓存事件、不补发断线事件，也不承担持久化职责。
+
 Publisher 发布失败或订阅者抛错，只进入宿主诊断，不回滚、不阻断执行、不改变已保存终态。MVP 事件是实时通知，不承诺断线期间补发全部事件，事件也不是事件日志；客户端应按 `(runId, sequence)` 去重。
 
 ### 11.4 Inspector、统一入口和快照水位

@@ -3,6 +3,10 @@ import type {
 	FlowNodeEvidenceAuthorizer,
 	FlowNodeEvidenceReader,
 	FlowNodeEvidenceSummary,
+	FlowObservationEvent,
+	FlowObservationPublisherApi,
+	FlowObservationPublisherOptions,
+	FlowObservationSubscription,
 	FlowRunHistory,
 	FlowRunInspectorApi,
 	FlowRunLocation,
@@ -16,6 +20,58 @@ import type {
 export interface FlowRunInspectorOptions {
 	evidenceReader?: FlowNodeEvidenceReader;
 	authorizeEvidence?: FlowNodeEvidenceAuthorizer;
+}
+
+/** In-process best-effort publisher. It is not an event log or state store. */
+export class FlowObservationPublisher implements FlowObservationPublisherApi {
+	private readonly listeners = new Map<
+		string,
+		Set<(event: FlowObservationEvent) => void>
+	>();
+	private readonly onError: (
+		error: unknown,
+		event: FlowObservationEvent,
+	) => void;
+
+	constructor(options: FlowObservationPublisherOptions = {}) {
+		this.onError = options.onError ?? (() => undefined);
+	}
+
+	publish(event: FlowObservationEvent): void {
+		const listeners = [...(this.listeners.get(event.runId) ?? [])];
+		for (const listener of listeners) {
+			try {
+				listener(structuredClone(event));
+			} catch (error) {
+				try {
+					this.onError(error, event);
+				} catch {
+					// Diagnostics must not affect a persisted Run or its execution.
+				}
+			}
+		}
+	}
+
+	subscribe(
+		runId: string,
+		listener: (event: FlowObservationEvent) => void,
+	): FlowObservationSubscription {
+		let listeners = this.listeners.get(runId);
+		if (!listeners) {
+			listeners = new Set();
+			this.listeners.set(runId, listeners);
+		}
+		listeners.add(listener);
+		let active = true;
+		return {
+			unsubscribe: () => {
+				if (!active) return;
+				active = false;
+				listeners?.delete(listener);
+				if (listeners?.size === 0) this.listeners.delete(runId);
+			},
+		};
+	}
 }
 
 /**
