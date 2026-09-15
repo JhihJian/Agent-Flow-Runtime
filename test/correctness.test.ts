@@ -6,6 +6,8 @@ import test from "node:test";
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
+	FlowRuntime,
+	toFlowEventEnvelope,
 } from "../src/observability.ts";
 import { parseFlow } from "../src/parser.ts";
 import { PiAgentIntegrationAdapter } from "../src/pi.ts";
@@ -517,6 +519,7 @@ test("Inspector 用同一份投影还原普通路径、路由和并行轮次", a
 		history.parallelRounds[0]?.joinNodeRunId,
 		history.nodeRuns[3]?.id,
 	);
+	assert.equal("outcome" in history.nodeRuns[1], false);
 	assert.deepEqual(history.current, { kind: "none" });
 	assert.equal(
 		await new FlowRunInspector(store).inspectRun("missing-run"),
@@ -690,4 +693,62 @@ test("RunStore 保存失败时不会发布未保存的节点成功事件", async
 		events.map((event) => event.type),
 		["run.started", "run.failed"],
 	);
+});
+
+test("统一 Runtime 门面先建立订阅再应用快照，不丢失水位之后的事件", async () => {
+	const publisher = new FlowObservationPublisher();
+	const snapshot = {
+		run: {
+			id: "race-run",
+			flowId: "flow",
+			flowVersion: "sha256:test",
+			task: "task",
+			status: "running" as const,
+			phase: "executing_node" as const,
+			sequence: 1,
+			historyCompleteness: "complete" as const,
+			startedAt: "2026-01-01T00:00:00.000Z",
+		},
+		nodeRuns: [],
+		routeDecisions: [],
+		parallelRounds: [],
+		recoveries: [],
+		current: { kind: "none" as const },
+		evidence: {},
+	};
+	const inspector = {
+		async inspectRun() {
+			publisher.publish({
+				type: "node.started",
+				runId: "race-run",
+				flowId: "flow",
+				sequence: 2,
+				occurredAt: "2026-01-01T00:00:01.000Z",
+				status: "running",
+				phase: "executing_node",
+				nodeRunId: "node-2",
+				nodeRef: "verify",
+				summary: "node started",
+			});
+			return snapshot;
+		},
+		async inspectNodeEvidence() {
+			return undefined;
+		},
+	};
+	const runtime = new FlowRuntime(inspector, publisher);
+	const events: FlowObservationEvent[] = [];
+	const observation = await runtime.openRunObservation("race-run", (event) =>
+		events.push(event),
+	);
+	assert.ok(observation);
+	assert.deepEqual(
+		events.map((event) => event.sequence),
+		[2],
+	);
+	assert.deepEqual(toFlowEventEnvelope(events[0]), {
+		type: "flow_event",
+		event: events[0],
+	});
+	observation.subscription.unsubscribe();
 });

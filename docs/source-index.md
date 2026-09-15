@@ -4,14 +4,14 @@
 
 ## [src/cli-state.ts](../src/cli-state.ts)
 
-依赖：`@earendil-works/pi-coding-agent`、`./pi.ts`
+依赖：`@earendil-works/pi-coding-agent`、`./observability.ts`、`./pi.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `PendingSessionReplacement` | 接口 | 否 | [src/cli-state.ts:4-7](../src/cli-state.ts#L4) |
-| `CliFlowState` | 接口 | 是 | [src/cli-state.ts:9-21](../src/cli-state.ts#L9) |
-| `getCliFlowState` | 函数 | 是 | [src/cli-state.ts:27-34](../src/cli-state.ts#L27) |
-| `rejectPendingSessionReplacement` | 函数 | 是 | [src/cli-state.ts:36-41](../src/cli-state.ts#L36) |
+| `PendingSessionReplacement` | 接口 | 否 | [src/cli-state.ts:6-9](../src/cli-state.ts#L6) |
+| `CliFlowState` | 接口 | 是 | [src/cli-state.ts:11-26](../src/cli-state.ts#L11) |
+| `getCliFlowState` | 函数 | 是 | [src/cli-state.ts:32-39](../src/cli-state.ts#L32) |
+| `rejectPendingSessionReplacement` | 函数 | 是 | [src/cli-state.ts:41-46](../src/cli-state.ts#L41) |
 
 ## [src/directory.ts](../src/directory.ts)
 
@@ -27,12 +27,15 @@
 
 ## [src/extension.ts](../src/extension.ts)
 
-依赖：`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./parser.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`
+依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./observability.ts`、`./parser.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:21-326](../src/extension.ts#L21) |
-| `loadFlow` | 函数 | 否 | [src/extension.ts:328-330](../src/extension.ts#L328) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:34-419](../src/extension.ts#L34) |
+| `loadFlow` | 函数 | 否 | [src/extension.ts:421-423](../src/extension.ts#L421) |
+| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:425-431](../src/extension.ts#L425) |
+| `publishHostObservation` | 函数 | 否 | [src/extension.ts:433-459](../src/extension.ts#L433) |
+| `renderRunSnapshot` | 函数 | 否 | [src/extension.ts:461-481](../src/extension.ts#L461) |
 
 ## [src/index.ts](../src/index.ts)
 
@@ -48,20 +51,31 @@
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `FlowRunInspectorOptions` | 接口 | 是 | [src/observability.ts:20-23](../src/observability.ts#L20) |
-| `FlowObservationPublisher` | 类 | 是 | [src/observability.ts:26-75](../src/observability.ts#L26) |
-| `FlowObservationPublisher.publish` | 方法 | 是 | [src/observability.ts:40-53](../src/observability.ts#L40) |
-| `FlowObservationPublisher.subscribe` | 方法 | 是 | [src/observability.ts:55-74](../src/observability.ts#L55) |
-| `FlowRunInspector` | 类 | 是 | [src/observability.ts:82-173](../src/observability.ts#L82) |
-| `FlowRunInspector.inspectRun` | 方法 | 是 | [src/observability.ts:101-135](../src/observability.ts#L101) |
-| `FlowRunInspector.inspectNodeEvidence` | 方法 | 是 | [src/observability.ts:137-172](../src/observability.ts#L137) |
-| `isEvidenceReader` | 函数 | 否 | [src/observability.ts:175-179](../src/observability.ts#L175) |
-| `bySequence` | 函数 | 否 | [src/observability.ts:181-183](../src/observability.ts#L181) |
-| `toRunSummary` | 函数 | 否 | [src/observability.ts:185-199](../src/observability.ts#L185) |
-| `locateCurrent` | 函数 | 否 | [src/observability.ts:201-229](../src/observability.ts#L201) |
-| `evidenceSummary` | 函数 | 否 | [src/observability.ts:231-239](../src/observability.ts#L231) |
-| `toCommandResult` | 函数 | 否 | [src/observability.ts:241-259](../src/observability.ts#L241) |
-| `isRecord` | 函数 | 否 | [src/observability.ts:261-265](../src/observability.ts#L261) |
+| `FlowRunInspectorOptions` | 接口 | 是 | [src/observability.ts:21-24](../src/observability.ts#L21) |
+| `FlowObservationPublisher` | 类 | 是 | [src/observability.ts:27-76](../src/observability.ts#L27) |
+| `FlowObservationPublisher.publish` | 方法 | 是 | [src/observability.ts:41-54](../src/observability.ts#L41) |
+| `FlowObservationPublisher.subscribe` | 方法 | 是 | [src/observability.ts:56-75](../src/observability.ts#L56) |
+| `FlowRunInspector` | 类 | 是 | [src/observability.ts:83-174](../src/observability.ts#L83) |
+| `FlowRunInspector.inspectRun` | 方法 | 是 | [src/observability.ts:102-136](../src/observability.ts#L102) |
+| `FlowRunInspector.inspectNodeEvidence` | 方法 | 是 | [src/observability.ts:138-173](../src/observability.ts#L138) |
+| `FlowRunObservation` | 接口 | 是 | [src/observability.ts:176-179](../src/observability.ts#L176) |
+| `FlowRuntime` | 类 | 是 | [src/observability.ts:183-242](../src/observability.ts#L183) |
+| `FlowRuntime.inspectRun` | 方法 | 是 | [src/observability.ts:195-197](../src/observability.ts#L195) |
+| `FlowRuntime.inspectNodeEvidence` | 方法 | 是 | [src/observability.ts:199-204](../src/observability.ts#L199) |
+| `FlowRuntime.subscribe` | 方法 | 是 | [src/observability.ts:206-211](../src/observability.ts#L206) |
+| `FlowRuntime.openRunObservation` | 方法 | 是 | [src/observability.ts:214-241](../src/observability.ts#L214) |
+| `formatFlowRunHistory` | 函数 | 是 | [src/observability.ts:244-268](../src/observability.ts#L244) |
+| `toFlowEventEnvelope` | 函数 | 是 | [src/observability.ts:270-275](../src/observability.ts#L270) |
+| `formatDestination` | 函数 | 否 | [src/observability.ts:277-282](../src/observability.ts#L277) |
+| `formatValue` | 函数 | 否 | [src/observability.ts:284-286](../src/observability.ts#L284) |
+| `isEvidenceReader` | 函数 | 否 | [src/observability.ts:288-292](../src/observability.ts#L288) |
+| `bySequence` | 函数 | 否 | [src/observability.ts:294-296](../src/observability.ts#L294) |
+| `toRunSummary` | 函数 | 否 | [src/observability.ts:298-312](../src/observability.ts#L298) |
+| `toNodeRunView` | 函数 | 否 | [src/observability.ts:314-332](../src/observability.ts#L314) |
+| `locateCurrent` | 函数 | 否 | [src/observability.ts:334-362](../src/observability.ts#L334) |
+| `evidenceSummary` | 函数 | 否 | [src/observability.ts:364-372](../src/observability.ts#L364) |
+| `toCommandResult` | 函数 | 否 | [src/observability.ts:374-392](../src/observability.ts#L374) |
+| `isRecord` | 函数 | 否 | [src/observability.ts:394-398](../src/observability.ts#L394) |
 
 ## [src/parser.ts](../src/parser.ts)
 
@@ -93,35 +107,36 @@
 
 ## [src/pi.ts](../src/pi.ts)
 
-依赖：`@earendil-works/pi-coding-agent`、`typebox`、`./types.ts`
+依赖：`@earendil-works/pi-coding-agent`、`typebox`、`./observability.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `PendingSdkNode` | 接口 | 否 | [src/pi.ts:19-25](../src/pi.ts#L19) |
-| `SdkHandle` | 接口 | 否 | [src/pi.ts:27-32](../src/pi.ts#L27) |
-| `PendingCliNode` | 接口 | 否 | [src/pi.ts:34-39](../src/pi.ts#L34) |
-| `PiCliBridge` | 接口 | 是 | [src/pi.ts:41-50](../src/pi.ts#L41) |
-| `PiAgentAdapterOptions` | 接口 | 是 | [src/pi.ts:52-56](../src/pi.ts#L52) |
-| `PiAgentIntegrationAdapter` | 类 | 是 | [src/pi.ts:59-341](../src/pi.ts#L59) |
-| `PiAgentIntegrationAdapter.createAgent` | 方法 | 是 | [src/pi.ts:69-78](../src/pi.ts#L69) |
-| `PiAgentIntegrationAdapter.takeOverAgent` | 方法 | 是 | [src/pi.ts:80-104](../src/pi.ts#L80) |
-| `PiAgentIntegrationAdapter.executeNode` | 方法 | 是 | [src/pi.ts:106-139](../src/pi.ts#L106) |
-| `PiAgentIntegrationAdapter.getNodeSession` | 方法 | 是 | [src/pi.ts:141-156](../src/pi.ts#L141) |
-| `PiAgentIntegrationAdapter.releaseAgent` | 方法 | 是 | [src/pi.ts:158-166](../src/pi.ts#L158) |
-| `PiAgentIntegrationAdapter.submitCliOutcome` | 方法 | 是 | [src/pi.ts:169-177](../src/pi.ts#L169) |
-| `PiAgentIntegrationAdapter.finalizeCliTurn` | 方法 | 是 | [src/pi.ts:180-208](../src/pi.ts#L180) |
-| `PiAgentIntegrationAdapter.createSdkConnection` | 方法 | 否 | [src/pi.ts:210-233](../src/pi.ts#L210) |
-| `PiAgentIntegrationAdapter.createCliConnection` | 方法 | 否 | [src/pi.ts:235-244](../src/pi.ts#L235) |
-| `PiAgentIntegrationAdapter.executeCliNode` | 方法 | 否 | [src/pi.ts:246-268](../src/pi.ts#L246) |
-| `PiAgentIntegrationAdapter.flowOutcomeTool` | 方法 | 否 | [src/pi.ts:270-306](../src/pi.ts#L270) |
-| `PiAgentIntegrationAdapter.submitSdkOutcome` | 方法 | 否 | [src/pi.ts:308-323](../src/pi.ts#L308) |
-| `PiAgentIntegrationAdapter.resolvePending` | 方法 | 否 | [src/pi.ts:326-340](../src/pi.ts#L326) |
-| `createFlowOutcomeTool` | 函数 | 是 | [src/pi.ts:343-375](../src/pi.ts#L343) |
-| `nodeSession` | 函数 | 否 | [src/pi.ts:377-387](../src/pi.ts#L377) |
-| `interactionReference` | 函数 | 否 | [src/pi.ts:389-394](../src/pi.ts#L389) |
-| `parseInteractionReference` | 函数 | 否 | [src/pi.ts:396-406](../src/pi.ts#L396) |
-| `messagesFromEntries` | 函数 | 否 | [src/pi.ts:408-436](../src/pi.ts#L408) |
-| `normalizeRole` | 函数 | 否 | [src/pi.ts:438-442](../src/pi.ts#L438) |
+| `PendingSdkNode` | 接口 | 否 | [src/pi.ts:20-26](../src/pi.ts#L20) |
+| `SdkHandle` | 接口 | 否 | [src/pi.ts:28-33](../src/pi.ts#L28) |
+| `PendingCliNode` | 接口 | 否 | [src/pi.ts:35-40](../src/pi.ts#L35) |
+| `PiCliBridge` | 接口 | 是 | [src/pi.ts:42-51](../src/pi.ts#L42) |
+| `PiAgentAdapterOptions` | 接口 | 是 | [src/pi.ts:53-57](../src/pi.ts#L53) |
+| `PiAgentIntegrationAdapter` | 类 | 是 | [src/pi.ts:60-342](../src/pi.ts#L60) |
+| `PiAgentIntegrationAdapter.createAgent` | 方法 | 是 | [src/pi.ts:70-79](../src/pi.ts#L70) |
+| `PiAgentIntegrationAdapter.takeOverAgent` | 方法 | 是 | [src/pi.ts:81-105](../src/pi.ts#L81) |
+| `PiAgentIntegrationAdapter.executeNode` | 方法 | 是 | [src/pi.ts:107-140](../src/pi.ts#L107) |
+| `PiAgentIntegrationAdapter.getNodeSession` | 方法 | 是 | [src/pi.ts:142-157](../src/pi.ts#L142) |
+| `PiAgentIntegrationAdapter.releaseAgent` | 方法 | 是 | [src/pi.ts:159-167](../src/pi.ts#L159) |
+| `PiAgentIntegrationAdapter.submitCliOutcome` | 方法 | 是 | [src/pi.ts:170-178](../src/pi.ts#L170) |
+| `PiAgentIntegrationAdapter.finalizeCliTurn` | 方法 | 是 | [src/pi.ts:181-209](../src/pi.ts#L181) |
+| `PiAgentIntegrationAdapter.createSdkConnection` | 方法 | 否 | [src/pi.ts:211-234](../src/pi.ts#L211) |
+| `PiAgentIntegrationAdapter.createCliConnection` | 方法 | 否 | [src/pi.ts:236-245](../src/pi.ts#L236) |
+| `PiAgentIntegrationAdapter.executeCliNode` | 方法 | 否 | [src/pi.ts:247-269](../src/pi.ts#L247) |
+| `PiAgentIntegrationAdapter.flowOutcomeTool` | 方法 | 否 | [src/pi.ts:271-307](../src/pi.ts#L271) |
+| `PiAgentIntegrationAdapter.submitSdkOutcome` | 方法 | 否 | [src/pi.ts:309-324](../src/pi.ts#L309) |
+| `PiAgentIntegrationAdapter.resolvePending` | 方法 | 否 | [src/pi.ts:327-341](../src/pi.ts#L327) |
+| `createFlowOutcomeTool` | 函数 | 是 | [src/pi.ts:344-376](../src/pi.ts#L344) |
+| `createFlowInspectionTool` | 函数 | 是 | [src/pi.ts:379-405](../src/pi.ts#L379) |
+| `nodeSession` | 函数 | 否 | [src/pi.ts:407-417](../src/pi.ts#L407) |
+| `interactionReference` | 函数 | 否 | [src/pi.ts:419-424](../src/pi.ts#L419) |
+| `parseInteractionReference` | 函数 | 否 | [src/pi.ts:426-436](../src/pi.ts#L426) |
+| `messagesFromEntries` | 函数 | 否 | [src/pi.ts:438-466](../src/pi.ts#L438) |
+| `normalizeRole` | 函数 | 否 | [src/pi.ts:468-472](../src/pi.ts#L468) |
 
 ## [src/runtime.ts](../src/runtime.ts)
 
@@ -245,14 +260,15 @@
 | `FlowRunSummary` | 接口 | 是 | [src/types.ts:298-310](../src/types.ts#L298) |
 | `FlowRunLocation` | 类型 | 是 | [src/types.ts:312-323](../src/types.ts#L312) |
 | `FlowNodeEvidenceSummary` | 接口 | 是 | [src/types.ts:325-329](../src/types.ts#L325) |
-| `FlowRunHistory` | 接口 | 是 | [src/types.ts:332-340](../src/types.ts#L332) |
-| `FlowNodeEvidence` | 接口 | 是 | [src/types.ts:342-358](../src/types.ts#L342) |
-| `FlowNodeEvidenceReader` | 接口 | 是 | [src/types.ts:360-362](../src/types.ts#L360) |
-| `FlowNodeEvidenceAccessRequest` | 接口 | 是 | [src/types.ts:364-367](../src/types.ts#L364) |
-| `FlowNodeEvidenceAuthorizer` | 类型 | 是 | [src/types.ts:369-371](../src/types.ts#L369) |
-| `FlowRunInspectorApi` | 接口 | 是 | [src/types.ts:373-379](../src/types.ts#L373) |
-| `FlowObservationEventType` | 类型 | 是 | [src/types.ts:381-393](../src/types.ts#L381) |
-| `FlowObservationEvent` | 接口 | 是 | [src/types.ts:395-412](../src/types.ts#L395) |
-| `FlowObservationSubscription` | 接口 | 是 | [src/types.ts:414-416](../src/types.ts#L414) |
-| `FlowObservationPublisherApi` | 接口 | 是 | [src/types.ts:418-424](../src/types.ts#L418) |
-| `FlowObservationPublisherOptions` | 接口 | 是 | [src/types.ts:426-428](../src/types.ts#L426) |
+| `FlowNodeRunView` | 接口 | 是 | [src/types.ts:331-347](../src/types.ts#L331) |
+| `FlowRunHistory` | 接口 | 是 | [src/types.ts:350-358](../src/types.ts#L350) |
+| `FlowNodeEvidence` | 接口 | 是 | [src/types.ts:360-376](../src/types.ts#L360) |
+| `FlowNodeEvidenceReader` | 接口 | 是 | [src/types.ts:378-380](../src/types.ts#L378) |
+| `FlowNodeEvidenceAccessRequest` | 接口 | 是 | [src/types.ts:382-385](../src/types.ts#L382) |
+| `FlowNodeEvidenceAuthorizer` | 类型 | 是 | [src/types.ts:387-389](../src/types.ts#L387) |
+| `FlowRunInspectorApi` | 接口 | 是 | [src/types.ts:391-397](../src/types.ts#L391) |
+| `FlowObservationEventType` | 类型 | 是 | [src/types.ts:399-411](../src/types.ts#L399) |
+| `FlowObservationEvent` | 接口 | 是 | [src/types.ts:413-430](../src/types.ts#L413) |
+| `FlowObservationSubscription` | 接口 | 是 | [src/types.ts:432-434](../src/types.ts#L432) |
+| `FlowObservationPublisherApi` | 接口 | 是 | [src/types.ts:436-442](../src/types.ts#L436) |
+| `FlowObservationPublisherOptions` | 接口 | 是 | [src/types.ts:444-446](../src/types.ts#L444) |

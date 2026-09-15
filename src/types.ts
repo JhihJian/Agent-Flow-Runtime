@@ -328,10 +328,28 @@ export interface FlowNodeEvidenceSummary {
 	commandOutputAvailable: boolean;
 }
 
+export interface FlowNodeRunView {
+	id: string;
+	runId: string;
+	sequence: number;
+	nodeRef: string;
+	actionKind: FlowAction["kind"];
+	input: FlowValue;
+	status: NodeRunStatus;
+	startedAt: string;
+	completedAt?: string;
+	result?: string;
+	error?: FlowError;
+	session?: NodeSession;
+	retryOf?: string;
+	enteredFrom: NodeRunSource;
+	parallelRoundId?: string;
+}
+
 /** Stable, adapter-independent projection of one Run's persisted facts. */
 export interface FlowRunHistory {
 	run: FlowRunSummary;
-	nodeRuns: NodeRunRecord[];
+	nodeRuns: FlowNodeRunView[];
 	routeDecisions: RouteDecisionRecord[];
 	parallelRounds: ParallelRoundRecord[];
 	recoveries: RunRecoveryRecord[];

@@ -1,5 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { FlowRuntime } from "./observability.ts";
 import type { PiAgentIntegrationAdapter } from "./pi.ts";
+import type { FlowObservationSubscription } from "./types.ts";
 
 interface PendingSessionReplacement {
 	resolve: () => void;
@@ -8,6 +10,9 @@ interface PendingSessionReplacement {
 
 export interface CliFlowState {
 	adapter?: PiAgentIntegrationAdapter;
+	runtime?: FlowRuntime;
+	observation?: FlowObservationSubscription;
+	activeRunId?: string;
 	active?: { path: string; promise: Promise<void> };
 	resuming?: Promise<void>;
 	configuredPath?: string;

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import type {
@@ -8,14 +9,26 @@ import {
 	getCliFlowState,
 	rejectPendingSessionReplacement,
 } from "./cli-state.ts";
+import {
+	FlowObservationPublisher,
+	FlowRunInspector,
+	FlowRuntime,
+	formatFlowRunHistory,
+	toFlowEventEnvelope,
+} from "./observability.ts";
 import { parseFlow } from "./parser.ts";
 import {
+	createFlowInspectionTool,
 	createFlowOutcomeTool,
 	PiAgentIntegrationAdapter,
 	type PiCliBridge,
 } from "./pi.ts";
 import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
-import type { FlowDefinition, UnifiedMessage } from "./types.ts";
+import type {
+	FlowDefinition,
+	FlowObservationEvent,
+	UnifiedMessage,
+} from "./types.ts";
 
 /** Install with `pi install <package>` or load with `pi -e ./dist/extension.js`. */
 export default function flowExtension(pi: ExtensionAPI) {
@@ -110,6 +123,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 			},
 		}),
 	);
+	pi.registerTool(createFlowInspectionTool(() => state.runtime));
 
 	pi.registerCommand("flow-new-session", {
 		description: "Start a fresh Pi session for an injected Flow transition",
@@ -175,6 +189,21 @@ export default function flowExtension(pi: ExtensionAPI) {
 			state.configuredPath =
 				typeof flag === "string" && flag.trim() ? flag : undefined;
 		}
+		if (
+			state.active &&
+			state.runtime &&
+			state.activeRunId &&
+			!state.observation
+		) {
+			const observation = await state.runtime.openRunObservation(
+				state.activeRunId,
+				(event) => publishHostObservation(pi, event, ctx),
+			);
+			if (observation) {
+				state.observation = observation.subscription;
+				renderRunSnapshot(ctx, observation.snapshot);
+			}
+		}
 		if (event.reason === "resume" && !state.active && !state.resuming) {
 			state.resuming = resumeFlow(ctx)
 				.catch((error) => {
@@ -206,6 +235,18 @@ export default function flowExtension(pi: ExtensionAPI) {
 		description: "Run a Flow: /flow run <file> <task>",
 		handler: async (args, ctx) => {
 			bindContext(ctx);
+			const show = /^show\s+(\S+)$/.exec(args.trim());
+			if (show) {
+				const runtime = state.runtime ?? createRuntimeForContext(ctx);
+				const history = await runtime.inspectRun(show[1]);
+				ctx.ui.notify(
+					history
+						? formatFlowRunHistory(history)
+						: `Flow 运行不存在: ${show[1]}`,
+					history ? "info" : "warning",
+				);
+				return;
+			}
 			const match = /^run\s+(\S+)\s+([\s\S]+)$/.exec(args.trim());
 			if (!match) {
 				ctx.ui.notify("用法: /flow run <文件> <任务>", "warning");
@@ -216,8 +257,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
-		// A session replacement reloads this extension while the coordinator
-		// continues through the process-level CLI state.
+		state.observation?.unsubscribe();
+		state.observation = undefined;
 	});
 
 	async function startFlow(
@@ -233,10 +274,29 @@ export default function flowExtension(pi: ExtensionAPI) {
 		const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
 		state.adapter = adapter;
 		const store = new JsonFileRunStore(join(cwd, ".pi", "flow-runs.json"));
+		const publisher = new FlowObservationPublisher({
+			onError: (error, event) =>
+				state.notify?.(
+					`Flow 观测通知异常 (${event.type}): ${error instanceof Error ? error.message : String(error)}`,
+					"warning",
+				),
+		});
+		const runtime = new FlowRuntime(
+			new FlowRunInspector(store, { evidenceReader: adapter }),
+			publisher,
+		);
+		state.runtime = runtime;
+		const runId = randomUUID();
+		state.activeRunId = runId;
+		state.observation = runtime.subscribe(runId, (event) => {
+			publishHostObservation(pi, event, ctx);
+		});
 		const coordinator = new FlowCoordinator(
 			flow,
 			store,
 			new AgentRunModel(adapter),
+			undefined,
+			publisher,
 		);
 		const first = flow.nodes.get(flow.startNodeRef);
 		if (!first) throw new Error(`Flow 首节点不存在: ${flow.startNodeRef}`);
@@ -245,12 +305,14 @@ export default function flowExtension(pi: ExtensionAPI) {
 				task,
 				first.action.kind === "复用Agent"
 					? {
+							runId,
 							existingAgentReference: bridge.getSessionReference(),
 							cwd,
 							flowPath: absolutePath,
 							sessionReference: bridge.getSessionReference(),
 						}
 					: {
+							runId,
 							cwd,
 							flowPath: absolutePath,
 							sessionReference: bridge.getSessionReference(),
@@ -267,6 +329,11 @@ export default function flowExtension(pi: ExtensionAPI) {
 				throw error;
 			})
 			.finally(() => {
+				state.observation?.unsubscribe();
+				state.observation = undefined;
+				state.activeRunId = undefined;
+				ctx.ui.setStatus("flow-runtime", undefined);
+				ctx.ui.setWidget("flow-runtime", undefined);
 				state.active = undefined;
 				state.adapter = undefined;
 			});
@@ -301,10 +368,31 @@ export default function flowExtension(pi: ExtensionAPI) {
 		}
 		const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
 		state.adapter = adapter;
+		const publisher = new FlowObservationPublisher({
+			onError: (error, event) =>
+				state.notify?.(
+					`Flow 观测通知异常 (${event.type}): ${error instanceof Error ? error.message : String(error)}`,
+					"warning",
+				),
+		});
+		const runtime = new FlowRuntime(
+			new FlowRunInspector(store, { evidenceReader: adapter }),
+			publisher,
+		);
+		state.runtime = runtime;
+		state.activeRunId = run.id;
+		const observation = await runtime.openRunObservation(run.id, (event) => {
+			publishHostObservation(pi, event, ctx);
+		});
+		if (!observation) return;
+		state.observation = observation.subscription;
+		renderRunSnapshot(ctx, observation.snapshot);
 		const coordinator = new FlowCoordinator(
 			flow,
 			store,
 			new AgentRunModel(adapter),
+			undefined,
+			publisher,
 		);
 		const promise = coordinator
 			.resume(run.id, { existingAgentReference: sessionReference, cwd })
@@ -318,6 +406,11 @@ export default function flowExtension(pi: ExtensionAPI) {
 				);
 			})
 			.finally(() => {
+				state.observation?.unsubscribe();
+				state.observation = undefined;
+				state.activeRunId = undefined;
+				ctx.ui.setStatus("flow-runtime", undefined);
+				ctx.ui.setWidget("flow-runtime", undefined);
 				state.active = undefined;
 				state.adapter = undefined;
 			});
@@ -327,4 +420,62 @@ export default function flowExtension(pi: ExtensionAPI) {
 
 async function loadFlow(path: string): Promise<FlowDefinition> {
 	return parseFlow(await readFile(path, "utf8"), path);
+}
+
+function createRuntimeForContext(ctx: ExtensionContext): FlowRuntime {
+	const store = new JsonFileRunStore(join(ctx.cwd, ".pi", "flow-runs.json"));
+	return new FlowRuntime(
+		new FlowRunInspector(store),
+		new FlowObservationPublisher(),
+	);
+}
+
+function publishHostObservation(
+	pi: ExtensionAPI,
+	event: FlowObservationEvent,
+	ctx: ExtensionContext,
+): void {
+	if (ctx.mode === "tui") {
+		ctx.ui.setStatus(
+			"flow-runtime",
+			`${event.status}/${event.phase} #${event.sequence}`,
+		);
+		ctx.ui.setWidget("flow-runtime", [
+			`Flow ${event.flowId}  Run ${event.runId}`,
+			`${event.type}: ${event.summary}`,
+		]);
+	}
+	if (ctx.mode === "json" || ctx.mode === "rpc") {
+		pi.sendMessage(
+			{
+				customType: "flow_event",
+				content: [],
+				display: false,
+				details: toFlowEventEnvelope(event),
+			},
+			{ triggerTurn: false },
+		);
+	}
+}
+
+function renderRunSnapshot(
+	ctx: ExtensionContext,
+	history: Awaited<ReturnType<FlowRuntime["inspectRun"]>>,
+): void {
+	if (!history || ctx.mode !== "tui") return;
+	const current =
+		history.current.kind === "node"
+			? `node:${history.current.nodeRef}`
+			: history.current.kind === "parallel"
+				? `parallel:${history.current.parallelRef}`
+				: "none";
+	ctx.ui.setStatus(
+		"flow-runtime",
+		`${history.run.status}/${history.run.phase} #${history.run.sequence}`,
+	);
+	ctx.ui.setWidget("flow-runtime", [
+		`Flow ${history.run.flowId}  Run ${history.run.id}`,
+		`Current: ${current}`,
+		`Nodes: ${history.nodeRuns.length}  Parallel rounds: ${history.parallelRounds.length}`,
+	]);
 }

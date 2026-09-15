@@ -346,7 +346,7 @@ RunStore 是 Run 当前状态和可查询历史的唯一持久事实来源，负
 
 `FlowObservationPublisher` 只接受已持久化事实的瞬时通知，不保存第二套状态，不路由、不提交结果、不反向控制 Flow。最小事件为：`run.started`、`run.resumed`、`run.completed`、`run.failed`、`run.interrupted`、`node.started`、`node.completed`、`node.failed`、`node.interrupted`、`route.selected`、`parallel.started`、`parallel.completed`。每个事件必须包含 `runId`、`flowId`、事件类型、Run 内单调 `sequence`、`occurredAt`、相关 NodeRun/ParallelRound 引用、提交后的 status/phase 和摘要。
 
-当前 Runtime 已提供进程内的`FlowObservationPublisher`。它只向当前订阅者尽力分发事件，订阅者异常和诊断回调异常均被隔离；它不缓存事件、不补发断线事件，也不承担持久化职责。
+当前 Runtime 已提供进程内的`FlowObservationPublisher`。它只向当前订阅者尽力分发事件，订阅者异常和诊断回调异常均被隔离；它不缓存事件、不补发断线事件，也不承担持久化职责。Pi 宿主将这些事件转换为 TUI 状态/小组件或 JSON/RPC 的`flow_event`自定义消息。
 
 Publisher 发布失败或订阅者抛错，只进入宿主诊断，不回滚、不阻断执行、不改变已保存终态。MVP 事件是实时通知，不承诺断线期间补发全部事件，事件也不是事件日志；客户端应按 `(runId, sequence)` 去重。
 
@@ -388,4 +388,4 @@ Runtime 对外只暴露一个组装好的入口，至少提供上述 Inspector �
 5. **恢复**：恢复前 Agent NodeRun 为 `interrupted`，恢复创建带关联的新 NodeRun 并发布 `run.resumed`；未完成命令不重放，明确进入 `failed` 或人工处理的 `interrupted`；已完成节点不重复执行。
 6. **断线**：订阅断开不影响 Run 和持久化；重连通过统一入口先取得正确快照，再接收水位之后的通知；不要求 MVP 补发断线期间的全部事件。
 
-本节点只完成上述契约审查和文档修正。契约通过后，下一节点才实现类型、持久化事实模型、状态转换、Inspector/Publisher、快照水位协议和六类测试；不在本节点实现展示适配器、事件日志、数据库并发或外部可观测性平台。
+运行事实、Inspector、Publisher 和 Pi 宿主的薄展示适配器现已按上述契约实现。当前仍不包含追加式事件日志、严格断线补发、跨进程数据库并发或外部可观测性平台。

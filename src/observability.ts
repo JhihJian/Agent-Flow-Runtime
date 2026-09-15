@@ -3,6 +3,7 @@ import type {
 	FlowNodeEvidenceAuthorizer,
 	FlowNodeEvidenceReader,
 	FlowNodeEvidenceSummary,
+	FlowNodeRunView,
 	FlowObservationEvent,
 	FlowObservationPublisherApi,
 	FlowObservationPublisherOptions,
@@ -123,7 +124,7 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 
 		return {
 			run: toRunSummary(run),
-			nodeRuns: orderedNodeRuns,
+			nodeRuns: orderedNodeRuns.map(toNodeRunView),
 			routeDecisions: orderedRoutes,
 			parallelRounds: orderedRounds,
 			recoveries: orderedRecoveries,
@@ -172,6 +173,118 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 	}
 }
 
+export interface FlowRunObservation {
+	snapshot: FlowRunHistory;
+	subscription: FlowObservationSubscription;
+}
+
+/** Unified read/observe facade used by SDK, Pi, and protocol adapters. */
+
+export class FlowRuntime implements FlowRunInspectorApi {
+	private readonly inspector: FlowRunInspectorApi;
+	private readonly publisher: FlowObservationPublisherApi;
+
+	constructor(
+		inspector: FlowRunInspectorApi,
+		publisher: FlowObservationPublisherApi,
+	) {
+		this.inspector = inspector;
+		this.publisher = publisher;
+	}
+
+	inspectRun(runId: string): Promise<FlowRunHistory | undefined> {
+		return this.inspector.inspectRun(runId);
+	}
+
+	inspectNodeEvidence(
+		runId: string,
+		nodeRunId: string,
+	): Promise<FlowNodeEvidence | undefined> {
+		return this.inspector.inspectNodeEvidence(runId, nodeRunId);
+	}
+
+	subscribe(
+		runId: string,
+		listener: (event: FlowObservationEvent) => void,
+	): FlowObservationSubscription {
+		return this.publisher.subscribe(runId, listener);
+	}
+
+	/** Register first, buffer the race window, then expose a stable snapshot. */
+	async openRunObservation(
+		runId: string,
+		listener: (event: FlowObservationEvent) => void,
+	): Promise<FlowRunObservation | undefined> {
+		let snapshotReady = false;
+		const buffered: FlowObservationEvent[] = [];
+		const subscription = this.subscribe(runId, (event) => {
+			if (!snapshotReady) buffered.push(event);
+			else listener(event);
+		});
+		try {
+			const snapshot = await this.inspectRun(runId);
+			if (!snapshot) {
+				subscription.unsubscribe();
+				return undefined;
+			}
+			snapshotReady = true;
+			for (const event of buffered.sort(
+				(left, right) => left.sequence - right.sequence,
+			)) {
+				if (event.sequence > snapshot.run.sequence) listener(event);
+			}
+			return { snapshot, subscription };
+		} catch (error) {
+			subscription.unsubscribe();
+			throw error;
+		}
+	}
+}
+
+export function formatFlowRunHistory(history: FlowRunHistory): string {
+	const lines = [
+		`Run ${history.run.id} | Flow ${history.run.flowId} | ${history.run.status} / ${history.run.phase}`,
+		`Task: ${formatValue(history.run.task)}`,
+		`Flow version: ${history.run.flowVersion}`,
+		`History: ${history.run.historyCompleteness} | sequence ${history.run.sequence}`,
+		"Path:",
+	];
+	for (const node of history.nodeRuns) {
+		const result = node.result ? ` -> ${node.result}` : "";
+		lines.push(`  ${node.sequence}. ${node.nodeRef} [${node.status}]${result}`);
+	}
+	for (const route of history.routeDecisions) {
+		lines.push(
+			`Route ${route.sourceNodeRunId}: ${route.result} -> ${formatDestination(route.destination)}`,
+		);
+	}
+	for (const round of history.parallelRounds) {
+		lines.push(
+			`Parallel ${round.id} [${round.status}] branches: ${Object.keys(round.branchNodeRunIds).join(", ")}`,
+		);
+	}
+	if (history.run.error) lines.push(`Error: ${history.run.error.summary}`);
+	return lines.join("\n");
+}
+
+export function toFlowEventEnvelope(event: FlowObservationEvent): {
+	type: "flow_event";
+	event: FlowObservationEvent;
+} {
+	return { type: "flow_event", event };
+}
+
+function formatDestination(
+	destination: FlowRunHistory["routeDecisions"][number]["destination"],
+): string {
+	if (destination.kind === "finish") return "finish";
+	return `${destination.kind}:${destination.ref}`;
+}
+
+function formatValue(value: FlowValue): string {
+	return typeof value === "string" ? value : JSON.stringify(value);
+}
+
 function isEvidenceReader(
 	value: FlowRunInspectorOptions | FlowNodeEvidenceReader,
 ): value is FlowNodeEvidenceReader {
@@ -195,6 +308,26 @@ function toRunSummary(run: FlowRunRecord): FlowRunSummary {
 		startedAt: run.startedAt,
 		completedAt: run.completedAt,
 		error: run.error,
+	};
+}
+
+function toNodeRunView(record: NodeRunRecord): FlowNodeRunView {
+	return {
+		id: record.id,
+		runId: record.runId,
+		sequence: record.sequence,
+		nodeRef: record.nodeRef,
+		actionKind: record.actionKind,
+		input: record.input,
+		status: record.status,
+		startedAt: record.startedAt,
+		completedAt: record.completedAt,
+		result: record.outcome?.result,
+		error: record.error,
+		session: record.session,
+		retryOf: record.retryOf,
+		enteredFrom: record.enteredFrom,
+		parallelRoundId: record.parallelRoundId,
 	};
 }
 

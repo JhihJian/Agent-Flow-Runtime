@@ -125,7 +125,7 @@ sequenceDiagram
 
 Pi Host 可以展示当前 Run 的简要状态，例如当前 Flow、当前节点、等待中的并行轮次和最终错误。展示内容来自 Runtime 的运行记录，不单独维护一份流程状态。
 
-当前实现主要在成功或失败时发送通知，持续的当前节点展示和运行查询仍属于后续能力。
+当前实现通过统一 Runtime 入口提供 `/flow show <runId>`、TUI 状态栏/小组件、JSON/RPC `flow_event` 消息和 Agent 的只读 `inspect_flow_run` 工具。重连时先读取 Inspector 快照，再订阅后续事件；持续事件为尽力而为通知，不补发断线期间的全部事件。
 
 ## 8. 必须保持的规则
 

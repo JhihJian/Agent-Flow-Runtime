@@ -63,7 +63,7 @@ When testing a checkout before installing it, load the built extension explicitl
 pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
 ```
 
-In TUI, use `/flow run <文件> <任务>`. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC event streams include each `submit_flow_outcome` tool execution with `{ outcome, content }` in `details`.
+In TUI, use `/flow run <文件> <任务>` and `/flow show <runId>` to inspect the same persisted history returned by the SDK. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. The `./examples/*.md` paths above refer to a repository checkout; installed users point `--flow` at their own Flow files, such as `.flows/release.md`.
 
@@ -98,6 +98,28 @@ const coordinator = new FlowCoordinator(
 const run = await coordinator.run("修复登录超时问题");
 console.log(run.status); // "completed"
 ```
+
+The same Runtime facade provides read and observe access for SDK hosts:
+
+```typescript
+import {
+	FlowObservationPublisher,
+	FlowRunInspector,
+	FlowRuntime,
+} from "@jhihjian/agent-flow-runtime";
+
+const runtime = new FlowRuntime(
+	new FlowRunInspector(store, { evidenceReader: adapter }),
+	new FlowObservationPublisher(),
+);
+const history = await runtime.inspectRun(run.id);
+const subscription = runtime.subscribe(run.id, (event) => {
+	console.log(event.type, event.sequence, event.summary);
+});
+subscription.unsubscribe();
+```
+
+Pi Agent hosts also expose the read-only `inspect_flow_run` tool. TUI status and widget output, CLI history output, JSON/RPC `flow_event` messages, and SDK results are thin views over this same Runtime facade. Events are best-effort and are not replayed after a disconnect; reconnecting clients should read `inspectRun` first.
 
 `PiAgentIntegrationAdapter` creates a real Pi SDK session for each `新建Agent` action and injects the `submit_flow_outcome` tool automatically. Model auth follows Pi conventions (`~/.pi/agent/auth.json`, environment variables, or the settings default model). Sessions persist under `~/.pi/agent/sessions/` by default; pass `sessionDir` to choose another location. Run records go wherever the `RunStore` points.
 

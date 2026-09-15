@@ -7,6 +7,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { FlowRuntime } from "./observability.ts";
 import type {
 	AgentConnection,
 	AgentIntegrationAdapter,
@@ -369,6 +370,35 @@ export function createFlowOutcomeTool(
 				],
 				details: { outcome: params.outcome, content: params.content },
 				terminate: true,
+			};
+		},
+	});
+}
+
+/** Read-only Agent access to the same Runtime history facade as other hosts. */
+export function createFlowInspectionTool(
+	getRuntime: () => FlowRuntime | undefined,
+): ToolDefinition {
+	return defineTool({
+		name: "inspect_flow_run",
+		label: "Inspect Flow Run",
+		description: "Read the persisted history of a Flow run by run ID.",
+		promptSnippet: "Inspect a Flow run's persisted history",
+		promptGuidelines: [
+			"Use this to inspect Flow state and history instead of inferring it from prose.",
+		],
+		parameters: Type.Object({
+			runId: Type.String({ description: "Flow Run identifier" }),
+		}),
+		executionMode: "sequential",
+		execute: async (_id, params) => {
+			const runtime = getRuntime();
+			if (!runtime) throw new Error("Flow 运行查询入口尚未就绪");
+			const history = await runtime.inspectRun(params.runId);
+			if (!history) throw new Error(`Flow 运行不存在: ${params.runId}`);
+			return {
+				content: [{ type: "text", text: JSON.stringify(history) }],
+				details: history,
 			};
 		},
 	});
