@@ -133,6 +133,10 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 	try {
 		const initial = await fetch(host.url ?? "");
 		assert.equal(initial.status, 200);
+		assert.match(
+			initial.headers.get("content-security-policy") ?? "",
+			/script-src 'self' 'wasm-unsafe-eval'/,
+		);
 		const baseUrl = new URL(host.url ?? "").origin;
 		const session = await fetch(`${baseUrl}/api/session`, {
 			method: "POST",
@@ -177,7 +181,7 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		assert.match(appSource, /renderSVGElement\(dot, \{ engine: 'dot' \}\)/);
 		assert.match(appSource, /buildFlowDot/);
 		assert.match(appSource, /dotString/);
-		assert.match(appSource, /rankdir=TB/);
+		assert.match(appSource, /rankdir=LR/);
 		assert.match(appSource, /splines=polyline/);
 		assert.match(appSource, /style="dashed"/);
 		assert.match(appSource, /flowRenderRevision/);

@@ -500,7 +500,7 @@ export class FlowObservabilityWebHost {
 			"Referrer-Policy": "no-referrer",
 			"X-Content-Type-Options": "nosniff",
 			"Content-Security-Policy":
-				"default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+				"default-src 'self'; connect-src 'self'; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; base-uri 'none'; frame-ancestors 'none'",
 		});
 		response.end(body);
 	}
@@ -891,7 +891,7 @@ function buildFlowDot(definition, sessions) {
   const nodeOrder = new Map(definition.nodes.map((node, index) => [node.ref, index]));
   const lines = [
     'digraph flow {',
-    'graph [rankdir=TB, nodesep=0.85, ranksep=1.2, splines=polyline, pad=0.28, bgcolor="transparent", outputorder=edgesfirst];',
+    'graph [rankdir=LR, nodesep=0.85, ranksep=1.2, splines=polyline, pad=0.28, bgcolor="transparent", outputorder=edgesfirst];',
     'node [shape=box, style="rounded,filled", fontname="Arial", fontsize=13, fontcolor="#e5e7eb", color="#64748b", fillcolor="#172033", penwidth=1.5, margin="0.22,0.13"];',
     'edge [fontname="Arial", fontsize=11, color="#64748b", fontcolor="#cbd5e1", penwidth=1.6, arrowsize=0.72];',
     'flow_start [id="flow-start", label="开始", shape=circle, fillcolor="#182235", color="#93c5fd", fontsize=11];',
