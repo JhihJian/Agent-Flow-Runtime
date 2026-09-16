@@ -4,6 +4,8 @@
 
 Web 展示模式是 Flow Runtime 的只读运行观察站。它面向需要持续跟进运行、定位失败节点、查看 Agent 交互和命令输出的本地可信用户。
 
+当前实现提供`FlowObservabilityWebHost`和`/flow web [port]`启动入口。服务通过随机令牌换取 HttpOnly cookie，提供 Run 列表、Run 快照、NodeRun 证据和 SSE 事件提示；浏览器收到事件后重新读取权威快照。
+
 Web 页面展示一次具体 Run 的持久化事实和受权限控制的执行依据。它不提供结果提交、路由选择、恢复、重试、停止或命令重放操作。
 
 ```text
@@ -187,7 +189,7 @@ Agent 节点以消息时间轴展示：
 
 命令退出码非零时，界面显示“命令执行已完成，业务结果为 failure”。执行器异常、命令中断和业务退出结果保持不同的状态表达。
 
-完整 Task、Prompt、消息、stdout 和 stderr 由服务端按 NodeRun 授权后返回。浏览器端折叠或截断不作为安全边界。
+完整 Task、Prompt、消息、stdout 和 stderr 由服务端按 NodeRun 授权后返回。浏览器端折叠或截断不作为安全边界。当活跃 Runtime 未保留历史 Agent 消息、但 NodeRun 保存 Pi 会话引用时，Web 宿主按需读取持久会话中的对应交互范围；读取失败或引用不可用时，节点检查器显示“完整依据不可用”。
 
 ## 7. 实时和断线
 

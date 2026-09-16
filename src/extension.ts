@@ -9,7 +9,7 @@ import {
 	getCliFlowState,
 	rejectPendingSessionReplacement,
 } from "./cli-state.ts";
-
+import { FlowObservabilityWebHost } from "./flow-observability-web.ts";
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
@@ -24,6 +24,7 @@ import {
 	PiAgentIntegrationAdapter,
 	type PiCliBridge,
 } from "./pi.ts";
+import { readPersistedPiNodeEvidence } from "./pi-session-evidence.ts";
 import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
 import type {
 	FlowDefinition,
@@ -271,6 +272,36 @@ export default function flowExtension(pi: ExtensionAPI) {
 				await showRun(show[1], ctx);
 				return;
 			}
+			const web = /^web(?:\s+(stop|\d+))?$/.exec(args.trim());
+			if (web) {
+				if (web[1] === "stop") {
+					await state.webHost?.close();
+					state.webHost = undefined;
+					ctx.ui.notify("Flow Web 观察站已停止", "info");
+					return;
+				}
+				if (state.webHost?.url) {
+					ctx.ui.notify(`Flow Web 观察站: ${state.webHost.url}`, "info");
+					return;
+				}
+				const port = web[1] ? Number(web[1]) : 3818;
+				if (!Number.isInteger(port) || port < 1 || port > 65535) {
+					ctx.ui.notify("端口必须在 1 到 65535 之间", "warning");
+					return;
+				}
+				const host = new FlowObservabilityWebHost({
+					getRuntime: () =>
+						state.runtime ??
+						createRuntimeForContext(state.currentContext ?? ctx),
+					host: "127.0.0.1",
+					port,
+					readPersistedEvidence: readPersistedPiNodeEvidence,
+				});
+				await host.start();
+				state.webHost = host;
+				ctx.ui.notify(`Flow Web 观察站: ${host.url}`, "info");
+				return;
+			}
 			const list = /^list(?:\s+(\d+))?$/.exec(args.trim());
 			if (list) {
 				const runtime = state.runtime ?? createRuntimeForContext(ctx);
@@ -296,6 +327,10 @@ export default function flowExtension(pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => {
 		state.observation?.unsubscribe();
 		state.observation = undefined;
+		if (!state.pendingSessionReplacement) {
+			await state.webHost?.close();
+			state.webHost = undefined;
+		}
 		state.currentContext = undefined;
 		state.notify = undefined;
 		state.sendNodePrompt = undefined;
