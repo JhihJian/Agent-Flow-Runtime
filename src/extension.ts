@@ -180,8 +180,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 		}
 		try {
 			await ctx.ui.custom<void>(
-				(tui, _theme, _keybindings, done) =>
-					new FlowRunVisualizationTui(tui, controller, () => done()),
+				(tui, theme, _keybindings, done) =>
+					new FlowRunVisualizationTui(tui, theme, controller, () => done()),
 				{
 					overlay: true,
 					overlayOptions: {

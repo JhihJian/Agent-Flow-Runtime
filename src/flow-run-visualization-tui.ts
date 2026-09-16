@@ -1,9 +1,11 @@
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
 	Key,
 	matchesKey,
 	type TUI,
 	truncateToWidth,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 import type {
 	FlowFactSelection,
@@ -15,6 +17,7 @@ import type { FlowRunLocation } from "./types.ts";
 
 export class FlowRunVisualizationTui implements Component {
 	private readonly tui: TUI;
+	private readonly theme: Theme;
 	private readonly controller: FlowRunVisualizationController;
 	private readonly close: () => void;
 	private readonly unsubscribe: () => void;
@@ -24,10 +27,12 @@ export class FlowRunVisualizationTui implements Component {
 
 	constructor(
 		tui: TUI,
+		theme: Theme,
 		controller: FlowRunVisualizationController,
 		close: () => void,
 	) {
 		this.tui = tui;
+		this.theme = theme;
 		this.controller = controller;
 		this.close = close;
 		this.state = controller.getState();
@@ -41,28 +46,25 @@ export class FlowRunVisualizationTui implements Component {
 
 	render(width: number): string[] {
 		const detail = this.state.detail;
-		if (!detail) return [line("Flow 运行详情已关闭", width)];
+		if (!detail) return this.panel(["Flow 运行详情已关闭"], width);
 		const history = detail.snapshot;
 		if (!history) {
-			return [
-				line(`Flow Run ${detail.runId}`, width),
-				line(detail.error ?? "正在读取运行快照...", width),
-				line("Esc 关闭", width),
-			];
+			return this.panel(
+				[
+					`Flow Run ${detail.runId}`,
+					detail.error ?? "正在读取运行快照...",
+					"Esc 关闭",
+				],
+				width,
+			);
 		}
 
 		const current = describeCurrent(history.current);
 		const lines = [
-			line(
-				`${history.run.status}/${history.run.phase}  ${history.run.flowId}  #${history.run.sequence}`,
-				width,
-			),
-			line(`Task: ${summarize(history.run.task)}`, width),
-			line(`Current: ${current}  Connection: ${detail.connection}`, width),
-			line(
-				"Timeline  Up/Down select  Enter expand  e evidence  r refresh  Esc close",
-				width,
-			),
+			`${history.run.status}/${history.run.phase}  ${history.run.flowId}  #${history.run.sequence}`,
+			`Task: ${summarize(history.run.task)}`,
+			`Current: ${current}  Connection: ${detail.connection}`,
+			"Timeline  Up/Down select  Enter expand  e evidence  r refresh  Esc close",
 		];
 
 		const timeline = detail.timeline;
@@ -71,10 +73,7 @@ export class FlowRunVisualizationTui implements Component {
 		for (const [offset, item] of visible.entries()) {
 			const index = start + offset;
 			lines.push(
-				line(
-					`${index === this.selectedIndex ? ">" : " "} ${describeItem(item)}`,
-					width,
-				),
+				`${index === this.selectedIndex ? ">" : " "} ${describeItem(item)}`,
 			);
 			if (
 				item.kind === "parallel" &&
@@ -82,26 +81,20 @@ export class FlowRunVisualizationTui implements Component {
 			) {
 				for (const branch of item.branches) {
 					lines.push(
-						line(
-							`    ${branch.branchRef}: ${branch.nodeName ?? branch.nodeRunId ?? "未开始"} [${branch.status ?? "waiting"}]${branch.result ? ` -> ${branch.result}` : ""}`,
-							width,
-						),
+						`    ${branch.branchRef}: ${branch.nodeName ?? branch.nodeRunId ?? "未开始"} [${branch.status ?? "waiting"}]${branch.result ? ` -> ${branch.result}` : ""}`,
 					);
 				}
 				if (item.joinNodeRunId) {
 					lines.push(
-						line(
-							`    join: ${item.joinNodeName ?? item.joinNodeRunId}${item.joinResult ? ` -> ${item.joinResult}` : ""}`,
-							width,
-						),
+						`    join: ${item.joinNodeName ?? item.joinNodeRunId}${item.joinResult ? ` -> ${item.joinResult}` : ""}`,
 					);
 				}
 			}
 		}
 
-		lines.push(line(describeEvidence(detail), width));
-		if (detail.error) lines.push(line(`Notice: ${detail.error}`, width));
-		return lines;
+		lines.push(describeEvidence(detail));
+		if (detail.error) lines.push(`Notice: ${detail.error}`);
+		return this.panel(lines, width);
 	}
 
 	handleInput(data: string): void {
@@ -168,6 +161,22 @@ export class FlowRunVisualizationTui implements Component {
 		);
 		if (selected >= 0) this.selectedIndex = selected;
 		else this.selectedIndex = Math.min(this.selectedIndex, timeline.length - 1);
+	}
+
+	private panel(lines: readonly string[], width: number): string[] {
+		const innerWidth = Math.max(1, width - 2);
+		const border = (value: string) => this.theme.fg("border", value);
+		const fill = (value: string) => {
+			const content = truncateToWidth(value, innerWidth, "...", true);
+			const padded =
+				content + " ".repeat(Math.max(0, innerWidth - visibleWidth(content)));
+			return border("│") + this.theme.bg("selectedBg", padded) + border("│");
+		};
+		return [
+			border(`╭${"─".repeat(innerWidth)}╮`),
+			...lines.map(fill),
+			border(`╰${"─".repeat(innerWidth)}╯`),
+		];
 	}
 }
 
@@ -258,8 +267,4 @@ function describeEvidence(
 function summarize(value: unknown): string {
 	const text = typeof value === "string" ? value : JSON.stringify(value);
 	return text.length > 90 ? `${text.slice(0, 87)}...` : text;
-}
-
-function line(value: string, width: number): string {
-	return truncateToWidth(value, Math.max(1, width));
 }

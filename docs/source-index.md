@@ -42,26 +42,26 @@
 
 ## [src/flow-run-visualization-tui.ts](../src/flow-run-visualization-tui.ts)
 
-依赖：`@earendil-works/pi-tui`、`./flow-run-visualization.ts`、`./types.ts`
+依赖：`@earendil-works/pi-coding-agent`、`@earendil-works/pi-tui`、`./flow-run-visualization.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `FlowRunVisualizationTui` | 类 | 是 | [src/flow-run-visualization-tui.ts:16-172](../src/flow-run-visualization-tui.ts#L16) |
-| `FlowRunVisualizationTui.render` | 方法 | 是 | [src/flow-run-visualization-tui.ts:42-105](../src/flow-run-visualization-tui.ts#L42) |
-| `FlowRunVisualizationTui.handleInput` | 方法 | 是 | [src/flow-run-visualization-tui.ts:107-137](../src/flow-run-visualization-tui.ts#L107) |
-| `FlowRunVisualizationTui.invalidate` | 方法 | 是 | [src/flow-run-visualization-tui.ts:139-141](../src/flow-run-visualization-tui.ts#L139) |
-| `FlowRunVisualizationTui.dispose` | 方法 | 是 | [src/flow-run-visualization-tui.ts:143-145](../src/flow-run-visualization-tui.ts#L143) |
-| `FlowRunVisualizationTui.timeline` | 方法 | 否 | [src/flow-run-visualization-tui.ts:147-149](../src/flow-run-visualization-tui.ts#L147) |
-| `FlowRunVisualizationTui.selectIndex` | 方法 | 否 | [src/flow-run-visualization-tui.ts:151-157](../src/flow-run-visualization-tui.ts#L151) |
-| `FlowRunVisualizationTui.syncSelectedIndex` | 方法 | 否 | [src/flow-run-visualization-tui.ts:159-171](../src/flow-run-visualization-tui.ts#L159) |
-| `selectionFor` | 函数 | 否 | [src/flow-run-visualization-tui.ts:174-190](../src/flow-run-visualization-tui.ts#L174) |
-| `sameSelection` | 函数 | 否 | [src/flow-run-visualization-tui.ts:192-213](../src/flow-run-visualization-tui.ts#L192) |
-| `describeItem` | 函数 | 否 | [src/flow-run-visualization-tui.ts:215-228](../src/flow-run-visualization-tui.ts#L215) |
-| `describeCurrent` | 函数 | 否 | [src/flow-run-visualization-tui.ts:230-234](../src/flow-run-visualization-tui.ts#L230) |
-| `describeDestination` | 函数 | 否 | [src/flow-run-visualization-tui.ts:236-243](../src/flow-run-visualization-tui.ts#L236) |
-| `describeEvidence` | 函数 | 否 | [src/flow-run-visualization-tui.ts:245-256](../src/flow-run-visualization-tui.ts#L245) |
-| `summarize` | 函数 | 否 | [src/flow-run-visualization-tui.ts:258-261](../src/flow-run-visualization-tui.ts#L258) |
-| `line` | 函数 | 否 | [src/flow-run-visualization-tui.ts:263-265](../src/flow-run-visualization-tui.ts#L263) |
+| `FlowRunVisualizationTui` | 类 | 是 | [src/flow-run-visualization-tui.ts:18-181](../src/flow-run-visualization-tui.ts#L18) |
+| `FlowRunVisualizationTui.render` | 方法 | 是 | [src/flow-run-visualization-tui.ts:47-98](../src/flow-run-visualization-tui.ts#L47) |
+| `FlowRunVisualizationTui.handleInput` | 方法 | 是 | [src/flow-run-visualization-tui.ts:100-130](../src/flow-run-visualization-tui.ts#L100) |
+| `FlowRunVisualizationTui.invalidate` | 方法 | 是 | [src/flow-run-visualization-tui.ts:132-134](../src/flow-run-visualization-tui.ts#L132) |
+| `FlowRunVisualizationTui.dispose` | 方法 | 是 | [src/flow-run-visualization-tui.ts:136-138](../src/flow-run-visualization-tui.ts#L136) |
+| `FlowRunVisualizationTui.timeline` | 方法 | 否 | [src/flow-run-visualization-tui.ts:140-142](../src/flow-run-visualization-tui.ts#L140) |
+| `FlowRunVisualizationTui.selectIndex` | 方法 | 否 | [src/flow-run-visualization-tui.ts:144-150](../src/flow-run-visualization-tui.ts#L144) |
+| `FlowRunVisualizationTui.syncSelectedIndex` | 方法 | 否 | [src/flow-run-visualization-tui.ts:152-164](../src/flow-run-visualization-tui.ts#L152) |
+| `FlowRunVisualizationTui.panel` | 方法 | 否 | [src/flow-run-visualization-tui.ts:166-180](../src/flow-run-visualization-tui.ts#L166) |
+| `selectionFor` | 函数 | 否 | [src/flow-run-visualization-tui.ts:183-199](../src/flow-run-visualization-tui.ts#L183) |
+| `sameSelection` | 函数 | 否 | [src/flow-run-visualization-tui.ts:201-222](../src/flow-run-visualization-tui.ts#L201) |
+| `describeItem` | 函数 | 否 | [src/flow-run-visualization-tui.ts:224-237](../src/flow-run-visualization-tui.ts#L224) |
+| `describeCurrent` | 函数 | 否 | [src/flow-run-visualization-tui.ts:239-243](../src/flow-run-visualization-tui.ts#L239) |
+| `describeDestination` | 函数 | 否 | [src/flow-run-visualization-tui.ts:245-252](../src/flow-run-visualization-tui.ts#L245) |
+| `describeEvidence` | 函数 | 否 | [src/flow-run-visualization-tui.ts:254-265](../src/flow-run-visualization-tui.ts#L254) |
+| `summarize` | 函数 | 否 | [src/flow-run-visualization-tui.ts:267-270](../src/flow-run-visualization-tui.ts#L267) |
 
 ## [src/flow-run-visualization.ts](../src/flow-run-visualization.ts)
 
