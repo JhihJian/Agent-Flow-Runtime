@@ -59,8 +59,7 @@
 		"typebox": "*"
 	},
 	"dependencies": {
-		"cytoscape": "^3.34.3",
-		"cytoscape-elk": "^2.3.0",
+		"@viz-js/viz": "^3.30.0",
 		"yaml": "2.9.0"
 	},
 	"devDependencies": {

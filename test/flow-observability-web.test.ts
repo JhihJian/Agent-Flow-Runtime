@@ -144,22 +144,26 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		assert.match(cookie ?? "", /flow_observability=test-token/);
 		const headers = { Cookie: cookie ?? "" };
 		const initialHtml = await initial.text();
-		assert.match(initialHtml, /\/assets\/elkjs\/elk\.bundled\.js/);
-		assert.match(initialHtml, /\/assets\/cytoscape\/cytoscape\.umd\.js/);
-		assert.match(initialHtml, /\/assets\/cytoscape-elk\/cytoscape-elk\.js/);
+		assert.match(initialHtml, /\/assets\/viz-js\/viz-global\.js/);
+		assert.doesNotMatch(initialHtml, /cytoscape|elkjs/i);
+		const vizAsset = await fetch(`${baseUrl}/assets/viz-js/viz-global.js`);
+		assert.equal(vizAsset.status, 200);
+		assert.match(
+			vizAsset.headers.get("content-type") ?? "",
+			/text\/javascript/,
+		);
 		for (const assetPath of [
 			"/assets/elkjs/elk.bundled.js",
 			"/assets/cytoscape/cytoscape.umd.js",
 			"/assets/cytoscape-elk/cytoscape-elk.js",
+			"/assets/viz-js/%2e%2e%2fpackage.json",
 		]) {
-			const asset = await fetch(`${baseUrl}${assetPath}`);
-			assert.equal(asset.status, 200, assetPath);
-			assert.match(asset.headers.get("content-type") ?? "", /text\/javascript/);
+			assert.equal(
+				(await fetch(`${baseUrl}${assetPath}`)).status,
+				404,
+				assetPath,
+			);
 		}
-		assert.equal(
-			(await fetch(`${baseUrl}/assets/cytoscape/%2e%2e%2fpackage.json`)).status,
-			404,
-		);
 		assert.equal(
 			(await fetch(`${baseUrl}/assets/mermaid/mermaid.esm.min.mjs`)).status,
 			404,
@@ -168,7 +172,15 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		assert.equal(app.status, 200);
 		const appSource = await app.text();
 		assert.doesNotMatch(appSource, /mermaid/i);
-		assert.match(appSource, /buildCytoscapeElements/);
+		assert.doesNotMatch(appSource, /cytoscape|window\.ELK/i);
+		assert.match(appSource, /window\.Viz\.instance\(\)/);
+		assert.match(appSource, /renderSVGElement\(dot, \{ engine: 'dot' \}\)/);
+		assert.match(appSource, /buildFlowDot/);
+		assert.match(appSource, /dotString/);
+		assert.match(appSource, /rankdir=TB/);
+		assert.match(appSource, /splines=polyline/);
+		assert.match(appSource, /style="dashed"/);
+		assert.match(appSource, /flowRenderRevision/);
 		const syntaxDirectory = await mkdtemp(
 			join(tmpdir(), "flow-observability-web-"),
 		);

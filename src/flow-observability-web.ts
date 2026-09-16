@@ -30,16 +30,8 @@ const NODE_MODULES = resolve(
 
 const WEB_LIBRARY_ASSETS: ReadonlyMap<string, string> = new Map([
 	[
-		"/assets/elkjs/elk.bundled.js",
-		resolve(NODE_MODULES, "elkjs/lib/elk.bundled.js"),
-	],
-	[
-		"/assets/cytoscape/cytoscape.umd.js",
-		resolve(NODE_MODULES, "cytoscape/dist/cytoscape.umd.js"),
-	],
-	[
-		"/assets/cytoscape-elk/cytoscape-elk.js",
-		resolve(NODE_MODULES, "cytoscape-elk/dist/cytoscape-elk.js"),
+		"/assets/viz-js/viz-global.js",
+		resolve(NODE_MODULES, "@viz-js/viz/dist/viz-global.js"),
 	],
 ]);
 
@@ -760,9 +752,7 @@ const WEB_PAGE = `<!doctype html>
     <section class="timeline-panel"><div id="run-summary" class="summary"></div><div id="flow-graph" class="flow-graph"></div><div id="timeline" class="timeline"></div></section>
     <aside class="inspector-panel"><div class="panel-title">事实检查器</div><div id="inspector" class="inspector"></div></aside>
   </main>
-  <script src="/assets/elkjs/elk.bundled.js"></script>
-  <script src="/assets/cytoscape/cytoscape.umd.js"></script>
-  <script src="/assets/cytoscape-elk/cytoscape-elk.js"></script>
+  <script src="/assets/viz-js/viz-global.js"></script>
   <script type="module" src="/assets/app.js"></script>
 </body>
 </html>`;
@@ -793,9 +783,14 @@ button.active { border-color: #60a5fa; color: #bfdbfe; background: #1e3a5f; }
 .summary-grid span { color: #9ca3af; display: block; }
 .timeline { padding: 14px 22px 32px; }
 .flow-graph { margin: 14px 22px 4px; height: clamp(380px, 52dvh, 680px); min-height: 380px; overflow: hidden; border: 1px solid #334155; border-radius: 4px; background: #0b1220; display: flex; flex-direction: column; }
+.flow-graph.flow-focus { position: fixed; inset: 16px; z-index: 20; height: auto; margin: 0; border-color: #60a5fa; box-shadow: 0 18px 56px rgba(0, 0, 0, 0.55); }
 .flow-graph > .muted { padding: 8px 10px 0; }
 .flow-graph > button { align-self: flex-start; margin: 8px 10px; }
-.cytoscape-canvas { flex: 1 1 auto; min-height: 300px; width: 100%; }
+.flow-graph .graph-focus-toggle { align-self: flex-end; margin: -33px 10px 8px; width: 30px; height: 26px; padding: 0; font-size: 17px; line-height: 1; }
+.graph-viewport { flex: 1 1 auto; min-height: 300px; width: 100%; overflow: auto; cursor: grab; touch-action: none; }
+.graph-viewport.dragging { cursor: grabbing; user-select: none; }
+.graph-svg { display: block; max-width: none; }
+.graph-svg .node { cursor: pointer; }
 .fact { display: grid; grid-template-columns: 44px 1fr; gap: 10px; width: 100%; text-align: left; border: 0; border-radius: 0; border-left: 2px solid #334155; padding: 10px 12px; background: transparent; }
 .fact:hover, .fact.selected { border-left-color: #60a5fa; background: #1b2b42; }
 .sequence { color: #93c5fd; font-family: ui-monospace, monospace; font-size: 12px; padding-top: 2px; }
@@ -814,10 +809,10 @@ pre { margin: 8px 0; padding: 10px; max-height: 280px; overflow: auto; white-spa
 `;
 
 const WEB_APP = `
-const cytoscape = window.cytoscape;
-if (!cytoscape || !window.ELK || !window.cytoscapeElk) throw new Error('Flow 图依赖加载失败');
+if (!window.Viz || typeof window.Viz.instance !== 'function') throw new Error('Flow 图依赖加载失败');
 const state = { runs: [], filter: 'all', runId: null, history: null, flowContext: null, selected: null, stream: null, poll: null };
-let flowGraph = null;
+let flowRenderRevision = 0;
+let vizInstancePromise = null;
 const realtime = document.body.dataset.realtime === 'true';
 const runsNode = document.querySelector('#runs');
 const filtersNode = document.querySelector('#filters');
@@ -839,16 +834,15 @@ async function request(path) { const response = await fetch(path, { credentials:
 async function loadRuns() { const payload = await request('/api/runs?limit=50'); state.runs = payload.runs; renderRuns(); if (!state.runId && state.runs[0]) openRun(state.runs[0].id); }
 function renderFilters() { clear(filtersNode); for (const [value,label] of filters) { const button = el('button', label); if (state.filter === value) button.classList.add('active'); button.onclick = () => { state.filter = value; renderFilters(); renderRuns(); }; filtersNode.append(button); } }
 function renderRuns() { clear(runsNode); renderFilters(); for (const run of visibleRuns()) { const button = el('button', null, 'run-row'); if (run.id === state.runId) button.classList.add('selected'); button.onclick = () => openRun(run.id); button.append(el('span', run.taskSummary, 'run-task')); button.append(el('span', run.flowId + ' | ' + run.status + '/' + run.phase, 'run-meta')); button.append(el('span', run.errorCategory || run.startedAt, 'run-meta')); runsNode.append(button); } }
-async function openRun(runId) { state.runId = runId; state.selected = null; closeStream(); renderRuns(); await loadRun(); await loadFlowContext(); openStream(); }
-async function loadRun() { if (!state.runId) return; try { const payload = await request('/api/runs/' + encodeURIComponent(state.runId)); state.history = payload.history; connectionNode.textContent = '快照已同步 #' + state.history.run.sequence; renderDetail(); } catch (error) { connectionNode.textContent = '读取失败'; clear(summaryNode); summaryNode.append(el('div', '运行详情不可用', 'error')); } }
-async function loadFlowContext() { if (!state.history) return; try { state.flowContext = await request('/api/flows/' + encodeURIComponent(state.history.run.flowId) + '?runId=' + encodeURIComponent(state.runId)); renderFlowGraph(); } catch (_) { state.flowContext = null; renderFlowGraph(); } }
+async function openRun(runId) { state.runId = runId; state.selected = null; closeStream(); renderRuns(); await loadRun(); await loadFlowContext(); if (state.runId === runId) openStream(); }
+async function loadRun() { const runId = state.runId; if (!runId) return; try { const payload = await request('/api/runs/' + encodeURIComponent(runId)); if (state.runId !== runId) return; state.history = payload.history; connectionNode.textContent = '快照已同步 #' + state.history.run.sequence; renderDetail(); } catch (error) { if (state.runId !== runId) return; connectionNode.textContent = '读取失败'; clear(summaryNode); summaryNode.append(el('div', '运行详情不可用', 'error')); } }
+async function loadFlowContext() { const runId = state.runId; const history = state.history; if (!runId || !history) return; try { const payload = await request('/api/flows/' + encodeURIComponent(history.run.flowId) + '?runId=' + encodeURIComponent(runId)); if (state.runId !== runId || state.history !== history) return; state.flowContext = payload; renderFlowGraph(); } catch (_) { if (state.runId !== runId || state.history !== history) return; state.flowContext = null; renderFlowGraph(); } }
 function openStream() { if (!state.runId) return; closeStream(); if (!realtime) { connectionNode.textContent = '每 4 秒快照同步'; state.poll = setInterval(loadRun, 4000); return; } const source = new EventSource('/api/runs/' + encodeURIComponent(state.runId) + '/observe'); state.stream = source; source.addEventListener('snapshot', (event) => { state.history = JSON.parse(event.data); connectionNode.textContent = '实时已连接 #' + state.history.run.sequence; renderDetail(); }); source.addEventListener('flow_event', () => { connectionNode.textContent = '正在同步'; loadRun(); }); source.onerror = () => { connectionNode.textContent = '实时连接断开，正在以快照校正'; }; state.poll = setInterval(loadRun, 4000); }
 function closeStream() { if (state.stream) state.stream.close(); if (state.poll) clearInterval(state.poll); state.stream = null; state.poll = null; }
 function addKv(parent, label, value) { const row = el('div', null, 'kv'); row.append(el('b', label)); row.append(el('span', value)); parent.append(row); }
 function renderDetail() { const history = state.history; if (!history) return; clear(summaryNode); summaryNode.append(el('h1', history.run.taskSummary)); const grid = el('div', null, 'summary-grid'); [['Flow', history.run.flowId], ['状态', history.run.status + '/' + history.run.phase], ['位置', describeCurrent(history.current)], ['版本', history.run.flowVersion], ['水位', '#' + history.run.sequence], ['连接', connectionNode.textContent]].forEach(([label,value]) => { const cell = el('div'); cell.append(el('span', label)); cell.append(el('div', value)); grid.append(cell); }); summaryNode.append(grid); renderFlowGraph(); renderTimeline(history); if (!state.selected) { const first = history.nodeRuns[0]; if (first) selectFact({ kind: 'node', id: first.id }); } else renderInspector(); }
-function destroyFlowGraph() { if (flowGraph) { flowGraph.destroy(); flowGraph = null; } }
 function renderFlowGraph() {
-  destroyFlowGraph();
+  const revision = ++flowRenderRevision;
   clear(graphNode);
   const context = state.flowContext;
   const definition = context && context.flowDefinition;
@@ -857,40 +851,142 @@ function renderFlowGraph() {
   const allSessions = el('button', '查看该 Flow 全部会话记录');
   allSessions.onclick = () => { state.selected = { kind: 'flowSessions', id: definition.flowId }; renderFlowGraph(); renderInspector(); };
   graphNode.append(allSessions);
-  const holder = el('div', null, 'cytoscape-canvas');
+  const focus = el('button', '⛶', 'graph-focus-toggle');
+  const updateFocusLabel = () => {
+    const focused = graphNode.classList.contains('flow-focus');
+    focus.title = focused ? '退出流程图专注模式' : '展开流程图';
+    focus.setAttribute('aria-label', focus.title);
+  };
+  updateFocusLabel();
+  focus.onclick = () => { graphNode.classList.toggle('flow-focus'); updateFocusLabel(); };
+  graphNode.append(focus);
+  const holder = el('div', null, 'graph-viewport');
+  holder.append(el('div', '正在自动排版 Flow 图', 'muted'));
   graphNode.append(holder);
+  const graph = buildFlowDot(definition, context.nodeSessions || []);
+  void renderFlowSvg(holder, graph.dot, graph.nodes, revision);
+}
+function vizInstance() {
+  if (!vizInstancePromise) vizInstancePromise = window.Viz.instance();
+  return vizInstancePromise;
+}
+function dotString(value) {
+  let escaped = '';
+  for (const character of text(value)) {
+    const code = character.charCodeAt(0);
+    if (character === String.fromCharCode(92)) escaped += String.fromCharCode(92, 92);
+    else if (character === '"') escaped += String.fromCharCode(92, 34);
+    else if (character === String.fromCharCode(10)) escaped += String.fromCharCode(92, 110);
+    else if (character === String.fromCharCode(13)) escaped += String.fromCharCode(92, 114);
+    else if (character === String.fromCharCode(9)) escaped += String.fromCharCode(92, 116);
+    else if (code >= 32 && code !== 127) escaped += character;
+  }
+  return '"' + escaped + '"';
+}
+function buildFlowDot(definition, sessions) {
+  const nodeIds = new Map(definition.nodes.map((node, index) => [node.ref, 'flow_node_' + index]));
+  const parallelIds = new Map(definition.parallels.map((parallel, index) => [parallel.ref, 'flow_parallel_' + index]));
+  const interactiveNodes = [];
+  const destinationId = destination => destination.kind === 'finish' ? 'flow_finish' : destination.kind === 'node' ? nodeIds.get(destination.ref) : parallelIds.get(destination.ref);
+  const nodeOrder = new Map(definition.nodes.map((node, index) => [node.ref, index]));
+  const lines = [
+    'digraph flow {',
+    'graph [rankdir=TB, nodesep=0.85, ranksep=1.2, splines=polyline, pad=0.28, bgcolor="transparent", outputorder=edgesfirst];',
+    'node [shape=box, style="rounded,filled", fontname="Arial", fontsize=13, fontcolor="#e5e7eb", color="#64748b", fillcolor="#172033", penwidth=1.5, margin="0.22,0.13"];',
+    'edge [fontname="Arial", fontsize=11, color="#64748b", fontcolor="#cbd5e1", penwidth=1.6, arrowsize=0.72];',
+    'flow_start [id="flow-start", label="开始", shape=circle, fillcolor="#182235", color="#93c5fd", fontsize=11];',
+    'flow_finish [id="flow-finish", label="结束", shape=doublecircle, fillcolor="#182235", color="#93c5fd", fontsize=11];',
+    'flow_start -> ' + nodeIds.get(definition.startNodeRef) + ';',
+  ];
+  definition.nodes.forEach((node, index) => {
+    const count = sessions.filter(session => session.nodeRef === node.ref).length;
+    const failed = sessions.some(session => session.nodeRef === node.ref && (session.status === 'failed' || session.status === 'interrupted'));
+    const selected = state.selected && state.selected.kind === 'flowNode' && state.selected.id === node.ref;
+    const svgId = 'flow-node-' + index;
+    const fill = failed ? '#3b1d2a' : selected ? '#1e3a5f' : '#172033';
+    const color = failed ? '#f87171' : selected ? '#60a5fa' : '#64748b';
+    const penwidth = failed || selected ? 3 : 1.5;
+    lines.push(nodeIds.get(node.ref) + ' [id=' + dotString(svgId) + ', label=' + dotString(node.name + String.fromCharCode(10) + count + ' 次会话') + ', fillcolor="' + fill + '", color="' + color + '", penwidth=' + penwidth + '];');
+    interactiveNodes.push({ svgId, ref: node.ref, label: node.name });
+  });
+  definition.parallels.forEach((parallel, index) => {
+    lines.push(parallelIds.get(parallel.ref) + ' [id="flow-parallel-' + index + '", label=' + dotString('并行' + String.fromCharCode(10) + parallel.ref) + ', shape=diamond, fillcolor="#25203b", color="#a78bfa", margin="0.16,0.1"];');
+  });
+  definition.nodes.forEach(node => node.successors.forEach(edge => {
+    const feedback = edge.destination.kind === 'node' && (nodeOrder.get(edge.destination.ref) ?? Infinity) <= (nodeOrder.get(node.ref) ?? -1);
+    const attributes = [];
+    if (node.successors.length > 1) attributes.push('label=' + dotString(edge.result));
+    if (feedback) attributes.push('color="#f59e0b"', 'fontcolor="#fcd34d"', 'style="dashed"', 'penwidth=2.2');
+    lines.push(nodeIds.get(node.ref) + ' -> ' + destinationId(edge.destination) + (attributes.length ? ' [' + attributes.join(', ') + ']' : '') + ';');
+  }));
+  definition.parallels.forEach(parallel => parallel.branches.forEach(branch => lines.push(parallelIds.get(parallel.ref) + ' -> ' + nodeIds.get(branch) + ';')));
+  lines.push('}');
+  return { dot: lines.join(String.fromCharCode(10)), nodes: interactiveNodes };
+}
+async function renderFlowSvg(holder, dot, nodes, revision) {
   try {
-    flowGraph = cytoscape({ container: holder, elements: buildCytoscapeElements(definition, context.nodeSessions || []), style: cytoscapeStyle(), wheelSensitivity: 0.18, minZoom: 0.2, maxZoom: 3, userZoomingEnabled: true, userPanningEnabled: true, boxSelectionEnabled: false });
-    flowGraph.on('tap', 'node.flow-node', event => selectFlowNode(event.target.data('ref')));
-    flowGraph.layout({ name: 'elk', fit: true, padding: 52, animate: false, nodeDimensionsIncludeLabels: true, elk: { algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.spacing.nodeNode': '72', 'elk.layered.spacing.nodeNodeBetweenLayers': '120', 'elk.layered.spacing.edgeNodeBetweenLayers': '48', 'elk.layered.spacing.edgeEdgeBetweenLayers': '32', 'elk.layered.spacing.edgeEdge': '24', 'elk.layered.cycleBreaking.strategy': 'GREEDY', 'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX' } }).run();
+    const svg = (await vizInstance()).renderSVGElement(dot, { engine: 'dot' });
+    if (revision !== flowRenderRevision || !holder.isConnected) return;
+    svg.querySelectorAll('a, foreignObject, image, script, use').forEach(element => element.remove());
+    svg.classList.add('graph-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Flow 流程图');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+    const viewBox = (svg.getAttribute('viewBox') || '0 0 900 600').trim().split(/\\s+/).map(Number);
+    const width = Math.max(viewBox[2] || 900, 560);
+    const height = Math.max(viewBox[3] || 600, 360);
+    attachGraphViewport(holder, svg, width, height);
+    nodes.forEach(node => {
+      const svgNode = svg.querySelector('#' + node.svgId);
+      if (!svgNode) return;
+      svgNode.classList.add('flow-node');
+      svgNode.setAttribute('role', 'button');
+      svgNode.setAttribute('aria-label', node.label);
+      svgNode.addEventListener('click', () => selectFlowNode(node.ref));
+    });
+    holder.replaceChildren(svg);
   } catch (_) {
-    destroyFlowGraph();
+    if (revision !== flowRenderRevision || !holder.isConnected) return;
     holder.replaceChildren(el('div', 'Flow 图自动排版失败', 'error'));
   }
 }
-function buildCytoscapeElements(definition, sessions) {
-  const nodeId = ref => 'node:' + ref;
-  const parallelId = ref => 'parallel:' + ref;
-  const destinationId = destination => destination.kind === 'finish' ? 'finish' : destination.kind === 'node' ? nodeId(destination.ref) : parallelId(destination.ref);
-  const elements = [{ data: { id: 'start', label: '开始' }, classes: 'terminal-node' }, { data: { id: 'finish', label: '结束' }, classes: 'terminal-node' }];
-  definition.nodes.forEach(node => { const count = sessions.filter(session => session.nodeRef === node.ref).length; const failed = sessions.some(session => session.nodeRef === node.ref && (session.status === 'failed' || session.status === 'interrupted')); const selected = state.selected && state.selected.kind === 'flowNode' && state.selected.id === node.ref; elements.push({ data: { id: nodeId(node.ref), ref: node.ref, label: node.name + '\\n' + count + ' 次会话' }, classes: 'flow-node' + (failed ? ' failed' : '') + (selected ? ' selected' : '') }); });
-  definition.parallels.forEach(parallel => elements.push({ data: { id: parallelId(parallel.ref), label: '并行\\n' + parallel.ref }, classes: 'parallel-node' }));
-  let edgeIndex = 0;
-  const addEdge = (source, target, label = '') => elements.push({ data: { id: 'edge:' + edgeIndex++, source, target, label } });
-  addEdge('start', nodeId(definition.startNodeRef));
-  definition.nodes.forEach(node => node.successors.forEach(edge => addEdge(nodeId(node.ref), destinationId(edge.destination), edge.result)));
-  definition.parallels.forEach(parallel => parallel.branches.forEach(branch => addEdge(parallelId(parallel.ref), nodeId(branch))));
-  return elements;
+function attachGraphViewport(viewport, svg, width, height) {
+  let zoom = 1;
+  let drag = null;
+  const setZoom = (next, pointerX, pointerY) => {
+    const previous = zoom;
+    zoom = Math.max(0.5, Math.min(3, next));
+    if (zoom === previous) return;
+    const x = pointerX == null ? viewport.scrollLeft + viewport.clientWidth / 2 : pointerX;
+    const y = pointerY == null ? viewport.scrollTop + viewport.clientHeight / 2 : pointerY;
+    svg.setAttribute('width', String(width * zoom));
+    svg.setAttribute('height', String(height * zoom));
+    viewport.scrollLeft = x / previous * zoom - viewport.clientWidth / 2;
+    viewport.scrollTop = y / previous * zoom - viewport.clientHeight / 2;
+  };
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  viewport.addEventListener('wheel', event => {
+    event.preventDefault();
+    const bounds = viewport.getBoundingClientRect();
+    setZoom(zoom * (event.deltaY < 0 ? 1.15 : 0.87), event.clientX - bounds.left + viewport.scrollLeft, event.clientY - bounds.top + viewport.scrollTop);
+  }, { passive: false });
+  viewport.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    drag = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+    viewport.classList.add('dragging');
+    viewport.setPointerCapture(event.pointerId);
+  });
+  viewport.addEventListener('pointermove', event => {
+    if (!drag) return;
+    viewport.scrollLeft = drag.left - (event.clientX - drag.x);
+    viewport.scrollTop = drag.top - (event.clientY - drag.y);
+  });
+  const endDrag = () => { drag = null; viewport.classList.remove('dragging'); };
+  viewport.addEventListener('pointerup', endDrag);
+  viewport.addEventListener('pointercancel', endDrag);
 }
-function cytoscapeStyle() { return [
-  { selector: 'node', style: { 'background-color': '#172033', 'border-color': '#64748b', 'border-width': 1.5, label: 'data(label)', color: '#e5e7eb', 'font-size': 12, 'text-wrap': 'wrap', 'text-max-width': 138, 'text-valign': 'center', 'text-halign': 'center', width: 164, height: 62, shape: 'round-rectangle' } },
-  { selector: 'node.terminal-node', style: { 'background-color': '#182235', 'border-color': '#93c5fd', width: 58, height: 58, shape: 'ellipse', 'font-size': 11 } },
-  { selector: 'node.parallel-node', style: { 'background-color': '#25203b', 'border-color': '#a78bfa', width: 142, height: 56, shape: 'round-rectangle' } },
-  { selector: 'node.flow-node', style: { cursor: 'pointer' } },
-  { selector: 'node.flow-node.selected', style: { 'background-color': '#1e3a5f', 'border-color': '#60a5fa', 'border-width': 3 } },
-  { selector: 'node.flow-node.failed', style: { 'background-color': '#3b1d2a', 'border-color': '#f87171', 'border-width': 3 } },
-  { selector: 'edge', style: { width: 1.8, 'line-color': '#64748b', 'target-arrow-color': '#64748b', 'target-arrow-shape': 'triangle', 'curve-style': 'taxi', 'taxi-direction': 'downward', 'taxi-turn': 48, 'taxi-turn-min-distance': 12, label: 'data(label)', color: '#cbd5e1', 'font-size': 10, 'text-background-color': '#0b1220', 'text-background-opacity': 1, 'text-background-padding': 3, 'text-rotation': 'autorotate' } }
-]; }
 function selectFlowNode(nodeRef) { state.selected = { kind: 'flowNode', id: nodeRef }; renderFlowGraph(); renderTimeline(state.history); renderInspector(); }
 function timelineItems(history) { const items = []; history.nodeRuns.forEach((node) => items.push({ kind:'node', id:node.id, sequence:node.sequence, title:(node.nodeName || node.nodeRef) + ' [' + node.status + ']', meta: node.result || '' })); history.routeDecisions.forEach((route) => items.push({ kind:'route', id:route.id, sequence:route.sequence, title:'路由 ' + route.result + ' -> ' + destination(route.destination), meta:'' })); history.parallelRounds.forEach((round) => items.push({ kind:'parallel', id:round.id, sequence:round.sequence, title:'并行 ' + round.parallelRef + ' [' + round.status + ']', meta:Object.keys(round.branchNodeRunIds).length + ' 个分支' })); history.recoveries.forEach((recovery) => items.push({ kind:'recovery', id:recovery.id, sequence:recovery.sequence, title:'恢复 ' + recovery.strategy, meta:'恢复记录' })); if (history.run.status !== 'running') items.push({ kind:'terminal', id:'terminal', sequence:history.run.sequence, title:'Run ' + history.run.status, meta:history.run.errorCategory || '' }); return items.sort((a,b) => a.sequence - b.sequence); }
 function renderTimeline(history) { clear(timelineNode); for (const item of timelineItems(history)) { const button = el('button', null, 'fact'); if (state.selected && state.selected.kind === item.kind && state.selected.id === item.id) button.classList.add('selected'); button.onclick = () => selectFact(item); button.append(el('span', '#' + item.sequence, 'sequence')); const body = el('span'); body.append(el('div', item.title, 'fact-title')); body.append(el('div', item.meta, 'fact-meta')); button.append(body); timelineNode.append(button); } }
