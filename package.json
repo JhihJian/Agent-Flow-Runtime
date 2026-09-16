@@ -56,7 +56,6 @@
 		"typebox": "*"
 	},
 	"dependencies": {
-		"@earendil-works/pi-tui": "^0.85.1",
 		"yaml": "2.9.0"
 	},
 	"devDependencies": {

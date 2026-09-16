@@ -15,7 +15,6 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 	const events = new Map<string, AsyncHandler[]>();
 	const tools: Array<{ name: string; execute: AsyncHandler }> = [];
 	const notifications: string[] = [];
-	const newUiCalls: Array<[string, unknown]> = [];
 	const state = getCliFlowState() as unknown as Record<string, unknown>;
 	for (const key of Object.keys(state)) delete state[key];
 	state.sessionReference = "pi-current-session";
@@ -58,12 +57,12 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		assert.ok(tool, "扩展应注册 Flow 结果工具");
 		return tool;
 	};
-	const newContext = context("new.jsonl", newUiCalls, async (prompt) => {
+	const newContext = context("new.jsonl", async (prompt) => {
 		const outcome = prompt.includes("分析任务") ? "已分析" : "已完成";
 		await outcomeTool().execute("tool-call", { outcome, content: outcome });
 		await emit("turn_end");
 	});
-	oldContext = context("old.jsonl", [], undefined, async (options) => {
+	oldContext = context("old.jsonl", undefined, async (options) => {
 		oldContext.invalidate();
 		await emit("session_shutdown");
 		await emit("session_start", { reason: "new" }, newContext.value);
@@ -84,16 +83,9 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		["Flow 已完成: 普通流转"],
 		"完成通知应发送到替换后的会话",
 	);
-	assert.ok(
-		newUiCalls.some(
-			([name, value]) => name === "status" && value === undefined,
-		),
-		"完成清理应在替换后的会话移除状态栏",
-	);
 
 	function context(
 		sessionFile: string,
-		uiCalls: Array<[string, unknown]>,
 		onPrompt?: (prompt: string) => Promise<void>,
 		onNewSession?: (options: {
 			withSession?: AsyncHandler;
@@ -119,13 +111,11 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 						assertCurrent();
 						notifications.push(message);
 					},
-					setStatus(_key: string, value: unknown) {
+					setStatus() {
 						assertCurrent();
-						uiCalls.push(["status", value]);
 					},
-					setWidget(_key: string, value: unknown) {
+					setWidget() {
 						assertCurrent();
-						uiCalls.push(["widget", value]);
 					},
 				},
 				async waitForIdle() {

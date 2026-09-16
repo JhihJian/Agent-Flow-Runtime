@@ -9,8 +9,7 @@ import {
 	getCliFlowState,
 	rejectPendingSessionReplacement,
 } from "./cli-state.ts";
-import { FlowRunVisualizationController } from "./flow-run-visualization.ts";
-import { FlowRunVisualizationTui } from "./flow-run-visualization-tui.ts";
+
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
@@ -58,7 +57,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 		state.sendNodePrompt = sendPrompt;
 		state.sendCommand = sendCommand;
 		state.publishObservation = (event) => {
-			publishHostObservation(event, ctx);
 			if (ctx.mode !== "json" && ctx.mode !== "rpc") return;
 			void Promise.resolve(sendHostEvent(event)).catch((error) => {
 				state.notify?.(
@@ -66,10 +64,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 					"warning",
 				);
 			});
-		};
-		state.clearFlowUi = () => {
-			ctx.ui.setStatus("flow-runtime", undefined);
-			ctx.ui.setWidget("flow-runtime", undefined);
 		};
 	};
 
@@ -159,44 +153,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 		);
 	};
 
-	const viewRun = async (
-		runId: string,
-		ctx: ExtensionContext,
-	): Promise<void> => {
-		if (ctx.mode !== "tui") {
-			await showRun(runId, ctx);
-			return;
-		}
-		const runtime = state.runtime ?? createRuntimeForContext(ctx);
-		const controller = new FlowRunVisualizationController(runtime);
-		await controller.openRun(runId);
-		if (!controller.getState().detail?.snapshot) {
-			ctx.ui.notify(
-				controller.getState().detail?.error ?? `Flow 运行不存在: ${runId}`,
-				"warning",
-			);
-			controller.dispose();
-			return;
-		}
-		try {
-			await ctx.ui.custom<void>(
-				(tui, theme, _keybindings, done) =>
-					new FlowRunVisualizationTui(tui, theme, controller, () => done()),
-				{
-					overlay: true,
-					overlayOptions: {
-						width: "90%",
-						minWidth: 60,
-						maxHeight: "80%",
-						anchor: "center",
-					},
-				},
-			);
-		} finally {
-			controller.dispose();
-		}
-	};
-
 	pi.registerCommand("flow-new-session", {
 		description: "Start a fresh Pi session for an injected Flow transition",
 		handler: async (_args, ctx) => {
@@ -277,7 +233,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 			);
 			if (observation) {
 				state.observation = observation.subscription;
-				renderRunSnapshot(ctx, observation.snapshot);
 			}
 		}
 		if (event.reason === "resume" && !state.active && !state.resuming) {
@@ -308,17 +263,12 @@ export default function flowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("flow", {
-		description: "Run or view a Flow: /flow run <file> <task>",
+		description: "Run or inspect a Flow: /flow run <file> <task>",
 		handler: async (args, ctx) => {
 			bindContext(ctx);
 			const show = /^show\s+(\S+)$/.exec(args.trim());
 			if (show) {
 				await showRun(show[1], ctx);
-				return;
-			}
-			const view = /^view\s+(\S+)$/.exec(args.trim());
-			if (view) {
-				await viewRun(view[1], ctx);
 				return;
 			}
 			const list = /^list(?:\s+(\d+))?$/.exec(args.trim());
@@ -329,13 +279,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 				);
 				if (!recent.length) {
 					ctx.ui.notify("暂无 Flow 运行记录", "info");
-					return;
-				}
-				if (ctx.hasUI) {
-					const labels = recent.map(formatRunSummaryOption);
-					const selected = await ctx.ui.select("选择 Flow 运行", labels);
-					const index = selected ? labels.indexOf(selected) : -1;
-					if (index >= 0) await viewRun(recent[index].id, ctx);
 					return;
 				}
 				ctx.ui.notify(formatRecentRuns(recent), "info");
@@ -358,7 +301,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 		state.sendNodePrompt = undefined;
 		state.sendCommand = undefined;
 		state.publishObservation = undefined;
-		state.clearFlowUi = undefined;
 	});
 
 	async function startFlow(
@@ -432,7 +374,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 				state.observation?.unsubscribe();
 				state.observation = undefined;
 				state.activeRunId = undefined;
-				state.clearFlowUi?.();
 				state.active = undefined;
 				state.adapter = undefined;
 			});
@@ -485,7 +426,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 		});
 		if (!observation) return;
 		state.observation = observation.subscription;
-		renderRunSnapshot(ctx, observation.snapshot);
 		const coordinator = new FlowCoordinator(
 			flow,
 			store,
@@ -508,7 +448,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 				state.observation?.unsubscribe();
 				state.observation = undefined;
 				state.activeRunId = undefined;
-				state.clearFlowUi?.();
 				state.active = undefined;
 				state.adapter = undefined;
 			});
@@ -528,22 +467,6 @@ function createRuntimeForContext(ctx: ExtensionContext): FlowRuntime {
 	);
 }
 
-function publishHostObservation(
-	event: FlowObservationEvent,
-	ctx: ExtensionContext,
-): void {
-	if (ctx.mode === "tui") {
-		ctx.ui.setStatus(
-			"flow-runtime",
-			`${event.status}/${event.phase} #${event.sequence}`,
-		);
-		ctx.ui.setWidget("flow-runtime", [
-			`Flow ${event.flowId}  Run ${event.runId}`,
-			`${event.type}: ${event.summary}`,
-		]);
-	}
-}
-
 function flowEventMessage(event: FlowObservationEvent) {
 	return {
 		customType: "flow_event",
@@ -551,28 +474,6 @@ function flowEventMessage(event: FlowObservationEvent) {
 		display: false,
 		details: toFlowEventEnvelope(event),
 	};
-}
-
-function renderRunSnapshot(
-	ctx: ExtensionContext,
-	history: Awaited<ReturnType<FlowRuntime["inspectRun"]>>,
-): void {
-	if (!history || ctx.mode !== "tui") return;
-	const current =
-		history.current.kind === "node"
-			? `node:${history.current.nodeName ?? history.current.nodeRef}`
-			: history.current.kind === "parallel"
-				? `parallel:${history.current.parallelRef}`
-				: "none";
-	ctx.ui.setStatus(
-		"flow-runtime",
-		`${history.run.status}/${history.run.phase} #${history.run.sequence}`,
-	);
-	ctx.ui.setWidget("flow-runtime", [
-		`Flow ${history.run.flowId}  Run ${history.run.id}`,
-		`Current: ${current}`,
-		`Nodes: ${history.nodeRuns.length}  Parallel rounds: ${history.parallelRounds.length}`,
-	]);
 }
 
 function formatRunSummaryOption(summary: FlowRunSummary): string {

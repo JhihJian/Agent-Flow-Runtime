@@ -20,7 +20,7 @@
 src/flow-run-visualization.ts
 ```
 
-该模块输出稳定的视图模型和状态变化，TUI、Web、CLI 或其他宿主只负责渲染和用户输入转发。
+该模块输出稳定的视图模型和状态变化，Web、CLI 或其他宿主只负责渲染和用户输入转发。
 
 当前实现已提供`FlowRunVisualizationController`、`buildFlowTimeline`和近期运行筛选函数，并从包公共入口导出。控制器的状态机、快照水位、订阅释放、冷启动快照一致性和证据隔离由独立单元测试覆盖。
 
@@ -40,7 +40,7 @@ FlowRunVisualizationController
   -> 订阅生命周期
   -> 按需证据状态
 
-TUI / Web / CLI
+Web / CLI
   -> 渲染 Controller 状态
   -> 调用 Controller 的只读操作
 ```
@@ -282,12 +282,11 @@ controller.reconnect(runId)
 
 | 宿主 | 输入 | 输出 |
 | --- | --- | --- |
-| Pi TUI | 选择 Run、展开事实、重连 | 状态栏、小组件、详情面板 |
 | Web | 筛选、选择、展开证据、重连 | 运行中心和详情页 |
 | CLI | Run ID、列表数量 | 格式化列表与详情文本 |
 | SDK | 直接调用控制器操作 | 视图模型订阅或轮询 |
 
-宿主不实现路径投影、事件水位判断、证据延迟加载或订阅释放。这些规则集中在展示状态模块，保证 TUI 和 Web 对同一 Run 得到相同解释。
+宿主不实现路径投影、事件水位判断、证据延迟加载或订阅释放。这些规则集中在展示状态模块，保证 Web 和 CLI 对同一 Run 得到相同解释。
 
 ## 10. 权限和脱敏
 

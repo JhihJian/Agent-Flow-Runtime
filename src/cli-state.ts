@@ -25,7 +25,6 @@ export interface CliFlowState {
 	sendNodePrompt?: (prompt: string) => void;
 	sendCommand?: (command: string) => void;
 	publishObservation?: (event: FlowObservationEvent) => void;
-	clearFlowUi?: () => void;
 	pendingSessionReplacement?: PendingSessionReplacement;
 	notify?: (message: string, level: "info" | "warning" | "error") => void;
 }
