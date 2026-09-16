@@ -782,13 +782,10 @@ button.active { border-color: #60a5fa; color: #bfdbfe; background: #1e3a5f; }
 .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; font-size: 12px; }
 .summary-grid span { color: #9ca3af; display: block; }
 .timeline { padding: 14px 22px 32px; }
-.flow-graph { margin: 14px 22px 4px; height: clamp(380px, 52dvh, 680px); min-height: 380px; overflow: hidden; border: 1px solid #334155; border-radius: 4px; background: #0b1220; display: flex; flex-direction: column; }
-.flow-graph.flow-focus { position: fixed; inset: 16px; z-index: 20; height: auto; margin: 0; border-color: #60a5fa; box-shadow: 0 18px 56px rgba(0, 0, 0, 0.55); }
+.flow-graph { margin: 14px 22px 4px; border: 1px solid #334155; border-radius: 4px; background: #0b1220; }
 .flow-graph > .muted { padding: 8px 10px 0; }
 .flow-graph > button { align-self: flex-start; margin: 8px 10px; }
-.flow-graph .graph-focus-toggle { align-self: flex-end; margin: -33px 10px 8px; width: 30px; height: 26px; padding: 0; font-size: 17px; line-height: 1; }
-.graph-viewport { flex: 1 1 auto; min-height: 300px; width: 100%; overflow: auto; cursor: grab; touch-action: none; }
-.graph-viewport.dragging { cursor: grabbing; user-select: none; }
+.graph-viewport { min-height: 300px; width: 100%; }
 .graph-svg { display: block; max-width: none; }
 .graph-svg .node { cursor: pointer; }
 .fact { display: grid; grid-template-columns: 44px 1fr; gap: 10px; width: 100%; text-align: left; border: 0; border-radius: 0; border-left: 2px solid #334155; padding: 10px 12px; background: transparent; }
@@ -851,15 +848,6 @@ function renderFlowGraph() {
   const allSessions = el('button', '查看该 Flow 全部会话记录');
   allSessions.onclick = () => { state.selected = { kind: 'flowSessions', id: definition.flowId }; renderFlowGraph(); renderInspector(); };
   graphNode.append(allSessions);
-  const focus = el('button', '⛶', 'graph-focus-toggle');
-  const updateFocusLabel = () => {
-    const focused = graphNode.classList.contains('flow-focus');
-    focus.title = focused ? '退出流程图专注模式' : '展开流程图';
-    focus.setAttribute('aria-label', focus.title);
-  };
-  updateFocusLabel();
-  focus.onclick = () => { graphNode.classList.toggle('flow-focus'); updateFocusLabel(); };
-  graphNode.append(focus);
   const holder = el('div', null, 'graph-viewport');
   holder.append(el('div', '正在自动排版 Flow 图', 'muted'));
   graphNode.append(holder);
@@ -936,7 +924,8 @@ async function renderFlowSvg(holder, dot, nodes, revision) {
     const viewBox = (svg.getAttribute('viewBox') || '0 0 900 600').trim().split(/\\s+/).map(Number);
     const width = Math.max(viewBox[2] || 900, 560);
     const height = Math.max(viewBox[3] || 600, 360);
-    attachGraphViewport(holder, svg, width, height);
+    svg.setAttribute('width', String(width));
+    svg.setAttribute('height', String(height));
     nodes.forEach(node => {
       const svgNode = svg.querySelector('#' + node.svgId);
       if (!svgNode) return;
@@ -950,42 +939,6 @@ async function renderFlowSvg(holder, dot, nodes, revision) {
     if (revision !== flowRenderRevision || !holder.isConnected) return;
     holder.replaceChildren(el('div', 'Flow 图自动排版失败', 'error'));
   }
-}
-function attachGraphViewport(viewport, svg, width, height) {
-  let zoom = 1;
-  let drag = null;
-  const setZoom = (next, pointerX, pointerY) => {
-    const previous = zoom;
-    zoom = Math.max(0.5, Math.min(3, next));
-    if (zoom === previous) return;
-    const x = pointerX == null ? viewport.scrollLeft + viewport.clientWidth / 2 : pointerX;
-    const y = pointerY == null ? viewport.scrollTop + viewport.clientHeight / 2 : pointerY;
-    svg.setAttribute('width', String(width * zoom));
-    svg.setAttribute('height', String(height * zoom));
-    viewport.scrollLeft = x / previous * zoom - viewport.clientWidth / 2;
-    viewport.scrollTop = y / previous * zoom - viewport.clientHeight / 2;
-  };
-  svg.setAttribute('width', String(width));
-  svg.setAttribute('height', String(height));
-  viewport.addEventListener('wheel', event => {
-    event.preventDefault();
-    const bounds = viewport.getBoundingClientRect();
-    setZoom(zoom * (event.deltaY < 0 ? 1.15 : 0.87), event.clientX - bounds.left + viewport.scrollLeft, event.clientY - bounds.top + viewport.scrollTop);
-  }, { passive: false });
-  viewport.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
-    drag = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
-    viewport.classList.add('dragging');
-    viewport.setPointerCapture(event.pointerId);
-  });
-  viewport.addEventListener('pointermove', event => {
-    if (!drag) return;
-    viewport.scrollLeft = drag.left - (event.clientX - drag.x);
-    viewport.scrollTop = drag.top - (event.clientY - drag.y);
-  });
-  const endDrag = () => { drag = null; viewport.classList.remove('dragging'); };
-  viewport.addEventListener('pointerup', endDrag);
-  viewport.addEventListener('pointercancel', endDrag);
 }
 function selectFlowNode(nodeRef) { state.selected = { kind: 'flowNode', id: nodeRef }; renderFlowGraph(); renderTimeline(state.history); renderInspector(); }
 function timelineItems(history) { const items = []; history.nodeRuns.forEach((node) => items.push({ kind:'node', id:node.id, sequence:node.sequence, title:(node.nodeName || node.nodeRef) + ' [' + node.status + ']', meta: node.result || '' })); history.routeDecisions.forEach((route) => items.push({ kind:'route', id:route.id, sequence:route.sequence, title:'路由 ' + route.result + ' -> ' + destination(route.destination), meta:'' })); history.parallelRounds.forEach((round) => items.push({ kind:'parallel', id:round.id, sequence:round.sequence, title:'并行 ' + round.parallelRef + ' [' + round.status + ']', meta:Object.keys(round.branchNodeRunIds).length + ' 个分支' })); history.recoveries.forEach((recovery) => items.push({ kind:'recovery', id:recovery.id, sequence:recovery.sequence, title:'恢复 ' + recovery.strategy, meta:'恢复记录' })); if (history.run.status !== 'running') items.push({ kind:'terminal', id:'terminal', sequence:history.run.sequence, title:'Run ' + history.run.status, meta:history.run.errorCategory || '' }); return items.sort((a,b) => a.sequence - b.sequence); }

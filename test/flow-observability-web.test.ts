@@ -185,6 +185,10 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		assert.match(appSource, /splines=polyline/);
 		assert.match(appSource, /style="dashed"/);
 		assert.match(appSource, /flowRenderRevision/);
+		assert.doesNotMatch(
+			appSource,
+			/attachGraphViewport|graph-focus-toggle|addEventListener\('wheel'/,
+		);
 		const syntaxDirectory = await mkdtemp(
 			join(tmpdir(), "flow-observability-web-"),
 		);
