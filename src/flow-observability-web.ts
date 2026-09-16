@@ -877,9 +877,9 @@ function buildMermaidGraph(definition, sessions) {
   lines.push('classDef failed fill:#3b1d2a,stroke:#f87171,stroke-width:2px,color:#fee2e2');
   if (state.selected && state.selected.kind === 'flowNode' && nodeIds[state.selected.id]) lines.push('class ' + nodeIds[state.selected.id] + ' active');
   definition.nodes.forEach(node => { if (sessions.some(session => session.nodeRef === node.ref && (session.status === 'failed' || session.status === 'interrupted'))) lines.push('class ' + nodeIds[node.ref] + ' failed'); });
-  return { source: lines.join('\n'), nodeIds };
+  return { source: lines.join('\\n'), nodeIds };
 }
-function mermaidText(value) { return String(value).replace(/["\\[\\]{}|]/g, ' ').replace(/\n/g, ' '); }
+function mermaidText(value) { return String(value).replace(/["\\[\\]{}|]/g, ' ').replace(/\\n/g, ' '); }
 function bindMermaidNodes(holder, nodeIds) { Object.entries(nodeIds).forEach(([ref, id]) => { const group = Array.from(holder.querySelectorAll('g.node')).find(node => node.id.includes('-' + id + '-')); if (group) group.addEventListener('click', () => selectFlowNode(ref)); }); }
 function selectFlowNode(nodeRef) { state.selected = { kind: 'flowNode', id: nodeRef }; renderFlowGraph(); renderTimeline(state.history); renderInspector(); }
 function timelineItems(history) { const items = []; history.nodeRuns.forEach((node) => items.push({ kind:'node', id:node.id, sequence:node.sequence, title:(node.nodeName || node.nodeRef) + ' [' + node.status + ']', meta: node.result || '' })); history.routeDecisions.forEach((route) => items.push({ kind:'route', id:route.id, sequence:route.sequence, title:'路由 ' + route.result + ' -> ' + destination(route.destination), meta:'' })); history.parallelRounds.forEach((round) => items.push({ kind:'parallel', id:round.id, sequence:round.sequence, title:'并行 ' + round.parallelRef + ' [' + round.status + ']', meta:Object.keys(round.branchNodeRunIds).length + ' 个分支' })); history.recoveries.forEach((recovery) => items.push({ kind:'recovery', id:recovery.id, sequence:recovery.sequence, title:'恢复 ' + recovery.strategy, meta:'恢复记录' })); if (history.run.status !== 'running') items.push({ kind:'terminal', id:'terminal', sequence:history.run.sequence, title:'Run ' + history.run.status, meta:history.run.errorCategory || '' }); return items.sort((a,b) => a.sequence - b.sequence); }

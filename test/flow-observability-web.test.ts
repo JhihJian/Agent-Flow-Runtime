@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { FlowObservabilityWebHost } from "../src/flow-observability-web.ts";
 import type { FlowRunVisualizationRuntime } from "../src/flow-run-visualization.ts";
@@ -144,6 +148,18 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		);
 		assert.equal(mermaid.status, 200);
 		assert.match(mermaid.headers.get("content-type") ?? "", /text\/javascript/);
+		const app = await fetch(`${baseUrl}/assets/app.js`);
+		assert.equal(app.status, 200);
+		const syntaxDirectory = await mkdtemp(
+			join(tmpdir(), "flow-observability-web-"),
+		);
+		try {
+			const appPath = join(syntaxDirectory, "app.mjs");
+			await writeFile(appPath, await app.text());
+			execFileSync(process.execPath, ["--check", appPath]);
+		} finally {
+			await rm(syntaxDirectory, { force: true, recursive: true });
+		}
 
 		const runs = await fetch(`${baseUrl}/api/runs`, {
 			headers,
