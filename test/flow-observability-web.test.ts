@@ -107,12 +107,18 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 	});
 	await host.start();
 	try {
-		const initial = await fetch(host.url ?? "", { redirect: "manual" });
-		assert.equal(initial.status, 302);
-		const cookie = initial.headers.get("set-cookie");
+		const initial = await fetch(host.url ?? "");
+		assert.equal(initial.status, 200);
+		const baseUrl = new URL(host.url ?? "").origin;
+		const session = await fetch(`${baseUrl}/api/session`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token: "test-token" }),
+		});
+		assert.equal(session.status, 204);
+		const cookie = session.headers.get("set-cookie");
 		assert.match(cookie ?? "", /flow_observability=test-token/);
 		const headers = { Cookie: cookie ?? "" };
-		const baseUrl = new URL(host.url ?? "").origin;
 
 		const runs = await fetch(`${baseUrl}/api/runs`, {
 			headers,
@@ -150,7 +156,7 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 	}
 });
 
-test("局域网监听需要显式确认并生成公开地址", async () => {
+test("非回环监听需要 TLS 证书和私钥", async () => {
 	assert.throws(
 		() =>
 			new FlowObservabilityWebHost({
@@ -158,23 +164,6 @@ test("局域网监听需要显式确认并生成公开地址", async () => {
 				host: "0.0.0.0",
 				port: 0,
 			}),
-		/需要显式确认/,
+		/需要 TLS/,
 	);
-	const host = new FlowObservabilityWebHost({
-		runtime: new FakeWebRuntime(),
-		host: "0.0.0.0",
-		publicHost: "10.144.144.2",
-		port: 0,
-		allowInsecureLan: true,
-		token: "lan-token",
-	});
-	await host.start();
-	try {
-		assert.match(
-			host.url ?? "",
-			/^http:\/\/10\.144\.144\.2:\d+\/\?token=lan-token$/,
-		);
-	} finally {
-		await host.close();
-	}
 });

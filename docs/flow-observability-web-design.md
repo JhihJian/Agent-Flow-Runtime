@@ -4,19 +4,19 @@
 
 Web 展示模式是 Flow Runtime 的只读运行观察站。它面向需要持续跟进运行、定位失败节点、查看 Agent 交互和命令输出的本地可信用户。
 
-当前实现提供`FlowObservabilityWebHost`、`/flow web [port]`和`/flow web lan [port]`启动入口。普通模式监听 loopback；`lan`模式是监听`0.0.0.0`的显式确认，适用于可信局域网。服务通过随机令牌换取 HttpOnly cookie，提供 Run 列表、Run 快照、NodeRun 证据和 SSE 事件提示；浏览器收到事件后重新读取权威快照。公网访问需要 TLS 和额外网络认证。
+当前实现提供独立的`flow-observability-web`可执行入口。普通模式监听 loopback；`--lan`模式监听`0.0.0.0`并强制要求 TLS key/cert。服务通过 fragment 令牌换取 HttpOnly cookie，提供 Run 列表、Run 快照和 NodeRun 证据。独立进程以快照轮询校正状态，不依赖 Pi 内存 Publisher；公网访问仍需要额外网络认证。
 
 Web 页面展示一次具体 Run 的持久化事实和受权限控制的执行依据。它不提供结果提交、路由选择、恢复、重试、停止或命令重放操作。
 
 ```text
 Browser
-  -> Web 观察宿主
-      -> FlowRuntime
-          -> FlowRunInspector
-          -> FlowObservationPublisher
+  -> 独立 Web 观察进程
+      -> 每请求新建只读 FlowRuntime
+          -> JsonFileRunStore 快照
+          -> 持久 Pi 会话证据读取
 ```
 
-浏览器不直接持有 `FlowRuntime`、`RunStore`、`FlowCoordinator`、`.pi/flow-runs.json` 或 Pi 会话读取器。Web 观察宿主负责请求授权、字段脱敏、快照读取和实时连接生命周期。
+浏览器不直接持有 `FlowRuntime`、`RunStore`、`FlowCoordinator`、`.pi/flow-runs.json` 或 Pi 会话读取器。独立 Web 进程负责请求授权、字段脱敏、快照读取和页面轮询；Pi CLI 不创建、停止或持有该进程。
 
 ## 2. 页面层级
 
@@ -196,15 +196,13 @@ Agent 节点以消息时间轴展示：
 页面打开详情时：
 
 ```text
-建立观察
-  -> 读取历史快照
+读取历史快照
   -> 展示快照
-  -> 收到更高水位事件
-  -> 合并刷新请求
-  -> 用新快照整体校正页面
+  -> 周期性读取最新快照
+  -> 水位推进时整体校正页面
 ```
 
-`FlowObservationEvent`只提示“可能有新事实”，不直接改写页面时间线、节点状态或并行状态。
+独立进程不消费 Pi 内存 `FlowObservationPublisher`。页面轮询只读取权威快照，不直接改写时间线、节点状态或并行状态。
 
 断线时保留最后确认快照，并显示：
 
@@ -214,9 +212,9 @@ Agent 节点以消息时间轴展示：
 Run 可能仍在继续执行
 ```
 
-重连时重新校验访问权限、建立观察并读取新快照。页面不依据遗漏事件补造断线期间的过程。
+重连时重新校验访问权限并读取新快照。页面不依据遗漏事件补造断线期间的过程。
 
-当前 Publisher 是进程内尽力而为通知。Web 模式对外承诺“快照最终校正”，不承诺可靠过程审计或完整事件回放。
+Web 模式对外承诺“快照最终校正”，不承诺可靠过程审计或完整事件回放。
 
 ## 8. Web 宿主边界
 
@@ -224,16 +222,16 @@ Web 宿主是 Browser 与 `FlowRuntime` 之间的只读适配器。
 
 它负责：
 
-- Run 列表、Run 快照、节点证据和实时连接的身份校验。
+- Run 列表、Run 快照和节点证据的身份校验。
 - 将 Runtime 返回值转为浏览器可见的脱敏读模型。
-- 对列表数量、分页、证据大小、并发订阅和重连频率实施限制。
+- 对列表数量、分页、证据大小和重连频率实施限制。
 - 以纯文本呈现 Task、消息、错误和命令输出，不将内容解释为 HTML。
 - 记录证据访问审计，不复制证据正文。
 
 它不负责：
 
 - Flow 执行、节点结果提交、路径选择、Run 恢复或命令重放。
-- 直接暴露 RunStore、Publisher、会话路径或 Pi 适配器。
+- 直接暴露 RunStore、会话路径或 Pi 适配器。
 - 将浏览器事件作为新的流程控制来源。
 
 本地可信单用户模式可以使用本地会话授权。网络暴露或多用户模式需要服务端主体、Run 可见范围、证据授权、脱敏和访问审计契约。
@@ -246,10 +244,10 @@ Web 宿主只暴露与展示对应的读操作：
 GET  /runs
 GET  /runs/:runId
 GET  /runs/:runId/node-runs/:nodeRunId/evidence
-GET  /runs/:runId/observe
+
 ```
 
-`observe`使用事件提示刷新，不承载历史重放。每个请求和每次重连都校验 Run 可见性；证据请求额外校验 NodeRun 和证据权限。
+页面以周期性快照读取保持新鲜度。每个请求都校验 Run 可见性；证据请求额外校验 NodeRun 和证据权限。
 
 ## 10. 不在首版实现的能力
 

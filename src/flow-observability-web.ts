@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import {
+	createServer as createHttpServer,
+	type Server as HttpServer,
+	type IncomingMessage,
+} from "node:http";
+import {
+	createServer as createHttpsServer,
+	type Server as HttpsServer,
+} from "node:https";
 import type { Socket } from "node:net";
 import type { FlowRunVisualizationRuntime } from "./flow-run-visualization.ts";
 import type {
@@ -34,7 +42,8 @@ export interface FlowObservabilityWebHostOptions {
 	publicHost?: string;
 	port?: number;
 	token?: string;
-	allowInsecureLan?: boolean;
+	tls?: { key: string | Buffer; cert: string | Buffer };
+	realtime?: boolean;
 	authorizer?: FlowObservabilityWebAuthorizer;
 	readPersistedEvidence?: (
 		session: NodeSession,
@@ -47,6 +56,8 @@ export class FlowObservabilityWebHost {
 	private readonly host: string;
 	private readonly publicHost?: string;
 	private readonly requestedPort: number;
+	private readonly tls?: { key: string | Buffer; cert: string | Buffer };
+	private readonly realtime: boolean;
 	private readonly authorizer: FlowObservabilityWebAuthorizer;
 	private readonly readPersistedEvidence?: (
 		session: NodeSession,
@@ -56,7 +67,7 @@ export class FlowObservabilityWebHost {
 		import("node:http").ServerResponse
 	>();
 	private sseConnections = 0;
-	private server?: Server;
+	private server?: HttpServer | HttpsServer;
 	private actualPort?: number;
 
 	constructor(options: FlowObservabilityWebHostOptions) {
@@ -70,8 +81,10 @@ export class FlowObservabilityWebHost {
 		}
 		this.host = options.host ?? "127.0.0.1";
 		this.publicHost = options.publicHost;
-		if (!isLoopbackHost(this.host) && !options.allowInsecureLan) {
-			throw new Error("局域网观察站需要显式确认明文 HTTP 风险");
+		this.tls = options.tls;
+		this.realtime = options.realtime ?? true;
+		if (!isLoopbackHost(this.host) && !this.tls) {
+			throw new Error("局域网观察站需要 TLS 证书和私钥");
 		}
 		this.requestedPort = options.port ?? 3818;
 		this.token = options.token ?? randomUUID();
@@ -81,15 +94,21 @@ export class FlowObservabilityWebHost {
 
 	get url(): string | undefined {
 		return this.actualPort
-			? `http://${this.publicHost ?? this.host}:${this.actualPort}/?token=${encodeURIComponent(this.token)}`
+			? `${this.tls ? "https" : "http"}://${this.publicHost ?? this.host}:${this.actualPort}/#token=${encodeURIComponent(this.token)}`
 			: undefined;
 	}
 
 	async start(): Promise<void> {
 		if (this.server) return;
-		const server = createServer((request, response) => {
+		const handler = (
+			request: IncomingMessage,
+			response: import("node:http").ServerResponse,
+		) => {
 			void this.handle(request, response);
-		});
+		};
+		const server = this.tls
+			? createHttpsServer(this.tls, handler)
+			: createHttpServer(handler);
 		server.on("connection", (socket) => {
 			this.sockets.add(socket);
 			socket.once("close", () => this.sockets.delete(socket));
@@ -131,28 +150,8 @@ export class FlowObservabilityWebHost {
 				request.url ?? "/",
 				"http://flow-observability.local",
 			);
-			if (
-				url.pathname === "/" &&
-				url.searchParams.get("token") === this.token
-			) {
-				response.setHeader(
-					"Set-Cookie",
-					`flow_observability=${this.token}; HttpOnly; SameSite=Strict; Path=/`,
-				);
-				response.writeHead(302, { Location: "/" });
-				response.end();
-				return;
-			}
-			if (!this.isAuthenticated(request)) {
-				this.writeText(
-					response,
-					401,
-					"Flow observation authorization required",
-				);
-				return;
-			}
 			if (url.pathname === "/") {
-				this.writeHtml(response, WEB_PAGE);
+				this.writeHtml(response, this.renderPage());
 				return;
 			}
 			if (url.pathname === "/assets/app.js") {
@@ -163,10 +162,42 @@ export class FlowObservabilityWebHost {
 				this.writeCss(response, WEB_CSS);
 				return;
 			}
+			if (url.pathname === "/api/session" && request.method === "POST") {
+				await this.establishSession(request, response);
+				return;
+			}
+			if (!this.isAuthenticated(request)) {
+				this.writeText(
+					response,
+					401,
+					"Flow observation authorization required",
+				);
+				return;
+			}
 			await this.handleApi(url, request, response);
 		} catch {
 			this.writeJson(response, 500, { error: "读取运行观察数据失败" });
 		}
+	}
+
+	private async establishSession(
+		request: IncomingMessage,
+		response: import("node:http").ServerResponse,
+	): Promise<void> {
+		const payload = await readJson(request);
+		if (payload.token !== this.token) {
+			this.writeJson(response, 401, { error: "观察站令牌无效" });
+			return;
+		}
+		response.setHeader(
+			"Set-Cookie",
+			`flow_observability=${this.token}; HttpOnly; SameSite=Strict; Path=/${this.tls ? "; Secure" : ""}`,
+		);
+		this.writeJson(response, 204, undefined);
+	}
+
+	private renderPage(): string {
+		return WEB_PAGE.replace("%%REALTIME%%", String(this.realtime));
 	}
 
 	private async handleApi(
@@ -537,6 +568,19 @@ function isLoopbackHost(host: string): boolean {
 	return host === "127.0.0.1" || host === "::1" || host === "localhost";
 }
 
+async function readJson(request: IncomingMessage): Promise<{ token?: string }> {
+	let body = "";
+	for await (const chunk of request) {
+		body += chunk.toString();
+		if (body.length > 4096) throw new Error("请求体过大");
+	}
+	try {
+		return JSON.parse(body) as { token?: string };
+	} catch {
+		return {};
+	}
+}
+
 const allowLocalRunAccess: FlowObservabilityWebAuthorizer = {
 	canReadRun: () => true,
 	canReadEvidence: () => true,
@@ -550,7 +594,7 @@ const WEB_PAGE = `<!doctype html>
   <title>Flow 运行观察站</title>
   <link rel="stylesheet" href="/assets/app.css">
 </head>
-<body>
+<body data-realtime="%%REALTIME%%">
   <header class="topbar"><strong>Flow 运行观察站</strong><span id="connection">正在连接</span></header>
   <main class="layout">
     <aside class="runs-panel"><div class="panel-title">近期运行</div><div id="filters" class="filters"></div><div id="runs" class="runs"></div></aside>
@@ -605,6 +649,7 @@ pre { margin: 8px 0; padding: 10px; max-height: 280px; overflow: auto; white-spa
 
 const WEB_APP = `
 const state = { runs: [], filter: 'all', runId: null, history: null, selected: null, stream: null, poll: null };
+const realtime = document.body.dataset.realtime === 'true';
 const runsNode = document.querySelector('#runs');
 const filtersNode = document.querySelector('#filters');
 const summaryNode = document.querySelector('#run-summary');
@@ -626,7 +671,7 @@ function renderFilters() { clear(filtersNode); for (const [value,label] of filte
 function renderRuns() { clear(runsNode); renderFilters(); for (const run of visibleRuns()) { const button = el('button', null, 'run-row'); if (run.id === state.runId) button.classList.add('selected'); button.onclick = () => openRun(run.id); button.append(el('span', run.taskSummary, 'run-task')); button.append(el('span', run.flowId + ' | ' + run.status + '/' + run.phase, 'run-meta')); button.append(el('span', run.errorCategory || run.startedAt, 'run-meta')); runsNode.append(button); } }
 async function openRun(runId) { state.runId = runId; closeStream(); renderRuns(); await loadRun(); openStream(); }
 async function loadRun() { if (!state.runId) return; try { const payload = await request('/api/runs/' + encodeURIComponent(state.runId)); state.history = payload.history; connectionNode.textContent = '快照已同步 #' + state.history.run.sequence; renderDetail(); } catch (error) { connectionNode.textContent = '读取失败'; clear(summaryNode); summaryNode.append(el('div', '运行详情不可用', 'error')); } }
-function openStream() { if (!state.runId) return; closeStream(); const source = new EventSource('/api/runs/' + encodeURIComponent(state.runId) + '/observe'); state.stream = source; source.addEventListener('snapshot', (event) => { state.history = JSON.parse(event.data); connectionNode.textContent = '实时已连接 #' + state.history.run.sequence; renderDetail(); }); source.addEventListener('flow_event', () => { connectionNode.textContent = '正在同步'; loadRun(); }); source.onerror = () => { connectionNode.textContent = '实时连接断开，正在以快照校正'; }; state.poll = setInterval(loadRun, 4000); }
+function openStream() { if (!state.runId) return; closeStream(); if (!realtime) { connectionNode.textContent = '每 4 秒快照同步'; state.poll = setInterval(loadRun, 4000); return; } const source = new EventSource('/api/runs/' + encodeURIComponent(state.runId) + '/observe'); state.stream = source; source.addEventListener('snapshot', (event) => { state.history = JSON.parse(event.data); connectionNode.textContent = '实时已连接 #' + state.history.run.sequence; renderDetail(); }); source.addEventListener('flow_event', () => { connectionNode.textContent = '正在同步'; loadRun(); }); source.onerror = () => { connectionNode.textContent = '实时连接断开，正在以快照校正'; }; state.poll = setInterval(loadRun, 4000); }
 function closeStream() { if (state.stream) state.stream.close(); if (state.poll) clearInterval(state.poll); state.stream = null; state.poll = null; }
 function addKv(parent, label, value) { const row = el('div', null, 'kv'); row.append(el('b', label)); row.append(el('span', value)); parent.append(row); }
 function renderDetail() { const history = state.history; if (!history) return; clear(summaryNode); summaryNode.append(el('h1', history.run.taskSummary)); const grid = el('div', null, 'summary-grid'); [['Flow', history.run.flowId], ['状态', history.run.status + '/' + history.run.phase], ['位置', describeCurrent(history.current)], ['版本', history.run.flowVersion], ['水位', '#' + history.run.sequence], ['连接', connectionNode.textContent]].forEach(([label,value]) => { const cell = el('div'); cell.append(el('span', label)); cell.append(el('div', value)); grid.append(cell); }); summaryNode.append(grid); renderTimeline(history); if (!state.selected) { const first = history.nodeRuns[0]; if (first) selectFact({ kind: 'node', id: first.id }); } else renderInspector(); }
@@ -638,5 +683,6 @@ function renderInspector() { clear(inspectorNode); const selected = state.select
 async function loadEvidence(nodeRunId) { try { const payload = await request('/api/runs/' + encodeURIComponent(state.runId) + '/node-runs/' + encodeURIComponent(nodeRunId) + '/evidence'); const evidence = payload.evidence; inspectorNode.append(el('h3', '完整依据')); if (payload.messageTranscriptAvailable && payload.messages) payload.messages.forEach((message) => { const block = el('div', null, 'message'); block.append(el('div', message.role, 'message-role')); block.append(el('pre', typeof message.content === 'string' ? message.content : JSON.stringify(message.content, null, 2))); inspectorNode.append(block); }); else inspectorNode.append(el('div', 'Agent 消息不可用', 'muted')); if (evidence.commandResult) { inspectorNode.append(el('h3', '命令结果')); addKv(inspectorNode, '退出码', text(evidence.commandResult.exitCode)); const stdout = el('pre', evidence.commandResult.stdout); const stderr = el('pre', evidence.commandResult.stderr); inspectorNode.append(el('h3', 'stdout')); inspectorNode.append(stdout); inspectorNode.append(el('h3', 'stderr')); inspectorNode.append(stderr); } } catch (_) { inspectorNode.append(el('div', '完整依据不可用', 'error')); } }
 function destination(value) { return value.kind === 'finish' ? '结束' : value.kind + ':' + value.ref; }
 function describeCurrent(current) { return current.kind === 'node' ? (current.nodeName || current.nodeRef) : current.kind === 'parallel' ? '并行:' + current.parallelRef : '无'; }
-loadRuns();
+async function bootstrap() { const token = new URL(window.location.href).hash.replace(/^#token=/, ''); if (token) { const response = await fetch('/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) }); if (!response.ok) { connectionNode.textContent = '观察站令牌无效'; return; } history.replaceState(null, '', window.location.pathname); } loadRuns(); }
+bootstrap();
 `;

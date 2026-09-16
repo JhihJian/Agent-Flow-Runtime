@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { hostname, networkInterfaces } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import type {
 	ExtensionAPI,
@@ -10,7 +9,7 @@ import {
 	getCliFlowState,
 	rejectPendingSessionReplacement,
 } from "./cli-state.ts";
-import { FlowObservabilityWebHost } from "./flow-observability-web.ts";
+
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
@@ -25,7 +24,7 @@ import {
 	PiAgentIntegrationAdapter,
 	type PiCliBridge,
 } from "./pi.ts";
-import { readPersistedPiNodeEvidence } from "./pi-session-evidence.ts";
+
 import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
 import type {
 	FlowDefinition,
@@ -273,44 +272,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 				await showRun(show[1], ctx);
 				return;
 			}
-			const web = /^web(?:\s+(stop|lan|\d+))?(?:\s+(\d+))?$/.exec(args.trim());
-			if (web) {
-				if (web[1] === "stop") {
-					await state.webHost?.close();
-					state.webHost = undefined;
-					ctx.ui.notify("Flow Web 观察站已停止", "info");
-					return;
-				}
-				if (state.webHost?.url) {
-					ctx.ui.notify(`Flow Web 观察站: ${state.webHost.url}`, "info");
-					return;
-				}
-				const lan = web[1] === "lan";
-				const port = Number(lan ? (web[2] ?? "3818") : (web[1] ?? "3818"));
-				if (!Number.isInteger(port) || port < 1 || port > 65535) {
-					ctx.ui.notify("端口必须在 1 到 65535 之间", "warning");
-					return;
-				}
-				const host = new FlowObservabilityWebHost({
-					getRuntime: () =>
-						state.runtime ??
-						createRuntimeForContext(state.currentContext ?? ctx),
-					host: lan ? "0.0.0.0" : "127.0.0.1",
-					publicHost: lan ? lanWebAddress() : undefined,
-					port,
-					allowInsecureLan: lan,
-					readPersistedEvidence: readPersistedPiNodeEvidence,
-				});
-				await host.start();
-				state.webHost = host;
-				ctx.ui.notify(
-					lan
-						? `Flow Web 观察站已开放可信局域网 HTTP: ${host.url}`
-						: `Flow Web 观察站: ${host.url}`,
-					lan ? "warning" : "info",
-				);
-				return;
-			}
+
 			const list = /^list(?:\s+(\d+))?$/.exec(args.trim());
 			if (list) {
 				const runtime = state.runtime ?? createRuntimeForContext(ctx);
@@ -336,10 +298,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => {
 		state.observation?.unsubscribe();
 		state.observation = undefined;
-		if (!state.pendingSessionReplacement) {
-			await state.webHost?.close();
-			state.webHost = undefined;
-		}
 		state.currentContext = undefined;
 		state.notify = undefined;
 		state.sendNodePrompt = undefined;
@@ -529,19 +487,4 @@ function formatRecentRuns(runs: FlowRunSummary[]): string {
 		"Recent Flow runs:",
 		...runs.map((run) => `- ${formatRunSummaryOption(run)}`),
 	].join("\n");
-}
-
-function lanWebAddress(): string {
-	if (hostname() === "jhihjian-MACO") return "10.144.144.2";
-	const addresses = Object.values(networkInterfaces()).flatMap(
-		(interfaces) => interfaces ?? [],
-	);
-	const ipv4 = addresses.filter(
-		(address) => address.family === "IPv4" && !address.internal,
-	);
-	return (
-		ipv4.find((address) => address.address.startsWith("10.144."))?.address ??
-		ipv4[0]?.address ??
-		"127.0.0.1"
-	);
 }
