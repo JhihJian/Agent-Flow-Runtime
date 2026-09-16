@@ -63,15 +63,7 @@ When testing a checkout before installing it, load the built extension explicitl
 pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
 ```
 
-In Pi, use `/flow run <文件> <任务>`, `/flow list` for recent Run IDs, or `/flow show <runId>` for plain-text history. Start Web observation independently from a shell:
-
-```bash
-flow-observability-web --workspace /absolute/project/path
-flow-observability-web --workspace /absolute/project/path --lan --tls-key /path/to/key.pem --tls-cert /path/to/cert.pem
-flow-observability-web --workspace /absolute/project/path --lan --insecure-lan
-```
-
-The first command listens on loopback. The second explicitly binds `0.0.0.0` with TLS. The third enables plaintext HTTP only after the explicit `--insecure-lan` confirmation; use it only on a trusted LAN. The process prints a tokenized URL; open it in a browser to inspect Run facts and NodeRun evidence. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
+In Pi, use `/flow run <文件> <任务>`, `/flow list` for recent Run IDs, or `/flow show <runId>` for plain-text history. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. The `./examples/*.md` paths above refer to a repository checkout; installed users point `--flow` at their own Flow files, such as `.flows/release.md`.
 
@@ -128,7 +120,7 @@ const subscription = runtime.subscribe(run.id, (event) => {
 subscription.unsubscribe();
 ```
 
-Pi Agent hosts also expose the read-only `inspect_flow_run` tool. The planned Web observation host, CLI history output, JSON/RPC `flow_event` messages, and SDK results are thin views over this same Runtime facade. Events are best-effort and are not replayed after a disconnect; reconnecting clients should read `inspectRun` first.
+Pi Agent hosts also expose the read-only `inspect_flow_run` tool. CLI history output, JSON/RPC `flow_event` messages, and SDK results are thin views over this same Runtime facade. Events are best-effort and are not replayed after a disconnect; reconnecting clients should read `inspectRun` first.
 
 `PiAgentIntegrationAdapter` creates a real Pi SDK session for each `新建Agent` action and injects the `submit_flow_outcome` tool automatically. Model auth follows Pi conventions (`~/.pi/agent/auth.json`, environment variables, or the settings default model). Sessions persist under `~/.pi/agent/sessions/` by default; pass `sessionDir` to choose another location. Run records go wherever the `RunStore` points.
 
@@ -142,8 +134,6 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `src/directory.ts` discovers and loads Flow files by filename identifier for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
-- `src/flow-run-visualization.ts` provides a renderer-neutral, read-only controller for recent Runs, Run detail snapshots, fact timelines, observation lifecycles, and on-demand evidence. It only consumes `FlowRuntime`.
-
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
 

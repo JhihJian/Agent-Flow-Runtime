@@ -107,19 +107,6 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 			.map(toRunSummary);
 	}
 
-	async listFlowRuns(
-		flowId: string,
-		limit?: number,
-	): Promise<FlowRunSummary[]> {
-		const runs = await this.store.listRuns(flowId);
-		const ordered = runs.sort((left, right) =>
-			right.startedAt.localeCompare(left.startedAt),
-		);
-		return (
-			limit === undefined ? ordered : ordered.slice(0, Math.max(0, limit))
-		).map(toRunSummary);
-	}
-
 	async inspectRun(runId: string): Promise<FlowRunHistory | undefined> {
 		const persisted = await this.store.getRunSnapshot(runId);
 		if (!persisted) return undefined;
@@ -140,7 +127,6 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 
 		return {
 			run: toRunSummary(run),
-			flowDefinition: run.flowDefinition,
 			nodeRuns: orderedNodeRuns.map(toNodeRunView),
 			routeDecisions: orderedRoutes,
 			parallelRounds: orderedRounds,
@@ -212,10 +198,6 @@ export class FlowRuntime implements FlowRunInspectorApi {
 
 	listRecentRuns(limit?: number): Promise<FlowRunSummary[]> {
 		return this.inspector.listRecentRuns(limit);
-	}
-
-	listFlowRuns(flowId: string, limit?: number): Promise<FlowRunSummary[]> {
-		return this.inspector.listFlowRuns(flowId, limit);
 	}
 
 	inspectRun(runId: string): Promise<FlowRunHistory | undefined> {

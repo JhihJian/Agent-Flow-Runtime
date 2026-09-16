@@ -34,7 +34,7 @@ Runtime 的核心职责是维护一次 Run 的状态，执行当前节点，接�
 - 当前节点，或当前并行轮次。
 - 开始和结束时间。
 - 流程级错误。
-- Run 创建时保存的 Flow 静态图快照，包含节点、结果边和并行汇合定义，用于按当时版本展示历史图。
+
 
 它表示“现在走到哪里”。
 
@@ -192,9 +192,9 @@ Flow 标识
 - 为什么从一个节点进入下一个节点。
 - 哪次访问产生了返工、失败或等待。
 
-Web、CLI 查询、JSONL 事件或后续指标系统都只是这份运行事实的不同读取方式。它们不能修改 Run，也不能选择结果或下一节点。
+CLI 查询、JSONL 事件或后续指标系统都只是这份运行事实的不同读取方式。它们不能修改 Run，也不能选择结果或下一节点。
 
-运行事实如何产生、如何推送到 Web/CLI/JSON/RPC，以及断线和恢复语义见[Flow 运行观测设计](flow-observability-design.md)。
+运行事实如何产生、如何推送到 CLI/JSON/RPC，以及断线和恢复语义见[Flow 运行观测设计](flow-observability-design.md)。
 
 ## 8. 数据保存
 
@@ -225,4 +225,4 @@ Run 创建时必须保存 Flow 内容版本或稳定指纹，否则恢复和历�
 
 当前实现包含 Flow 解析、普通节点流转、Agent 新建和复用、命令执行、单层命令并行、显式汇合、Pi 会话关联、本地运行记录，以及 Pi CLI 恢复执行中的 Run。
 
-当前 Runtime 已提供只读的`FlowRunInspector`、进程内尽力而为的`FlowObservationPublisher`、统一的`FlowRuntime`门面和无框架的`FlowRunVisualizationController`。Pi 宿主已通过同一入口接入 `/flow list`、`/flow show`、JSON/RPC `flow_event` 和 Agent 查询工具；复杂详情交由 Web 观察站承载。严格事件回放与跨进程共享仍不在 MVP 范围内。
+当前 Runtime 已提供只读的`FlowRunInspector`、进程内尽力而为的`FlowObservationPublisher`和统一的`FlowRuntime`门面。Pi 宿主已通过同一入口接入 `/flow list`、`/flow show`、JSON/RPC `flow_event` 和 Agent 查询工具。严格事件回放与跨进程共享仍不在 MVP 范围内。

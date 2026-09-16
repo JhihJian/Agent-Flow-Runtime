@@ -10,7 +10,6 @@ import type {
 	CommandRequest,
 	CommandResult,
 	FlowDefinition,
-	FlowDefinitionSnapshot,
 	FlowDestination,
 	FlowError,
 	FlowErrorCategory,
@@ -556,7 +555,6 @@ export class FlowCoordinator {
 			id: options.runId ?? randomUUID(),
 			flowId: this.flow.id,
 			flowVersion: fingerprintFlow(this.flow),
-			flowDefinition: snapshotFlowDefinition(this.flow),
 			task,
 			status: "running",
 			phase: "starting",
@@ -1630,31 +1628,6 @@ function fingerprintFlow(flow: FlowDefinition): string {
 		parallels: [...flow.parallels.values()],
 	};
 	return `sha256:${createHash("sha256").update(JSON.stringify(definition)).digest("hex")}`;
-}
-
-export function snapshotFlowDefinition(
-	flow: FlowDefinition,
-): FlowDefinitionSnapshot {
-	return {
-		flowId: flow.id,
-		flowVersion: fingerprintFlow(flow),
-		name: flow.name,
-		description: flow.description,
-		startNodeRef: flow.startNodeRef,
-		nodes: [...flow.nodes.values()].map((node) => ({
-			ref: node.ref,
-			name: node.name,
-			actionKind: node.action.kind,
-			successors: [...node.successors.entries()].map(
-				([result, destination]) => ({ result, destination }),
-			),
-		})),
-		parallels: [...flow.parallels.values()].map((parallel) => ({
-			ref: parallel.ref,
-			branches: [...parallel.branches],
-			joinRef: parallel.joinRef,
-		})),
-	};
 }
 
 function normalizeRun(run: FlowRunRecord): FlowRunRecord {
