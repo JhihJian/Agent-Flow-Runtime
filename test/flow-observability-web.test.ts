@@ -139,6 +139,11 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		const cookie = session.headers.get("set-cookie");
 		assert.match(cookie ?? "", /flow_observability=test-token/);
 		const headers = { Cookie: cookie ?? "" };
+		const mermaid = await fetch(
+			`${baseUrl}/assets/mermaid/mermaid.esm.min.mjs`,
+		);
+		assert.equal(mermaid.status, 200);
+		assert.match(mermaid.headers.get("content-type") ?? "", /text\/javascript/);
 
 		const runs = await fetch(`${baseUrl}/api/runs`, {
 			headers,

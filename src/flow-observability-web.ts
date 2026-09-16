@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import {
 	createServer as createHttpServer,
 	type Server as HttpServer,
@@ -9,6 +10,8 @@ import {
 	type Server as HttpsServer,
 } from "node:https";
 import type { Socket } from "node:net";
+import { dirname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { FlowRunVisualizationRuntime } from "./flow-run-visualization.ts";
 import type {
 	FlowDefinitionSnapshot,
@@ -19,6 +22,11 @@ import type {
 	NodeSession,
 	UnifiedMessage,
 } from "./types.ts";
+
+const MERMAID_DIST = resolve(
+	dirname(fileURLToPath(import.meta.url)),
+	"../node_modules/mermaid/dist",
+);
 
 export interface FlowObservabilityWebRequestContext {
 	remoteAddress?: string;
@@ -171,6 +179,10 @@ export class FlowObservabilityWebHost {
 			}
 			if (url.pathname === "/assets/app.css") {
 				this.writeCss(response, WEB_CSS);
+				return;
+			}
+			if (url.pathname.startsWith("/assets/mermaid/")) {
+				await this.writeMermaidAsset(response, url.pathname);
 				return;
 			}
 			if (url.pathname === "/api/session" && request.method === "POST") {
@@ -510,6 +522,33 @@ export class FlowObservabilityWebHost {
 		response.end(body);
 	}
 
+	private async writeMermaidAsset(
+		response: import("node:http").ServerResponse,
+		pathname: string,
+	): Promise<void> {
+		const relativePath = decodeURIComponent(
+			pathname.slice("/assets/mermaid/".length),
+		);
+		const file = resolve(MERMAID_DIST, relativePath);
+		if (file !== MERMAID_DIST && !file.startsWith(`${MERMAID_DIST}${sep}`)) {
+			this.writeText(response, 404, "资源不存在");
+			return;
+		}
+		try {
+			const content = await readFile(file);
+			response.writeHead(200, {
+				"Content-Type": file.endsWith(".css")
+					? "text/css; charset=utf-8"
+					: "text/javascript; charset=utf-8",
+				"Cache-Control": "no-store",
+				"X-Content-Type-Options": "nosniff",
+			});
+			response.end(content);
+		} catch {
+			this.writeText(response, 404, "资源不存在");
+		}
+	}
+
 	private writeJson(
 		response: import("node:http").ServerResponse,
 		status: number,
@@ -766,7 +805,10 @@ pre { margin: 8px 0; padding: 10px; max-height: 280px; overflow: auto; white-spa
 `;
 
 const WEB_APP = `
+import mermaid from '/assets/mermaid/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark', flowchart: { htmlLabels: false, useMaxWidth: true, curve: 'basis' } });
 const state = { runs: [], filter: 'all', runId: null, history: null, flowContext: null, selected: null, stream: null, poll: null };
+let graphGeneration = 0;
 const realtime = document.body.dataset.realtime === 'true';
 const runsNode = document.querySelector('#runs');
 const filtersNode = document.querySelector('#filters');
@@ -796,7 +838,49 @@ function closeStream() { if (state.stream) state.stream.close(); if (state.poll)
 function addKv(parent, label, value) { const row = el('div', null, 'kv'); row.append(el('b', label)); row.append(el('span', value)); parent.append(row); }
 function renderDetail() { const history = state.history; if (!history) return; clear(summaryNode); summaryNode.append(el('h1', history.run.taskSummary)); const grid = el('div', null, 'summary-grid'); [['Flow', history.run.flowId], ['状态', history.run.status + '/' + history.run.phase], ['位置', describeCurrent(history.current)], ['版本', history.run.flowVersion], ['水位', '#' + history.run.sequence], ['连接', connectionNode.textContent]].forEach(([label,value]) => { const cell = el('div'); cell.append(el('span', label)); cell.append(el('div', value)); grid.append(cell); }); summaryNode.append(grid); renderFlowGraph(); renderTimeline(history); if (!state.selected) { const first = history.nodeRuns[0]; if (first) selectFact({ kind: 'node', id: first.id }); } else renderInspector(); }
 function svg(tag, attrs) { const node = document.createElementNS('http://www.w3.org/2000/svg', tag); Object.entries(attrs || {}).forEach(([key, value]) => node.setAttribute(key, String(value))); return node; }
-function renderFlowGraph() { clear(graphNode); const context = state.flowContext; const definition = context && context.flowDefinition; if (!definition) { graphNode.append(el('div', '当前 Run 没有可用的历史 Flow 图快照', 'muted')); return; } const source = el('div', context.flowDefinitionSource === 'current_file' ? '当前 Flow 文件图，仅供参考' : 'Run 创建时持久化的 Flow 图快照', 'muted'); graphNode.append(source); const allSessions = el('button', '查看该 Flow 全部会话记录'); allSessions.onclick = () => { state.selected = { kind: 'flowSessions', id: definition.flowId }; renderFlowGraph(); renderInspector(); }; graphNode.append(allSessions); const graphNodes = definition.nodes.map(node => ({ ref: node.ref, name: node.name, node })); definition.parallels.forEach(parallel => graphNodes.push({ ref: parallel.ref, name: '并行: ' + parallel.ref, parallel })); const finish = { ref: '__finish__', name: '结束', finish: true }; graphNodes.push(finish); const columns = 3; const width = Math.max(720, columns * 230 + 40); const rows = Math.ceil(graphNodes.length / columns); const height = Math.max(240, rows * 105 + 40); const positions = new Map(graphNodes.map((node, index) => [node.ref, { x: 25 + (index % columns) * 230, y: 25 + Math.floor(index / columns) * 105 }])); const canvas = svg('svg', { viewBox: '0 0 ' + width + ' ' + height, width, height }); const defs = svg('defs'); const marker = svg('marker', { id: 'arrow', markerWidth: 8, markerHeight: 8, refX: 7, refY: 4, orient: 'auto' }); marker.append(svg('path', { d: 'M0,0 L8,4 L0,8 z', fill: '#64748b' })); defs.append(marker); canvas.append(defs); const connect = (from, to, label) => { const a = positions.get(from); const b = positions.get(to === 'finish' ? '__finish__' : to); if (!a || !b) return; const line = svg('path', { d: 'M' + (a.x + 190) + ',' + (a.y + 27) + ' L' + b.x + ',' + (b.y + 27), class: 'flow-edge' }); canvas.append(line); if (label) { const text = svg('text', { x: (a.x + b.x + 190) / 2, y: (a.y + b.y + 42) / 2, class: 'flow-edge-label' }); text.textContent = label; canvas.append(text); } }; definition.nodes.forEach(node => node.successors.forEach(edge => connect(node.ref, edge.destination.kind === 'finish' ? 'finish' : edge.destination.ref, edge.result))); definition.parallels.forEach(parallel => { parallel.branches.forEach(branch => connect(parallel.ref, branch)); }); graphNodes.forEach(node => { const pos = positions.get(node.ref); const sessions = (context.nodeSessions || []).filter(session => session.nodeRef === node.ref); const group = svg('g', { transform: 'translate(' + pos.x + ' ' + pos.y + ')', class: 'flow-node' + (state.selected && state.selected.kind === 'flowNode' && state.selected.id === node.ref ? ' active' : '') + (sessions.some(session => session.status === 'failed' || session.status === 'interrupted') ? ' failed' : '') }); group.append(svg('rect', { width: 190, height: 55 })); const title = svg('text', { x: 10, y: 22 }); title.textContent = node.name; group.append(title); const count = svg('text', { x: 10, y: 42, class: 'flow-node-count' }); count.textContent = node.finish ? '' : sessions.length + ' 次会话访问'; group.append(count); if (!node.finish) group.addEventListener('click', () => selectFlowNode(node.ref)); canvas.append(group); }); graphNode.append(canvas); }
+async function renderFlowGraph() {
+  const generation = ++graphGeneration;
+  clear(graphNode);
+  const context = state.flowContext;
+  const definition = context && context.flowDefinition;
+  if (!definition) { graphNode.append(el('div', '当前 Run 没有可用的历史 Flow 图快照', 'muted')); return; }
+  graphNode.append(el('div', context.flowDefinitionSource === 'current_file' ? '当前 Flow 文件图，仅供参考' : 'Run 创建时持久化的 Flow 图快照', 'muted'));
+  const allSessions = el('button', '查看该 Flow 全部会话记录');
+  allSessions.onclick = () => { state.selected = { kind: 'flowSessions', id: definition.flowId }; renderFlowGraph(); renderInspector(); };
+  graphNode.append(allSessions);
+  const holder = el('div', '正在自动排版 Flow 图...', 'muted');
+  graphNode.append(holder);
+  const graph = buildMermaidGraph(definition, context.nodeSessions || []);
+  try {
+    const rendered = await mermaid.render('flow_graph_' + generation, graph.source);
+    if (generation !== graphGeneration || state.flowContext !== context) return;
+    holder.replaceChildren();
+    holder.innerHTML = rendered.svg;
+    bindMermaidNodes(holder, graph.nodeIds);
+  } catch (_) {
+    if (generation !== graphGeneration) return;
+    holder.replaceChildren(el('div', 'Flow 图自动排版失败', 'error'));
+  }
+}
+function buildMermaidGraph(definition, sessions) {
+  const nodeIds = {};
+  const parallelIds = {};
+  definition.nodes.forEach((node, index) => { nodeIds[node.ref] = 'node' + index; });
+  definition.parallels.forEach((parallel, index) => { parallelIds[parallel.ref] = 'parallel' + index; });
+  const idFor = destination => destination.kind === 'finish' ? 'finish' : destination.kind === 'node' ? nodeIds[destination.ref] : parallelIds[destination.ref];
+  const lines = ['flowchart TD', 'start((开始)) --> ' + nodeIds[definition.startNodeRef], 'finish((结束))'];
+  definition.nodes.forEach(node => { const count = sessions.filter(session => session.nodeRef === node.ref).length; lines.push(nodeIds[node.ref] + '["' + mermaidText(node.name + ' · ' + count + ' 次会话') + '"]'); });
+  definition.parallels.forEach(parallel => lines.push(parallelIds[parallel.ref] + '{{"' + mermaidText('并行 · ' + parallel.ref) + '"}}'));
+  definition.nodes.forEach(node => node.successors.forEach(edge => { const target = idFor(edge.destination); if (target) lines.push(nodeIds[node.ref] + ' -->|' + mermaidText(edge.result) + '| ' + target); }));
+  definition.parallels.forEach(parallel => parallel.branches.forEach(branch => { if (nodeIds[branch]) lines.push(parallelIds[parallel.ref] + ' --> ' + nodeIds[branch]); }));
+  lines.push('classDef active fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#e5e7eb');
+  lines.push('classDef failed fill:#3b1d2a,stroke:#f87171,stroke-width:2px,color:#fee2e2');
+  if (state.selected && state.selected.kind === 'flowNode' && nodeIds[state.selected.id]) lines.push('class ' + nodeIds[state.selected.id] + ' active');
+  definition.nodes.forEach(node => { if (sessions.some(session => session.nodeRef === node.ref && (session.status === 'failed' || session.status === 'interrupted'))) lines.push('class ' + nodeIds[node.ref] + ' failed'); });
+  return { source: lines.join('\n'), nodeIds };
+}
+function mermaidText(value) { return String(value).replace(/["\\[\\]{}|]/g, ' ').replace(/\n/g, ' '); }
+function bindMermaidNodes(holder, nodeIds) { Object.entries(nodeIds).forEach(([ref, id]) => { const group = Array.from(holder.querySelectorAll('g.node')).find(node => node.id.includes('-' + id + '-')); if (group) group.addEventListener('click', () => selectFlowNode(ref)); }); }
 function selectFlowNode(nodeRef) { state.selected = { kind: 'flowNode', id: nodeRef }; renderFlowGraph(); renderTimeline(state.history); renderInspector(); }
 function timelineItems(history) { const items = []; history.nodeRuns.forEach((node) => items.push({ kind:'node', id:node.id, sequence:node.sequence, title:(node.nodeName || node.nodeRef) + ' [' + node.status + ']', meta: node.result || '' })); history.routeDecisions.forEach((route) => items.push({ kind:'route', id:route.id, sequence:route.sequence, title:'路由 ' + route.result + ' -> ' + destination(route.destination), meta:'' })); history.parallelRounds.forEach((round) => items.push({ kind:'parallel', id:round.id, sequence:round.sequence, title:'并行 ' + round.parallelRef + ' [' + round.status + ']', meta:Object.keys(round.branchNodeRunIds).length + ' 个分支' })); history.recoveries.forEach((recovery) => items.push({ kind:'recovery', id:recovery.id, sequence:recovery.sequence, title:'恢复 ' + recovery.strategy, meta:'恢复记录' })); if (history.run.status !== 'running') items.push({ kind:'terminal', id:'terminal', sequence:history.run.sequence, title:'Run ' + history.run.status, meta:history.run.errorCategory || '' }); return items.sort((a,b) => a.sequence - b.sequence); }
 function renderTimeline(history) { clear(timelineNode); for (const item of timelineItems(history)) { const button = el('button', null, 'fact'); if (state.selected && state.selected.kind === item.kind && state.selected.id === item.id) button.classList.add('selected'); button.onclick = () => selectFact(item); button.append(el('span', '#' + item.sequence, 'sequence')); const body = el('span'); body.append(el('div', item.title, 'fact-title')); body.append(el('div', item.meta, 'fact-meta')); button.append(body); timelineNode.append(button); } }
