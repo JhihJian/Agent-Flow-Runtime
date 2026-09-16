@@ -10,7 +10,7 @@ import {
 	type Server as HttpsServer,
 } from "node:https";
 import type { Socket } from "node:net";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FlowRunVisualizationRuntime } from "./flow-run-visualization.ts";
 import type {
@@ -23,10 +23,25 @@ import type {
 	UnifiedMessage,
 } from "./types.ts";
 
-const MERMAID_DIST = resolve(
+const NODE_MODULES = resolve(
 	dirname(fileURLToPath(import.meta.url)),
-	"../node_modules/mermaid/dist",
+	"../node_modules",
 );
+
+const WEB_LIBRARY_ASSETS: ReadonlyMap<string, string> = new Map([
+	[
+		"/assets/elkjs/elk.bundled.js",
+		resolve(NODE_MODULES, "elkjs/lib/elk.bundled.js"),
+	],
+	[
+		"/assets/cytoscape/cytoscape.umd.js",
+		resolve(NODE_MODULES, "cytoscape/dist/cytoscape.umd.js"),
+	],
+	[
+		"/assets/cytoscape-elk/cytoscape-elk.js",
+		resolve(NODE_MODULES, "cytoscape-elk/dist/cytoscape-elk.js"),
+	],
+]);
 
 export interface FlowObservabilityWebRequestContext {
 	remoteAddress?: string;
@@ -181,8 +196,8 @@ export class FlowObservabilityWebHost {
 				this.writeCss(response, WEB_CSS);
 				return;
 			}
-			if (url.pathname.startsWith("/assets/mermaid/")) {
-				await this.writeMermaidAsset(response, url.pathname);
+			if (url.pathname.startsWith("/assets/")) {
+				await this.writeLibraryAsset(response, url.pathname);
 				return;
 			}
 			if (url.pathname === "/api/session" && request.method === "POST") {
@@ -522,15 +537,12 @@ export class FlowObservabilityWebHost {
 		response.end(body);
 	}
 
-	private async writeMermaidAsset(
+	private async writeLibraryAsset(
 		response: import("node:http").ServerResponse,
 		pathname: string,
 	): Promise<void> {
-		const relativePath = decodeURIComponent(
-			pathname.slice("/assets/mermaid/".length),
-		);
-		const file = resolve(MERMAID_DIST, relativePath);
-		if (file !== MERMAID_DIST && !file.startsWith(`${MERMAID_DIST}${sep}`)) {
+		const file = WEB_LIBRARY_ASSETS.get(pathname);
+		if (!file) {
 			this.writeText(response, 404, "资源不存在");
 			return;
 		}
@@ -748,6 +760,9 @@ const WEB_PAGE = `<!doctype html>
     <section class="timeline-panel"><div id="run-summary" class="summary"></div><div id="flow-graph" class="flow-graph"></div><div id="timeline" class="timeline"></div></section>
     <aside class="inspector-panel"><div class="panel-title">事实检查器</div><div id="inspector" class="inspector"></div></aside>
   </main>
+  <script src="/assets/elkjs/elk.bundled.js"></script>
+  <script src="/assets/cytoscape/cytoscape.umd.js"></script>
+  <script src="/assets/cytoscape-elk/cytoscape-elk.js"></script>
   <script type="module" src="/assets/app.js"></script>
 </body>
 </html>`;
@@ -777,16 +792,10 @@ button.active { border-color: #60a5fa; color: #bfdbfe; background: #1e3a5f; }
 .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; font-size: 12px; }
 .summary-grid span { color: #9ca3af; display: block; }
 .timeline { padding: 14px 22px 32px; }
-.flow-graph { margin: 14px 22px 4px; min-height: 240px; overflow: auto; border: 1px solid #334155; border-radius: 4px; background: #0b1220; }
-.flow-graph svg { min-width: 720px; display: block; }
-.flow-edge { stroke: #64748b; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
-.flow-edge-label { fill: #9ca3af; font-size: 11px; }
-.flow-node { cursor: pointer; }
-.flow-node rect { fill: #172033; stroke: #64748b; stroke-width: 1.5; rx: 4; }
-.flow-node.active rect { fill: #1e3a5f; stroke: #60a5fa; stroke-width: 2; }
-.flow-node.failed rect { stroke: #f87171; }
-.flow-node text { fill: #e5e7eb; font-size: 12px; pointer-events: none; }
-.flow-node-count { fill: #93c5fd; font-size: 10px; pointer-events: none; }
+.flow-graph { margin: 14px 22px 4px; height: clamp(380px, 52dvh, 680px); min-height: 380px; overflow: hidden; border: 1px solid #334155; border-radius: 4px; background: #0b1220; display: flex; flex-direction: column; }
+.flow-graph > .muted { padding: 8px 10px 0; }
+.flow-graph > button { align-self: flex-start; margin: 8px 10px; }
+.cytoscape-canvas { flex: 1 1 auto; min-height: 300px; width: 100%; }
 .fact { display: grid; grid-template-columns: 44px 1fr; gap: 10px; width: 100%; text-align: left; border: 0; border-radius: 0; border-left: 2px solid #334155; padding: 10px 12px; background: transparent; }
 .fact:hover, .fact.selected { border-left-color: #60a5fa; background: #1b2b42; }
 .sequence { color: #93c5fd; font-family: ui-monospace, monospace; font-size: 12px; padding-top: 2px; }
@@ -805,10 +814,10 @@ pre { margin: 8px 0; padding: 10px; max-height: 280px; overflow: auto; white-spa
 `;
 
 const WEB_APP = `
-import mermaid from '/assets/mermaid/mermaid.esm.min.mjs';
-mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark', flowchart: { htmlLabels: false, useMaxWidth: true, curve: 'basis' } });
+const cytoscape = window.cytoscape;
+if (!cytoscape || !window.ELK || !window.cytoscapeElk) throw new Error('Flow 图依赖加载失败');
 const state = { runs: [], filter: 'all', runId: null, history: null, flowContext: null, selected: null, stream: null, poll: null };
-let graphGeneration = 0;
+let flowGraph = null;
 const realtime = document.body.dataset.realtime === 'true';
 const runsNode = document.querySelector('#runs');
 const filtersNode = document.querySelector('#filters');
@@ -837,9 +846,9 @@ function openStream() { if (!state.runId) return; closeStream(); if (!realtime) 
 function closeStream() { if (state.stream) state.stream.close(); if (state.poll) clearInterval(state.poll); state.stream = null; state.poll = null; }
 function addKv(parent, label, value) { const row = el('div', null, 'kv'); row.append(el('b', label)); row.append(el('span', value)); parent.append(row); }
 function renderDetail() { const history = state.history; if (!history) return; clear(summaryNode); summaryNode.append(el('h1', history.run.taskSummary)); const grid = el('div', null, 'summary-grid'); [['Flow', history.run.flowId], ['状态', history.run.status + '/' + history.run.phase], ['位置', describeCurrent(history.current)], ['版本', history.run.flowVersion], ['水位', '#' + history.run.sequence], ['连接', connectionNode.textContent]].forEach(([label,value]) => { const cell = el('div'); cell.append(el('span', label)); cell.append(el('div', value)); grid.append(cell); }); summaryNode.append(grid); renderFlowGraph(); renderTimeline(history); if (!state.selected) { const first = history.nodeRuns[0]; if (first) selectFact({ kind: 'node', id: first.id }); } else renderInspector(); }
-function svg(tag, attrs) { const node = document.createElementNS('http://www.w3.org/2000/svg', tag); Object.entries(attrs || {}).forEach(([key, value]) => node.setAttribute(key, String(value))); return node; }
-async function renderFlowGraph() {
-  const generation = ++graphGeneration;
+function destroyFlowGraph() { if (flowGraph) { flowGraph.destroy(); flowGraph = null; } }
+function renderFlowGraph() {
+  destroyFlowGraph();
   clear(graphNode);
   const context = state.flowContext;
   const definition = context && context.flowDefinition;
@@ -848,39 +857,40 @@ async function renderFlowGraph() {
   const allSessions = el('button', '查看该 Flow 全部会话记录');
   allSessions.onclick = () => { state.selected = { kind: 'flowSessions', id: definition.flowId }; renderFlowGraph(); renderInspector(); };
   graphNode.append(allSessions);
-  const holder = el('div', '正在自动排版 Flow 图...', 'muted');
+  const holder = el('div', null, 'cytoscape-canvas');
   graphNode.append(holder);
-  const graph = buildMermaidGraph(definition, context.nodeSessions || []);
   try {
-    const rendered = await mermaid.render('flow_graph_' + generation, graph.source);
-    if (generation !== graphGeneration || state.flowContext !== context) return;
-    holder.replaceChildren();
-    holder.innerHTML = rendered.svg;
-    bindMermaidNodes(holder, graph.nodeIds);
+    flowGraph = cytoscape({ container: holder, elements: buildCytoscapeElements(definition, context.nodeSessions || []), style: cytoscapeStyle(), wheelSensitivity: 0.18, minZoom: 0.2, maxZoom: 3, userZoomingEnabled: true, userPanningEnabled: true, boxSelectionEnabled: false });
+    flowGraph.on('tap', 'node.flow-node', event => selectFlowNode(event.target.data('ref')));
+    flowGraph.layout({ name: 'elk', fit: true, padding: 52, animate: false, nodeDimensionsIncludeLabels: true, elk: { algorithm: 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.spacing.nodeNode': '72', 'elk.layered.spacing.nodeNodeBetweenLayers': '120', 'elk.layered.spacing.edgeNodeBetweenLayers': '48', 'elk.layered.spacing.edgeEdgeBetweenLayers': '32', 'elk.layered.spacing.edgeEdge': '24', 'elk.layered.cycleBreaking.strategy': 'GREEDY', 'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX' } }).run();
   } catch (_) {
-    if (generation !== graphGeneration) return;
+    destroyFlowGraph();
     holder.replaceChildren(el('div', 'Flow 图自动排版失败', 'error'));
   }
 }
-function buildMermaidGraph(definition, sessions) {
-  const nodeIds = {};
-  const parallelIds = {};
-  definition.nodes.forEach((node, index) => { nodeIds[node.ref] = 'node' + index; });
-  definition.parallels.forEach((parallel, index) => { parallelIds[parallel.ref] = 'parallel' + index; });
-  const idFor = destination => destination.kind === 'finish' ? 'finish' : destination.kind === 'node' ? nodeIds[destination.ref] : parallelIds[destination.ref];
-  const lines = ['flowchart TD', 'start((开始)) --> ' + nodeIds[definition.startNodeRef], 'finish((结束))'];
-  definition.nodes.forEach(node => { const count = sessions.filter(session => session.nodeRef === node.ref).length; lines.push(nodeIds[node.ref] + '["' + mermaidText(node.name + ' · ' + count + ' 次会话') + '"]'); });
-  definition.parallels.forEach(parallel => lines.push(parallelIds[parallel.ref] + '{{"' + mermaidText('并行 · ' + parallel.ref) + '"}}'));
-  definition.nodes.forEach(node => node.successors.forEach(edge => { const target = idFor(edge.destination); if (target) lines.push(nodeIds[node.ref] + ' -->|' + mermaidText(edge.result) + '| ' + target); }));
-  definition.parallels.forEach(parallel => parallel.branches.forEach(branch => { if (nodeIds[branch]) lines.push(parallelIds[parallel.ref] + ' --> ' + nodeIds[branch]); }));
-  lines.push('classDef active fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#e5e7eb');
-  lines.push('classDef failed fill:#3b1d2a,stroke:#f87171,stroke-width:2px,color:#fee2e2');
-  if (state.selected && state.selected.kind === 'flowNode' && nodeIds[state.selected.id]) lines.push('class ' + nodeIds[state.selected.id] + ' active');
-  definition.nodes.forEach(node => { if (sessions.some(session => session.nodeRef === node.ref && (session.status === 'failed' || session.status === 'interrupted'))) lines.push('class ' + nodeIds[node.ref] + ' failed'); });
-  return { source: lines.join('\\n'), nodeIds };
+function buildCytoscapeElements(definition, sessions) {
+  const nodeId = ref => 'node:' + ref;
+  const parallelId = ref => 'parallel:' + ref;
+  const destinationId = destination => destination.kind === 'finish' ? 'finish' : destination.kind === 'node' ? nodeId(destination.ref) : parallelId(destination.ref);
+  const elements = [{ data: { id: 'start', label: '开始' }, classes: 'terminal-node' }, { data: { id: 'finish', label: '结束' }, classes: 'terminal-node' }];
+  definition.nodes.forEach(node => { const count = sessions.filter(session => session.nodeRef === node.ref).length; const failed = sessions.some(session => session.nodeRef === node.ref && (session.status === 'failed' || session.status === 'interrupted')); const selected = state.selected && state.selected.kind === 'flowNode' && state.selected.id === node.ref; elements.push({ data: { id: nodeId(node.ref), ref: node.ref, label: node.name + '\\n' + count + ' 次会话' }, classes: 'flow-node' + (failed ? ' failed' : '') + (selected ? ' selected' : '') }); });
+  definition.parallels.forEach(parallel => elements.push({ data: { id: parallelId(parallel.ref), label: '并行\\n' + parallel.ref }, classes: 'parallel-node' }));
+  let edgeIndex = 0;
+  const addEdge = (source, target, label = '') => elements.push({ data: { id: 'edge:' + edgeIndex++, source, target, label } });
+  addEdge('start', nodeId(definition.startNodeRef));
+  definition.nodes.forEach(node => node.successors.forEach(edge => addEdge(nodeId(node.ref), destinationId(edge.destination), edge.result)));
+  definition.parallels.forEach(parallel => parallel.branches.forEach(branch => addEdge(parallelId(parallel.ref), nodeId(branch))));
+  return elements;
 }
-function mermaidText(value) { return String(value).replace(/["\\[\\]{}|]/g, ' ').replace(/\\n/g, ' '); }
-function bindMermaidNodes(holder, nodeIds) { Object.entries(nodeIds).forEach(([ref, id]) => { const group = Array.from(holder.querySelectorAll('g.node')).find(node => node.id.includes('-' + id + '-')); if (group) group.addEventListener('click', () => selectFlowNode(ref)); }); }
+function cytoscapeStyle() { return [
+  { selector: 'node', style: { 'background-color': '#172033', 'border-color': '#64748b', 'border-width': 1.5, label: 'data(label)', color: '#e5e7eb', 'font-size': 12, 'text-wrap': 'wrap', 'text-max-width': 138, 'text-valign': 'center', 'text-halign': 'center', width: 164, height: 62, shape: 'round-rectangle' } },
+  { selector: 'node.terminal-node', style: { 'background-color': '#182235', 'border-color': '#93c5fd', width: 58, height: 58, shape: 'ellipse', 'font-size': 11 } },
+  { selector: 'node.parallel-node', style: { 'background-color': '#25203b', 'border-color': '#a78bfa', width: 142, height: 56, shape: 'round-rectangle' } },
+  { selector: 'node.flow-node', style: { cursor: 'pointer' } },
+  { selector: 'node.flow-node.selected', style: { 'background-color': '#1e3a5f', 'border-color': '#60a5fa', 'border-width': 3 } },
+  { selector: 'node.flow-node.failed', style: { 'background-color': '#3b1d2a', 'border-color': '#f87171', 'border-width': 3 } },
+  { selector: 'edge', style: { width: 1.8, 'line-color': '#64748b', 'target-arrow-color': '#64748b', 'target-arrow-shape': 'triangle', 'curve-style': 'taxi', 'taxi-direction': 'downward', 'taxi-turn': 48, 'taxi-turn-min-distance': 12, label: 'data(label)', color: '#cbd5e1', 'font-size': 10, 'text-background-color': '#0b1220', 'text-background-opacity': 1, 'text-background-padding': 3, 'text-rotation': 'autorotate' } }
+]; }
 function selectFlowNode(nodeRef) { state.selected = { kind: 'flowNode', id: nodeRef }; renderFlowGraph(); renderTimeline(state.history); renderInspector(); }
 function timelineItems(history) { const items = []; history.nodeRuns.forEach((node) => items.push({ kind:'node', id:node.id, sequence:node.sequence, title:(node.nodeName || node.nodeRef) + ' [' + node.status + ']', meta: node.result || '' })); history.routeDecisions.forEach((route) => items.push({ kind:'route', id:route.id, sequence:route.sequence, title:'路由 ' + route.result + ' -> ' + destination(route.destination), meta:'' })); history.parallelRounds.forEach((round) => items.push({ kind:'parallel', id:round.id, sequence:round.sequence, title:'并行 ' + round.parallelRef + ' [' + round.status + ']', meta:Object.keys(round.branchNodeRunIds).length + ' 个分支' })); history.recoveries.forEach((recovery) => items.push({ kind:'recovery', id:recovery.id, sequence:recovery.sequence, title:'恢复 ' + recovery.strategy, meta:'恢复记录' })); if (history.run.status !== 'running') items.push({ kind:'terminal', id:'terminal', sequence:history.run.sequence, title:'Run ' + history.run.status, meta:history.run.errorCategory || '' }); return items.sort((a,b) => a.sequence - b.sequence); }
 function renderTimeline(history) { clear(timelineNode); for (const item of timelineItems(history)) { const button = el('button', null, 'fact'); if (state.selected && state.selected.kind === item.kind && state.selected.id === item.id) button.classList.add('selected'); button.onclick = () => selectFact(item); button.append(el('span', '#' + item.sequence, 'sequence')); const body = el('span'); body.append(el('div', item.title, 'fact-title')); body.append(el('div', item.meta, 'fact-meta')); button.append(body); timelineNode.append(button); } }

@@ -143,19 +143,38 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		const cookie = session.headers.get("set-cookie");
 		assert.match(cookie ?? "", /flow_observability=test-token/);
 		const headers = { Cookie: cookie ?? "" };
-		const mermaid = await fetch(
-			`${baseUrl}/assets/mermaid/mermaid.esm.min.mjs`,
+		const initialHtml = await initial.text();
+		assert.match(initialHtml, /\/assets\/elkjs\/elk\.bundled\.js/);
+		assert.match(initialHtml, /\/assets\/cytoscape\/cytoscape\.umd\.js/);
+		assert.match(initialHtml, /\/assets\/cytoscape-elk\/cytoscape-elk\.js/);
+		for (const assetPath of [
+			"/assets/elkjs/elk.bundled.js",
+			"/assets/cytoscape/cytoscape.umd.js",
+			"/assets/cytoscape-elk/cytoscape-elk.js",
+		]) {
+			const asset = await fetch(`${baseUrl}${assetPath}`);
+			assert.equal(asset.status, 200, assetPath);
+			assert.match(asset.headers.get("content-type") ?? "", /text\/javascript/);
+		}
+		assert.equal(
+			(await fetch(`${baseUrl}/assets/cytoscape/%2e%2e%2fpackage.json`)).status,
+			404,
 		);
-		assert.equal(mermaid.status, 200);
-		assert.match(mermaid.headers.get("content-type") ?? "", /text\/javascript/);
+		assert.equal(
+			(await fetch(`${baseUrl}/assets/mermaid/mermaid.esm.min.mjs`)).status,
+			404,
+		);
 		const app = await fetch(`${baseUrl}/assets/app.js`);
 		assert.equal(app.status, 200);
+		const appSource = await app.text();
+		assert.doesNotMatch(appSource, /mermaid/i);
+		assert.match(appSource, /buildCytoscapeElements/);
 		const syntaxDirectory = await mkdtemp(
 			join(tmpdir(), "flow-observability-web-"),
 		);
 		try {
 			const appPath = join(syntaxDirectory, "app.mjs");
-			await writeFile(appPath, await app.text());
+			await writeFile(appPath, appSource);
 			execFileSync(process.execPath, ["--check", appPath]);
 		} finally {
 			await rm(syntaxDirectory, { force: true, recursive: true });
