@@ -43,6 +43,7 @@ export interface FlowObservabilityWebHostOptions {
 	port?: number;
 	token?: string;
 	tls?: { key: string | Buffer; cert: string | Buffer };
+	allowInsecureLan?: boolean;
 	realtime?: boolean;
 	authorizer?: FlowObservabilityWebAuthorizer;
 	readPersistedEvidence?: (
@@ -83,7 +84,7 @@ export class FlowObservabilityWebHost {
 		this.publicHost = options.publicHost;
 		this.tls = options.tls;
 		this.realtime = options.realtime ?? true;
-		if (!isLoopbackHost(this.host) && !this.tls) {
+		if (!isLoopbackHost(this.host) && !this.tls && !options.allowInsecureLan) {
 			throw new Error("局域网观察站需要 TLS 证书和私钥");
 		}
 		this.requestedPort = options.port ?? 3818;

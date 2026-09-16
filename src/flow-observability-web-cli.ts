@@ -14,14 +14,22 @@ interface CliOptions {
 	workspace: string;
 	port: number;
 	lan: boolean;
+	insecureLan: boolean;
 	tlsKey?: string;
 	tlsCert?: string;
 }
 
 async function main(): Promise<void> {
 	const options = parseOptions(process.argv.slice(2));
-	if (options.lan && (!options.tlsKey || !options.tlsCert)) {
+	if (
+		options.lan &&
+		!options.insecureLan &&
+		(!options.tlsKey || !options.tlsCert)
+	) {
 		throw new Error("LAN 模式需要 --tls-key 和 --tls-cert");
+	}
+	if (options.insecureLan && !options.lan) {
+		throw new Error("--insecure-lan 必须与 --lan 一起使用");
 	}
 	const tls =
 		options.tlsKey && options.tlsCert
@@ -36,10 +44,13 @@ async function main(): Promise<void> {
 		publicHost: options.lan ? lanAddress() : "127.0.0.1",
 		port: options.port,
 		tls,
+		allowInsecureLan: options.insecureLan,
 		realtime: false,
 	});
 	await host.start();
-	process.stdout.write(`Flow Web 观察站: ${host.url}\n`);
+	process.stdout.write(
+		`Flow Web 观察站${options.insecureLan ? "（不安全 LAN 模式）" : ""}: ${host.url}\n`,
+	);
 	const close = async () => {
 		await host.close();
 		process.exit(0);
@@ -63,6 +74,7 @@ function parseOptions(args: string[]): CliOptions {
 	let workspace = process.cwd();
 	let port = 3818;
 	let lan = false;
+	let insecureLan = false;
 	let tlsKey: string | undefined;
 	let tlsCert: string | undefined;
 	for (let index = 0; index < args.length; index += 1) {
@@ -79,6 +91,10 @@ function parseOptions(args: string[]): CliOptions {
 			lan = true;
 			continue;
 		}
+		if (argument === "--insecure-lan") {
+			insecureLan = true;
+			continue;
+		}
 		if (argument === "--tls-key") {
 			tlsKey = requireValue(args, ++index, argument);
 			continue;
@@ -89,7 +105,7 @@ function parseOptions(args: string[]): CliOptions {
 		}
 		if (argument === "--help") {
 			process.stdout.write(
-				"用法: flow-observability-web [--workspace <目录>] [--port <端口>] [--lan --tls-key <文件> --tls-cert <文件>]\n",
+				"用法: flow-observability-web [--workspace <目录>] [--port <端口>] [--lan --tls-key <文件> --tls-cert <文件> | --lan --insecure-lan]\n",
 			);
 			process.exit(0);
 		}
@@ -98,7 +114,7 @@ function parseOptions(args: string[]): CliOptions {
 	if (!Number.isInteger(port) || port < 1 || port > 65535) {
 		throw new Error("端口必须在 1 到 65535 之间");
 	}
-	return { workspace, port, lan, tlsKey, tlsCert };
+	return { workspace, port, lan, insecureLan, tlsKey, tlsCert };
 }
 
 function requireValue(args: string[], index: number, option: string): string {

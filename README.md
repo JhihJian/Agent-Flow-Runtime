@@ -68,9 +68,10 @@ In Pi, use `/flow run <文件> <任务>`, `/flow list` for recent Run IDs, or `/
 ```bash
 flow-observability-web --workspace /absolute/project/path
 flow-observability-web --workspace /absolute/project/path --lan --tls-key /path/to/key.pem --tls-cert /path/to/cert.pem
+flow-observability-web --workspace /absolute/project/path --lan --insecure-lan
 ```
 
-The first command listens on loopback. The second explicitly binds `0.0.0.0` and requires TLS for LAN access. The process prints a tokenized URL; open it in a browser to inspect Run facts and NodeRun evidence. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
+The first command listens on loopback. The second explicitly binds `0.0.0.0` with TLS. The third enables plaintext HTTP only after the explicit `--insecure-lan` confirmation; use it only on a trusted LAN. The process prints a tokenized URL; open it in a browser to inspect Run facts and NodeRun evidence. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. The `./examples/*.md` paths above refer to a repository checkout; installed users point `--flow` at their own Flow files, such as `.flows/release.md`.
 

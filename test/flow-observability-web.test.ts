@@ -166,4 +166,21 @@ test("非回环监听需要 TLS 证书和私钥", async () => {
 			}),
 		/需要 TLS/,
 	);
+	const host = new FlowObservabilityWebHost({
+		runtime: new FakeWebRuntime(),
+		host: "0.0.0.0",
+		publicHost: "10.144.144.2",
+		port: 0,
+		allowInsecureLan: true,
+		token: "lan-token",
+	});
+	await host.start();
+	try {
+		assert.match(
+			host.url ?? "",
+			/^http:\/\/10\.144\.144\.2:\d+\/#token=lan-token$/,
+		);
+	} finally {
+		await host.close();
+	}
 });

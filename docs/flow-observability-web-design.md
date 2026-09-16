@@ -4,7 +4,7 @@
 
 Web 展示模式是 Flow Runtime 的只读运行观察站。它面向需要持续跟进运行、定位失败节点、查看 Agent 交互和命令输出的本地可信用户。
 
-当前实现提供独立的`flow-observability-web`可执行入口。普通模式监听 loopback；`--lan`模式监听`0.0.0.0`并强制要求 TLS key/cert。服务通过 fragment 令牌换取 HttpOnly cookie，提供 Run 列表、Run 快照和 NodeRun 证据。独立进程以快照轮询校正状态，不依赖 Pi 内存 Publisher；公网访问仍需要额外网络认证。
+当前实现提供独立的`flow-observability-web`可执行入口。普通模式监听 loopback；`--lan`模式监听`0.0.0.0`并默认要求 TLS key/cert。`--lan --insecure-lan`是显式明文 HTTP 确认，仅适用于可信局域网。服务通过 fragment 令牌换取 HttpOnly cookie，提供 Run 列表、Run 快照和 NodeRun 证据。独立进程以快照轮询校正状态，不依赖 Pi 内存 Publisher；公网访问仍需要额外网络认证。
 
 Web 页面展示一次具体 Run 的持久化事实和受权限控制的执行依据。它不提供结果提交、路由选择、恢复、重试、停止或命令重放操作。
 
