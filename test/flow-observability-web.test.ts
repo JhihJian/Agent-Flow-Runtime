@@ -181,7 +181,7 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		assert.match(appSource, /renderSVGElement\(dot, \{ engine: 'dot' \}\)/);
 		assert.match(appSource, /buildFlowDot/);
 		assert.match(appSource, /dotString/);
-		assert.match(appSource, /rankdir=LR/);
+		assert.match(appSource, /rankdir=TB/);
 		assert.match(appSource, /splines=polyline/);
 		assert.match(appSource, /style="dashed"/);
 		assert.match(appSource, /flowRenderRevision/);
