@@ -13,6 +13,7 @@ import type {
 
 export interface FlowRunVisualizationRuntime {
 	listRecentRuns(limit?: number): Promise<FlowRunSummary[]>;
+	listFlowRuns(flowId: string, limit?: number): Promise<FlowRunSummary[]>;
 	inspectRun(runId: string): Promise<FlowRunHistory | undefined>;
 	inspectNodeEvidence(
 		runId: string,

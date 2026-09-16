@@ -270,6 +270,8 @@ test("运行事实保存 Flow 指纹、节点顺序和每次路由决定", async
 	const routes = await store.listRouteDecisions(run.id);
 	assert.equal(run.historyCompleteness, "complete");
 	assert.match(run.flowVersion, /^sha256:/);
+	assert.equal(run.flowDefinition?.flowVersion, run.flowVersion);
+	assert.equal(run.flowDefinition?.nodes[0]?.ref, "analyze");
 	assert.deepEqual(
 		records.map((record) => [record.sequence, record.nodeRef, record.status]),
 		[
@@ -779,6 +781,9 @@ test("统一 Runtime 门面先建立订阅再应用快照，不丢失水位之�
 	};
 	const inspector = {
 		async listRecentRuns() {
+			return [];
+		},
+		async listFlowRuns() {
 			return [];
 		},
 		async inspectRun() {

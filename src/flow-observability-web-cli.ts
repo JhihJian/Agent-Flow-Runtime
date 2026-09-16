@@ -7,8 +7,9 @@ import {
 	FlowRunInspector,
 	FlowRuntime,
 } from "./observability.ts";
+import { parseFlow } from "./parser.ts";
 import { readPersistedPiNodeEvidence } from "./pi-session-evidence.ts";
-import { JsonFileRunStore } from "./runtime.ts";
+import { JsonFileRunStore, snapshotFlowDefinition } from "./runtime.ts";
 
 interface CliOptions {
 	workspace: string;
@@ -46,6 +47,12 @@ async function main(): Promise<void> {
 		tls,
 		allowInsecureLan: options.insecureLan,
 		realtime: false,
+		getFallbackFlowDefinition: (runId, history) =>
+			readCurrentFlowDefinition(
+				options.workspace,
+				runId,
+				history.run.flowVersion,
+			),
 	});
 	await host.start();
 	process.stdout.write(
@@ -68,6 +75,24 @@ function createRuntime(workspace: string): FlowRuntime {
 		},
 	});
 	return new FlowRuntime(inspector, new FlowObservationPublisher());
+}
+
+async function readCurrentFlowDefinition(
+	workspace: string,
+	runId: string,
+	flowVersion: string,
+) {
+	if (flowVersion !== "legacy:unknown") return undefined;
+	const store = new JsonFileRunStore(join(workspace, ".pi", "flow-runs.json"));
+	const run = await store.getRun(runId);
+	if (!run?.flowPath) return undefined;
+	try {
+		return snapshotFlowDefinition(
+			parseFlow(await readFile(run.flowPath, "utf8"), run.flowPath),
+		);
+	} catch {
+		return undefined;
+	}
 }
 
 function parseOptions(args: string[]): CliOptions {

@@ -57,6 +57,26 @@ export interface FlowDefinition {
 	parallels: Map<string, ParallelStart>;
 }
 
+/** Immutable, display-safe static graph captured when a Run begins. */
+export interface FlowDefinitionSnapshot {
+	flowId: string;
+	flowVersion: string;
+	name: string;
+	description: string;
+	startNodeRef: string;
+	nodes: Array<{
+		ref: string;
+		name: string;
+		actionKind: FlowAction["kind"];
+		successors: Array<{ result: string; destination: FlowDestination }>;
+	}>;
+	parallels: Array<{
+		ref: string;
+		branches: string[];
+		joinRef: string;
+	}>;
+}
+
 export interface OutcomeOption {
 	name: string;
 	description: string;
@@ -250,6 +270,8 @@ export interface FlowRunRecord {
 	flowId: string;
 	/** Immutable content fingerprint calculated from the parsed Flow definition. */
 	flowVersion: string;
+	/** Static Flow graph for accurate historical visualization. */
+	flowDefinition?: FlowDefinitionSnapshot;
 	task: FlowValue;
 	status: RunStatus;
 	phase: RunPhase;
@@ -365,6 +387,7 @@ export interface FlowNodeRunView {
 /** Stable, adapter-independent projection of one Run's persisted facts. */
 export interface FlowRunHistory {
 	run: FlowRunSummary;
+	flowDefinition?: FlowDefinitionSnapshot;
 	nodeRuns: FlowNodeRunView[];
 	routeDecisions: RouteDecisionRecord[];
 	parallelRounds: ParallelRoundRecord[];
@@ -407,6 +430,7 @@ export type FlowNodeEvidenceAuthorizer = (
 
 export interface FlowRunInspectorApi {
 	listRecentRuns(limit?: number): Promise<FlowRunSummary[]>;
+	listFlowRuns(flowId: string, limit?: number): Promise<FlowRunSummary[]>;
 	inspectRun(runId: string): Promise<FlowRunHistory | undefined>;
 	inspectNodeEvidence(
 		runId: string,

@@ -27,6 +27,22 @@ const summary: FlowRunSummary = {
 
 const history: FlowRunHistory = {
 	run: summary,
+	flowDefinition: {
+		flowId: "code-change",
+		flowVersion: "sha256:flow",
+		name: "代码修改",
+		description: "测试流程图快照",
+		startNodeRef: "analyze",
+		nodes: [
+			{
+				ref: "analyze",
+				name: "分析",
+				actionKind: "新建Agent",
+				successors: [{ result: "已分析", destination: { kind: "finish" } }],
+			},
+		],
+		parallels: [],
+	},
 	nodeRuns: [
 		{
 			id: "node-1",
@@ -65,6 +81,10 @@ const evidence: FlowNodeEvidence = {
 class FakeWebRuntime implements FlowRunVisualizationRuntime {
 	async listRecentRuns(): Promise<FlowRunSummary[]> {
 		return [structuredClone(summary)];
+	}
+
+	async listFlowRuns(flowId: string): Promise<FlowRunSummary[]> {
+		return flowId === summary.flowId ? [structuredClone(summary)] : [];
 	}
 
 	async inspectRun(id: string): Promise<FlowRunHistory | undefined> {
@@ -136,6 +156,23 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		assert.equal(detailPayload.history.run.id, runId);
 		assert.equal("task" in detailPayload.history.run, false);
 		assert.equal("input" in detailPayload.history.nodeRuns[0], false);
+
+		const flowSessions = await fetch(`${baseUrl}/api/flows/code-change`, {
+			headers,
+		});
+		assert.equal(flowSessions.status, 200);
+		const flowPayload = (await flowSessions.json()) as {
+			flowDefinition?: { nodes: Array<{ ref: string }> };
+			nodeSessions: Array<{
+				runId: string;
+				nodeRunId: string;
+				nodeRef: string;
+			}>;
+		};
+		assert.equal(flowPayload.flowDefinition?.nodes[0]?.ref, "analyze");
+		assert.equal(flowPayload.nodeSessions[0]?.runId, runId);
+		assert.equal(flowPayload.nodeSessions[0]?.nodeRunId, "node-1");
+		assert.equal(flowPayload.nodeSessions[0]?.nodeRef, "analyze");
 
 		const nodeEvidence = await fetch(
 			`${baseUrl}/api/runs/${runId}/node-runs/node-1/evidence`,

@@ -150,6 +150,15 @@ class FakeVisualizationRuntime implements FlowRunVisualizationRuntime {
 		return structuredClone(this.recentRuns.slice(0, limit));
 	}
 
+	async listFlowRuns(
+		flowId: string,
+		limit?: number,
+	): Promise<FlowRunSummary[]> {
+		return structuredClone(
+			this.recentRuns.filter((run) => run.flowId === flowId).slice(0, limit),
+		);
+	}
+
 	async inspectRun(id: string): Promise<FlowRunHistory | undefined> {
 		this.inspectCalls += 1;
 		const response = this.inspectionResponses.shift();
