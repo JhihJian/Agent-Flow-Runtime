@@ -149,3 +149,32 @@ test("Web 观察站通过令牌提供只读 Run、详情和节点证据", async 
 		await host.close();
 	}
 });
+
+test("局域网监听需要显式确认并生成公开地址", async () => {
+	assert.throws(
+		() =>
+			new FlowObservabilityWebHost({
+				runtime: new FakeWebRuntime(),
+				host: "0.0.0.0",
+				port: 0,
+			}),
+		/需要显式确认/,
+	);
+	const host = new FlowObservabilityWebHost({
+		runtime: new FakeWebRuntime(),
+		host: "0.0.0.0",
+		publicHost: "10.144.144.2",
+		port: 0,
+		allowInsecureLan: true,
+		token: "lan-token",
+	});
+	await host.start();
+	try {
+		assert.match(
+			host.url ?? "",
+			/^http:\/\/10\.144\.144\.2:\d+\/\?token=lan-token$/,
+		);
+	} finally {
+		await host.close();
+	}
+});

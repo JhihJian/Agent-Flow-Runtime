@@ -31,8 +31,10 @@ export interface FlowObservabilityWebHostOptions {
 	runtime?: FlowRunVisualizationRuntime;
 	getRuntime?: () => FlowRunVisualizationRuntime;
 	host?: string;
+	publicHost?: string;
 	port?: number;
 	token?: string;
+	allowInsecureLan?: boolean;
 	authorizer?: FlowObservabilityWebAuthorizer;
 	readPersistedEvidence?: (
 		session: NodeSession,
@@ -43,6 +45,7 @@ export class FlowObservabilityWebHost {
 	readonly token: string;
 	private readonly runtimeProvider: () => FlowRunVisualizationRuntime;
 	private readonly host: string;
+	private readonly publicHost?: string;
 	private readonly requestedPort: number;
 	private readonly authorizer: FlowObservabilityWebAuthorizer;
 	private readonly readPersistedEvidence?: (
@@ -66,6 +69,10 @@ export class FlowObservabilityWebHost {
 			throw new Error("Web 观察站需要 FlowRuntime 提供器");
 		}
 		this.host = options.host ?? "127.0.0.1";
+		this.publicHost = options.publicHost;
+		if (!isLoopbackHost(this.host) && !options.allowInsecureLan) {
+			throw new Error("局域网观察站需要显式确认明文 HTTP 风险");
+		}
 		this.requestedPort = options.port ?? 3818;
 		this.token = options.token ?? randomUUID();
 		this.authorizer = options.authorizer ?? allowLocalRunAccess;
@@ -74,7 +81,7 @@ export class FlowObservabilityWebHost {
 
 	get url(): string | undefined {
 		return this.actualPort
-			? `http://127.0.0.1:${this.actualPort}/?token=${encodeURIComponent(this.token)}`
+			? `http://${this.publicHost ?? this.host}:${this.actualPort}/?token=${encodeURIComponent(this.token)}`
 			: undefined;
 	}
 
@@ -524,6 +531,10 @@ function toWebEvent(event: FlowObservationEvent) {
 function summarize(value: unknown): string {
 	const text = typeof value === "string" ? value : JSON.stringify(value);
 	return text.length > 160 ? `${text.slice(0, 157)}...` : text;
+}
+
+function isLoopbackHost(host: string): boolean {
+	return host === "127.0.0.1" || host === "::1" || host === "localhost";
 }
 
 const allowLocalRunAccess: FlowObservabilityWebAuthorizer = {

@@ -4,7 +4,7 @@
 
 Web 展示模式是 Flow Runtime 的只读运行观察站。它面向需要持续跟进运行、定位失败节点、查看 Agent 交互和命令输出的本地可信用户。
 
-当前实现提供`FlowObservabilityWebHost`和`/flow web [port]`启动入口。服务通过随机令牌换取 HttpOnly cookie，提供 Run 列表、Run 快照、NodeRun 证据和 SSE 事件提示；浏览器收到事件后重新读取权威快照。
+当前实现提供`FlowObservabilityWebHost`、`/flow web [port]`和`/flow web lan [port]`启动入口。普通模式监听 loopback；`lan`模式是监听`0.0.0.0`的显式确认，适用于可信局域网。服务通过随机令牌换取 HttpOnly cookie，提供 Run 列表、Run 快照、NodeRun 证据和 SSE 事件提示；浏览器收到事件后重新读取权威快照。公网访问需要 TLS 和额外网络认证。
 
 Web 页面展示一次具体 Run 的持久化事实和受权限控制的执行依据。它不提供结果提交、路由选择、恢复、重试、停止或命令重放操作。
 

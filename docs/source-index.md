@@ -27,16 +27,17 @@
 
 ## [src/extension.ts](../src/extension.ts)
 
-依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./flow-observability-web.ts`、`./observability.ts`、`./parser.ts`、`./pi.ts`、`./pi-session-evidence.ts`、`./runtime.ts`、`./types.ts`
+依赖：`node:crypto`、`node:fs/promises`、`node:os`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./flow-observability-web.ts`、`./observability.ts`、`./parser.ts`、`./pi.ts`、`./pi-session-evidence.ts`、`./runtime.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:37-491](../src/extension.ts#L37) |
-| `loadFlow` | 函数 | 否 | [src/extension.ts:493-495](../src/extension.ts#L493) |
-| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:497-503](../src/extension.ts#L497) |
-| `flowEventMessage` | 函数 | 否 | [src/extension.ts:505-512](../src/extension.ts#L505) |
-| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:514-516](../src/extension.ts#L514) |
-| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:518-523](../src/extension.ts#L518) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:38-500](../src/extension.ts#L38) |
+| `loadFlow` | 函数 | 否 | [src/extension.ts:502-504](../src/extension.ts#L502) |
+| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:506-512](../src/extension.ts#L506) |
+| `flowEventMessage` | 函数 | 否 | [src/extension.ts:514-521](../src/extension.ts#L514) |
+| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:523-525](../src/extension.ts#L523) |
+| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:527-532](../src/extension.ts#L527) |
+| `lanWebAddress` | 函数 | 否 | [src/extension.ts:534-547](../src/extension.ts#L534) |
 
 ## [src/flow-observability-web.ts](../src/flow-observability-web.ts)
 
@@ -46,29 +47,30 @@
 | --- | --- | --- | --- |
 | `FlowObservabilityWebRequestContext` | 接口 | 是 | [src/flow-observability-web.ts:14-16](../src/flow-observability-web.ts#L14) |
 | `FlowObservabilityWebAuthorizer` | 接口 | 是 | [src/flow-observability-web.ts:18-28](../src/flow-observability-web.ts#L18) |
-| `FlowObservabilityWebHostOptions` | 接口 | 是 | [src/flow-observability-web.ts:30-40](../src/flow-observability-web.ts#L30) |
-| `FlowObservabilityWebHost` | 类 | 是 | [src/flow-observability-web.ts:42-409](../src/flow-observability-web.ts#L42) |
-| `FlowObservabilityWebHost.start` | 方法 | 是 | [src/flow-observability-web.ts:81-104](../src/flow-observability-web.ts#L81) |
-| `FlowObservabilityWebHost.close` | 方法 | 是 | [src/flow-observability-web.ts:106-116](../src/flow-observability-web.ts#L106) |
-| `FlowObservabilityWebHost.handle` | 方法 | 否 | [src/flow-observability-web.ts:118-163](../src/flow-observability-web.ts#L118) |
-| `FlowObservabilityWebHost.handleApi` | 方法 | 否 | [src/flow-observability-web.ts:165-244](../src/flow-observability-web.ts#L165) |
-| `FlowObservabilityWebHost.canReadRun` | 方法 | 否 | [src/flow-observability-web.ts:246-254](../src/flow-observability-web.ts#L246) |
-| `FlowObservabilityWebHost.openObservation` | 方法 | 否 | [src/flow-observability-web.ts:256-314](../src/flow-observability-web.ts#L256) |
-| `FlowObservabilityWebHost.isAuthenticated` | 方法 | 否 | [src/flow-observability-web.ts:316-321](../src/flow-observability-web.ts#L316) |
-| `FlowObservabilityWebHost.runtime` | 方法 | 否 | [src/flow-observability-web.ts:323-325](../src/flow-observability-web.ts#L323) |
-| `FlowObservabilityWebHost.writeSse` | 方法 | 否 | [src/flow-observability-web.ts:327-333](../src/flow-observability-web.ts#L327) |
-| `FlowObservabilityWebHost.publishSse` | 方法 | 否 | [src/flow-observability-web.ts:335-344](../src/flow-observability-web.ts#L335) |
-| `FlowObservabilityWebHost.writeHtml` | 方法 | 否 | [src/flow-observability-web.ts:346-359](../src/flow-observability-web.ts#L346) |
-| `FlowObservabilityWebHost.writeJavaScript` | 方法 | 否 | [src/flow-observability-web.ts:361-371](../src/flow-observability-web.ts#L361) |
-| `FlowObservabilityWebHost.writeCss` | 方法 | 否 | [src/flow-observability-web.ts:373-383](../src/flow-observability-web.ts#L373) |
-| `FlowObservabilityWebHost.writeJson` | 方法 | 否 | [src/flow-observability-web.ts:385-396](../src/flow-observability-web.ts#L385) |
-| `FlowObservabilityWebHost.writeText` | 方法 | 否 | [src/flow-observability-web.ts:398-408](../src/flow-observability-web.ts#L398) |
-| `WebRunSummary` | 接口 | 否 | [src/flow-observability-web.ts:411-423](../src/flow-observability-web.ts#L411) |
-| `toWebRunSummary` | 函数 | 否 | [src/flow-observability-web.ts:425-439](../src/flow-observability-web.ts#L425) |
-| `toWebRunHistory` | 函数 | 否 | [src/flow-observability-web.ts:441-488](../src/flow-observability-web.ts#L441) |
-| `toWebEvidence` | 函数 | 否 | [src/flow-observability-web.ts:490-502](../src/flow-observability-web.ts#L490) |
-| `toWebEvent` | 函数 | 否 | [src/flow-observability-web.ts:504-522](../src/flow-observability-web.ts#L504) |
-| `summarize` | 函数 | 否 | [src/flow-observability-web.ts:524-527](../src/flow-observability-web.ts#L524) |
+| `FlowObservabilityWebHostOptions` | 接口 | 是 | [src/flow-observability-web.ts:30-42](../src/flow-observability-web.ts#L30) |
+| `FlowObservabilityWebHost` | 类 | 是 | [src/flow-observability-web.ts:44-416](../src/flow-observability-web.ts#L44) |
+| `FlowObservabilityWebHost.start` | 方法 | 是 | [src/flow-observability-web.ts:88-111](../src/flow-observability-web.ts#L88) |
+| `FlowObservabilityWebHost.close` | 方法 | 是 | [src/flow-observability-web.ts:113-123](../src/flow-observability-web.ts#L113) |
+| `FlowObservabilityWebHost.handle` | 方法 | 否 | [src/flow-observability-web.ts:125-170](../src/flow-observability-web.ts#L125) |
+| `FlowObservabilityWebHost.handleApi` | 方法 | 否 | [src/flow-observability-web.ts:172-251](../src/flow-observability-web.ts#L172) |
+| `FlowObservabilityWebHost.canReadRun` | 方法 | 否 | [src/flow-observability-web.ts:253-261](../src/flow-observability-web.ts#L253) |
+| `FlowObservabilityWebHost.openObservation` | 方法 | 否 | [src/flow-observability-web.ts:263-321](../src/flow-observability-web.ts#L263) |
+| `FlowObservabilityWebHost.isAuthenticated` | 方法 | 否 | [src/flow-observability-web.ts:323-328](../src/flow-observability-web.ts#L323) |
+| `FlowObservabilityWebHost.runtime` | 方法 | 否 | [src/flow-observability-web.ts:330-332](../src/flow-observability-web.ts#L330) |
+| `FlowObservabilityWebHost.writeSse` | 方法 | 否 | [src/flow-observability-web.ts:334-340](../src/flow-observability-web.ts#L334) |
+| `FlowObservabilityWebHost.publishSse` | 方法 | 否 | [src/flow-observability-web.ts:342-351](../src/flow-observability-web.ts#L342) |
+| `FlowObservabilityWebHost.writeHtml` | 方法 | 否 | [src/flow-observability-web.ts:353-366](../src/flow-observability-web.ts#L353) |
+| `FlowObservabilityWebHost.writeJavaScript` | 方法 | 否 | [src/flow-observability-web.ts:368-378](../src/flow-observability-web.ts#L368) |
+| `FlowObservabilityWebHost.writeCss` | 方法 | 否 | [src/flow-observability-web.ts:380-390](../src/flow-observability-web.ts#L380) |
+| `FlowObservabilityWebHost.writeJson` | 方法 | 否 | [src/flow-observability-web.ts:392-403](../src/flow-observability-web.ts#L392) |
+| `FlowObservabilityWebHost.writeText` | 方法 | 否 | [src/flow-observability-web.ts:405-415](../src/flow-observability-web.ts#L405) |
+| `WebRunSummary` | 接口 | 否 | [src/flow-observability-web.ts:418-430](../src/flow-observability-web.ts#L418) |
+| `toWebRunSummary` | 函数 | 否 | [src/flow-observability-web.ts:432-446](../src/flow-observability-web.ts#L432) |
+| `toWebRunHistory` | 函数 | 否 | [src/flow-observability-web.ts:448-495](../src/flow-observability-web.ts#L448) |
+| `toWebEvidence` | 函数 | 否 | [src/flow-observability-web.ts:497-509](../src/flow-observability-web.ts#L497) |
+| `toWebEvent` | 函数 | 否 | [src/flow-observability-web.ts:511-529](../src/flow-observability-web.ts#L511) |
+| `summarize` | 函数 | 否 | [src/flow-observability-web.ts:531-534](../src/flow-observability-web.ts#L531) |
+| `isLoopbackHost` | 函数 | 否 | [src/flow-observability-web.ts:536-538](../src/flow-observability-web.ts#L536) |
 
 ## [src/flow-run-visualization.ts](../src/flow-run-visualization.ts)
 
