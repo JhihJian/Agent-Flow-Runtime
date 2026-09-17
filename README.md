@@ -55,6 +55,8 @@ pi --flow ./examples/code-change.md "修复登录超时问题"
 pi --flow ./examples/code-change.md -p "修复登录超时问题"
 pi --flow ./examples/code-change.md --mode json -p "修复登录超时问题"
 pi --flow ./examples/code-change.md --mode rpc
+pi --flow ./.flows/release-check "执行发布检查"
+pi --flow ./.flows/release-check/FLOW.md "执行发布检查"
 ```
 
 When testing a checkout before installing it, load the built extension explicitly:
@@ -65,34 +67,34 @@ pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
 
 In Pi, use `/flow run <文件> <任务>`, `/flow list` for recent Run IDs, or `/flow show <runId>` for plain-text history. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
-After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. The `./examples/*.md` paths above refer to a repository checkout; installed users point `--flow` at their own Flow files, such as `.flows/release.md`.
+After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release-check/FLOW.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. Installed users point `--flow` at their own single Flow file, package directory, or resource-bearing package entry.
 
 Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, outcome, Pi session reference, and Pi entry range for every Agent-node visit. When Pi resumes the same session, an unfinished CLI Flow is restored from this file and its interrupted Agent node is submitted again in that session. The interrupted node is recorded as a separate retry visit, so the original incomplete visit remains auditable. An interrupted custom-command node is marked failed rather than replayed, because its external side effect may already have occurred.
 
 ## SDK Quick Start
 
-Use the runtime as a library to parse a Flow file and drive it with Pi SDK sessions:
+Use the runtime as a library to load a single Flow file or Flow package and drive it with Pi SDK sessions:
 
 ```typescript
-import { readFile } from "node:fs/promises";
 import {
   AgentRunModel,
   FlowCoordinator,
   JsonFileRunStore,
-  parseFlow,
+  loadFlow,
   PiAgentIntegrationAdapter,
 } from "@jhihjian/agent-flow-runtime";
 
-const flow = parseFlow(
-  await readFile("./.flows/code-change.md", "utf8"),
-  "code-change.md",
-);
+const loaded = await loadFlow("./.flows/code-change");
 
 const adapter = new PiAgentIntegrationAdapter({ cwd: process.cwd() });
 const coordinator = new FlowCoordinator(
-  flow,
+  loaded.flow,
   new JsonFileRunStore(".pi/flow-runs.json"),
   new AgentRunModel(adapter),
+  undefined,
+  undefined,
+  undefined,
+  loaded.resources,
 );
 
 const run = await coordinator.run("修复登录超时问题");

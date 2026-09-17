@@ -2,6 +2,10 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+	resolveCommandResources,
+	resolvePromptResources,
+} from "./flow-loader.ts";
 import { renderCommandRequest } from "./parser.ts";
 import type {
 	AgentConnection,
@@ -16,6 +20,7 @@ import type {
 	FlowNode,
 	FlowObservationEvent,
 	FlowObservationPublisherApi,
+	FlowResourceContext,
 	FlowRunRecord,
 	FlowRunSnapshot,
 	FlowValue,
@@ -516,6 +521,7 @@ export class FlowCoordinator {
 	private readonly agentModel: AgentRunModel;
 	private readonly commandExecutor: CommandExecutor;
 	private readonly publisher?: FlowObservationPublisherApi;
+	private readonly resources?: FlowResourceContext;
 	private readonly onObservationError: (
 		error: unknown,
 		event: FlowObservationEvent,
@@ -532,6 +538,7 @@ export class FlowCoordinator {
 			error: unknown,
 			event: FlowObservationEvent,
 		) => void = () => undefined,
+		resources?: FlowResourceContext,
 	) {
 		this.flow = flow;
 		this.store = store;
@@ -539,6 +546,7 @@ export class FlowCoordinator {
 		this.commandExecutor = commandExecutor;
 		this.publisher = publisher;
 		this.onObservationError = onObservationError;
+		this.resources = resources;
 	}
 
 	async run(
@@ -1046,14 +1054,17 @@ export class FlowCoordinator {
 		try {
 			let outcome: NodeOutcome;
 			if (node.action.kind === "执行自定义命令") {
-				const request = {
-					...renderCommandRequest(
-						node.action.request,
-						record.input,
-						branchOutcomes,
-					),
-					cwd,
-				};
+				const request = resolveCommandResources(
+					{
+						...renderCommandRequest(
+							node.action.request,
+							record.input,
+							branchOutcomes,
+						),
+						cwd,
+					},
+					this.resources,
+				);
 				const commandResult = await this.commandExecutor.execute(request);
 				outcome = {
 					result: "已执行",
@@ -1069,7 +1080,12 @@ export class FlowCoordinator {
 					runId: run.id,
 					action: record.retryOf ? "复用Agent" : node.action.kind,
 					nodeExecutionReference: record.id,
-					prompt: renderAgentPrompt(node.action.prompt, record.input, node),
+					prompt: renderAgentPrompt(
+						node.action.prompt,
+						record.input,
+						node,
+						this.resources,
+					),
 					outcomes: [...node.results].map(([name, description]) => ({
 						name,
 						description,
@@ -1701,13 +1717,14 @@ function renderAgentPrompt(
 	prompt: string,
 	input: FlowValue,
 	node: FlowNode,
+	resources?: FlowResourceContext,
 ): string {
 	const renderedInput =
 		typeof input === "string" ? input : JSON.stringify(input, null, 2);
 	const outcomes = [...node.results]
 		.map(([name, description]) => `- ${name}: ${description}`)
 		.join("\n");
-	return `${prompt.replaceAll("{outcome}", renderedInput)}\n\n本节点只允许提交以下一个结果：\n${outcomes}\n\n完成工作后必须调用 submit_flow_outcome，并提供 outcome 和 content。`;
+	return `${resolvePromptResources(prompt, resources).replaceAll("{outcome}", renderedInput)}\n\n本节点只允许提交以下一个结果：\n${outcomes}\n\n完成工作后必须调用 submit_flow_outcome，并提供 outcome 和 content。`;
 }
 
 function replaceObject<T extends object>(target: T, source: T): void {

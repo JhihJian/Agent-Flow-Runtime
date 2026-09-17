@@ -32,7 +32,7 @@ pi --flow <文件> <任务>
 
 启动时，Pi Flow Host 完成以下工作：
 
-1. 读取 Flow 文件并调用`parseFlow`。
+1. 通过`loadFlow`读取单文件或目录包，得到定义、规范化入口和资源上下文。
 2. 创建 Pi 适配器、运行记录存储和`FlowCoordinator`。
 3. 将 Task 和 FlowDefinition 交给协调器。
 4. 等待 Run 完成，并将终态通知 Pi 用户或输出通道。

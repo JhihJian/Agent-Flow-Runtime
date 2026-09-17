@@ -14,7 +14,8 @@
 
 ```mermaid
 flowchart LR
-  file[Flow Markdown] --> parser[parseFlow]
+  file[Flow 路径] --> loader[loadFlow]
+  loader --> parser[parseFlow]
   parser --> definition[FlowDefinition]
   task[用户任务] --> start[startFlow]
   definition --> start
@@ -40,12 +41,12 @@ flowchart LR
 
 <!-- source-guide:start-flow -->
 <!-- source-guide:location:start-flow -->
-**源码：** [src/extension.ts:308-384](../src/extension.ts#L308)，`启动 Flow`
+**源码：** [src/extension.ts:306-385](../src/extension.ts#L306)，`启动 Flow`
 <!-- /source-guide:location:start-flow -->
 
 ```mermaid
 flowchart TD
-  A[接收 Flow 路径、任务和 Pi 上下文] --> B[读取并 parseFlow]
+  A[接收 Flow 路径、任务和 Pi 上下文] --> B[loadFlow 识别单文件或包入口]
   B --> C[创建 Pi 适配器、运行记录存储和协调器]
   C --> D{首节点动作}
   D -->|复用Agent| E[带当前会话引用运行]
@@ -57,7 +58,8 @@ flowchart TD
 ```text
 startFlow(路径, 任务, Pi上下文):
     拒绝已有正在运行的 Flow
-    flow = parseFlow(读取文件)
+    loaded = loadFlow(路径)
+    flow = loaded.flow
     创建 PiAgentIntegrationAdapter、JsonFileRunStore、FlowCoordinator
     如果首节点是复用Agent:
         coordinator.run(任务, 当前 Pi 会话引用)
@@ -87,8 +89,8 @@ flowchart TD
 ```
 
 ```text
-parseFlow(Markdown, 文件名):
-    id = 从文件名取得标识
+parseFlow(Markdown, 文件名, 可选标识):
+    id = 采用可选标识，缺省时从文件名取得
     metadata = 校验唯一且非空的 name、description
     graph = 解析唯一的 flowchart TD
     sections = 解析每个节点标题下的动作和结果说明
@@ -104,7 +106,7 @@ parseFlow(Markdown, 文件名):
 
 <!-- source-guide:coordinator-run -->
 <!-- source-guide:location:coordinator-run -->
-**源码：** [src/runtime.ts:544-583](../src/runtime.ts#L544)，`驱动一次运行`
+**源码：** [src/runtime.ts:552-591](../src/runtime.ts#L552)，`驱动一次运行`
 <!-- /source-guide:location:coordinator-run -->
 
 ```mermaid
@@ -143,7 +145,7 @@ run(任务, 可选已有会话):
 
 <!-- source-guide:execute-node -->
 <!-- source-guide:location:execute-node -->
-**源码：** [src/runtime.ts:898-920](../src/runtime.ts#L898)，`执行单个节点`
+**源码：** [src/runtime.ts:906-928](../src/runtime.ts#L906)，`执行单个节点`
 <!-- /source-guide:location:execute-node -->
 
 ```mermaid
@@ -181,7 +183,7 @@ executeNode(run, 节点引用, 输入, 分支结果):
 
 <!-- source-guide:execute-parallel -->
 <!-- source-guide:location:execute-parallel -->
-**源码：** [src/runtime.ts:809-896](../src/runtime.ts#L809)，`执行并行分支`
+**源码：** [src/runtime.ts:817-904](../src/runtime.ts#L817)，`执行并行分支`
 <!-- /source-guide:location:execute-parallel -->
 
 ```mermaid
@@ -213,7 +215,7 @@ executeParallel(run, 并行引用, 输入):
 
 <!-- source-guide:agent-execute-node -->
 <!-- source-guide:location:agent-execute-node -->
-**源码：** [src/runtime.ts:442-499](../src/runtime.ts#L442)，`管理 Agent 节点`
+**源码：** [src/runtime.ts:447-504](../src/runtime.ts#L447)，`管理 Agent 节点`
 <!-- /source-guide:location:agent-execute-node -->
 
 ```mermaid

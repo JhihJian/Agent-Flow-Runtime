@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+
 import { isAbsolute, join, resolve } from "node:path";
 import type {
 	ExtensionAPI,
@@ -9,7 +9,7 @@ import {
 	getCliFlowState,
 	rejectPendingSessionReplacement,
 } from "./cli-state.ts";
-
+import { loadFlow } from "./flow-loader.ts";
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
@@ -17,7 +17,6 @@ import {
 	formatFlowRunHistory,
 	toFlowEventEnvelope,
 } from "./observability.ts";
-import { parseFlow } from "./parser.ts";
 import {
 	createFlowInspectionTool,
 	createFlowOutcomeTool,
@@ -27,7 +26,6 @@ import {
 
 import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
 import type {
-	FlowDefinition,
 	FlowObservationEvent,
 	FlowRunSummary,
 	UnifiedMessage,
@@ -314,7 +312,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 		if (state.active) throw new Error(`Flow 正在运行: ${state.active.path}`);
 		const absolutePath = isAbsolute(path) ? path : resolve(ctx.cwd, path);
 		const cwd = ctx.cwd;
-		const flow = await loadFlow(absolutePath);
+		const loaded = await loadFlow(absolutePath);
+		const flow = loaded.flow;
 		const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
 		state.adapter = adapter;
 		const store = new JsonFileRunStore(join(cwd, ".pi", "flow-runs.json"));
@@ -341,6 +340,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 			new AgentRunModel(adapter),
 			undefined,
 			publisher,
+			undefined,
+			loaded.resources,
 		);
 		const first = flow.nodes.get(flow.startNodeRef);
 		if (!first) throw new Error(`Flow 首节点不存在: ${flow.startNodeRef}`);
@@ -352,13 +353,13 @@ export default function flowExtension(pi: ExtensionAPI) {
 							runId,
 							existingAgentReference: bridge.getSessionReference(),
 							cwd,
-							flowPath: absolutePath,
+							flowPath: loaded.path,
 							sessionReference: bridge.getSessionReference(),
 						}
 					: {
 							runId,
 							cwd,
-							flowPath: absolutePath,
+							flowPath: loaded.path,
 							sessionReference: bridge.getSessionReference(),
 						},
 			)
@@ -379,7 +380,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 				state.active = undefined;
 				state.adapter = undefined;
 			});
-		state.active = { path: absolutePath, promise };
+		state.active = { path: loaded.path, promise };
 		await promise;
 	}
 
@@ -403,7 +404,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 		if (!run) return;
 		const flowPath = run.flowPath;
 		if (!flowPath) return;
-		const flow = await loadFlow(flowPath);
+		const loaded = await loadFlow(flowPath);
+		const flow = loaded.flow;
 		if (flow.id !== run.flowId) {
 			state.notify?.(`无法恢复 Flow: 文件与运行记录不匹配`, "error");
 			return;
@@ -434,6 +436,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 			new AgentRunModel(adapter),
 			undefined,
 			publisher,
+			undefined,
+			loaded.resources,
 		);
 		const promise = coordinator
 			.resume(run.id, { existingAgentReference: sessionReference, cwd })
@@ -455,10 +459,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 			});
 		state.active = { path: flowPath, promise };
 	}
-}
-
-async function loadFlow(path: string): Promise<FlowDefinition> {
-	return parseFlow(await readFile(path, "utf8"), path);
 }
 
 function createRuntimeForContext(ctx: ExtensionContext): FlowRuntime {

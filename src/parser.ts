@@ -44,8 +44,8 @@ export class FlowSyntaxError extends Error {
 export function parseFlow(
 	markdown: string,
 	filename = "flow.md",
+	id = basename(filename, extname(filename)),
 ): FlowDefinition {
-	const id = basename(filename, extname(filename));
 	if (!id) throw new FlowSyntaxError("Flow 文件必须有文件名标识");
 	const metadata = parseMetadata(markdown);
 	const graph = parseGraph(extractSingleMermaid(markdown));

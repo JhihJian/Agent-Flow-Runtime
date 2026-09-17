@@ -57,6 +57,19 @@ export interface FlowDefinition {
 	parallels: Map<string, ParallelStart>;
 }
 
+/** Files adjacent to a directory-based Flow entry. */
+export interface FlowResourceContext {
+	packageRoot: string;
+	resourcePaths: ReadonlyMap<string, string>;
+}
+
+/** A Flow definition together with its normalized source location. */
+export interface LoadedFlow {
+	flow: FlowDefinition;
+	path: string;
+	resources?: FlowResourceContext;
+}
+
 export interface OutcomeOption {
 	name: string;
 	description: string;
