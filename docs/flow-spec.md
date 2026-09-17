@@ -2,6 +2,8 @@
 
 本规范定义可运行 Flow 文件的格式。Flow 的用途和整体方式见[Flow 概览](flow-overview.md)。
 
+需要与参考 Markdown、Node.js 脚本或静态资源一同分发的 V2 Flow 包，见[Flow 包目录规范](flow-package-spec.md)。该规范尚未由当前运行时实现，本文件描述的 V1 单文件格式仍是当前唯一可运行格式。
+
 ## 1. 文件开头
 
 文件以元信息开头，只保留流程名称和适用情况：
