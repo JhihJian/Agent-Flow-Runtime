@@ -24,15 +24,15 @@ Pi Agent 会话
 扩展提供两种启动方式：
 
 ```text
-pi --flow <文件> <任务>
-/flow run <文件> <任务>
+pi --flow <包目录或FLOW.md> <任务>
+/flow run <包目录或FLOW.md> <任务>
 ```
 
 也支持 Pi 的打印、JSON 和 RPC 模式。不同入口只改变 Task 如何进入 Runtime，不改变 Flow 的执行方式。
 
 启动时，Pi Flow Host 完成以下工作：
 
-1. 通过`loadFlow`读取单文件或目录包，得到定义、规范化入口和资源上下文。
+1. 通过`loadFlow`读取包目录或`FLOW.md`，得到定义、规范化入口和资源上下文。
 2. 创建 Pi 适配器、运行记录存储和`FlowCoordinator`。
 3. 将 Task 和 FlowDefinition 交给协调器。
 4. 等待 Run 完成，并将终态通知 Pi 用户或输出通道。

@@ -13,7 +13,7 @@ description: 适用于目标明确、需要完成代码修改并运行测试验�
 ---
 ```
 
-`name`和`description`均为非空内容。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。文件名去掉`.md`后是 Flow 标识，用于关联运行记录。
+每条 Flow 保存为`<flow-id>/FLOW.md`。`name`和`description`均为非空内容。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。目录名是 Flow 标识，用于关联运行记录。
 
 ## 2. 图与节点
 

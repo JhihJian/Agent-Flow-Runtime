@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -153,7 +153,7 @@ flowchart TD
 	assert.equal(commands.requests[0]?.cwd, businessCwd);
 });
 
-test("单文件 Flow 保持原有文件名标识且不启用包资源解析", async () => {
+test("拒绝不是 FLOW.md 的单文件入口", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "single-flow-"));
 	const path = join(directory, "ordinary.md");
 	await writeFile(
@@ -182,16 +182,44 @@ flowchart TD
 		"utf8",
 	);
 
-	const loaded = await loadFlow(path);
-	assert.equal(loaded.flow.id, "ordinary");
-	assert.equal(loaded.resources, undefined);
-	assert.equal(loaded.flow.nodes.get("check")?.action.kind, "执行自定义命令");
+	await assert.rejects(() => loadFlow(path), /入口必须命名为 FLOW\.md/);
+});
 
-	const legacyEntry = join(directory, "FLOW.md");
-	await writeFile(legacyEntry, await readFile(path, "utf8"), "utf8");
-	const legacy = await loadFlow(legacyEntry);
-	assert.equal(legacy.flow.id, "FLOW");
-	assert.equal(legacy.resources, undefined);
+test("没有资源目录的 FLOW.md 仍是目录包", async () => {
+	const root = await mkdtemp(join(tmpdir(), "empty-flow-package-"));
+	const entry = join(root, "FLOW.md");
+	await writeFile(
+		entry,
+		`---
+name: 空包
+description: 用于验证固定入口。
+---
+
+\`\`\`mermaid
+flowchart TD
+  start((开始)) --> check[检查]
+  check -->|已执行| finish((结束))
+\`\`\`
+
+## 检查
+
+\`\`\`执行自定义命令
+{"command":"node","args":["-e","process.exit(0)"]}
+\`\`\`
+
+### 已执行
+
+已执行。
+`,
+		"utf8",
+	);
+
+	const fromDirectory = await loadFlow(root);
+	const fromEntry = await loadFlow(entry);
+	assert.equal(fromDirectory.flow.id, fromEntry.flow.id);
+	assert.equal(fromDirectory.path, entry);
+	assert.ok(fromDirectory.resources);
+	assert.deepEqual([...fromDirectory.resources.resourcePaths], []);
 });
 
 test("目录包缺少入口或引用资源时拒绝加载", async () => {

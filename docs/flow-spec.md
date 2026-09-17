@@ -2,18 +2,11 @@
 
 本规范定义可运行 Flow 文件的格式。Flow 的用途和整体方式见[Flow 概览](flow-overview.md)。
 
-运行时支持 V1 单文件 Flow 和下面的目录包。使用`--flow`或`/flow run`时，可以传入单个`.md`文件、包目录或资源目录同级的`FLOW.md`；目录输入会直接执行其中的`FLOW.md`，不生成运行副本。孤立的旧`FLOW.md`仍作为单文件处理，保持原有`FLOW`标识。
+每条可执行 Flow 都是一个目录包。使用`--flow`或`/flow run`时，只能传入包目录或包内的`FLOW.md`；运行时直接执行该入口，不生成运行副本。
 
 ## Flow 包目录
 
-Flow 包用于一条 Flow 除流程定义外，还需要携带参考 Markdown 或 Node.js 脚本的情况。目录约定参考 Skill：一个目录只有一个固定入口，其余文件按用途放在入口旁边。
-
-只有流程图和简短节点提示时，继续使用单个`.md`文件。出现以下任一情况时，使用 Flow 包：
-
-- Agent 节点需要阅读较长的规则、检查表或领域资料。
-- 命令节点需要运行应与 Flow 一同发布的 Node.js 程序。
-
-包化只组织资源，不改变 Flow 图、节点、结果或并行语义。
+目录约定参考 Skill：一个目录只有一个固定入口，其余文件按用途放在入口旁边。即使暂时不需要参考资料或脚本，也必须使用包目录。
 
 ```text
 .flows/
@@ -38,9 +31,7 @@ Flow 包用于一条 Flow 除流程定义外，还需要携带参考 Markdown �
 
 脚本需要读取业务项目时使用进程`cwd`，需要读取同包模块时使用 ESM 相对导入或`import.meta.url`。Flow 文件中不写机器相关的绝对路径。被引用的`references/...`必须是`.md`文件，被调用的`scripts/...`必须是`.mjs`文件；路径不能包含`.`或`..`段。
 
-现有任意`.md`单文件 Flow 保持原有标识和运行方式。单文件 Flow 以文件名作为标识，目录包以`FLOW.md`父目录名作为标识。包目录是无歧义入口；直接传入`FLOW.md`时，运行时只在同级存在`references/`或`scripts/`目录时将其识别为包，以避免改变旧的孤立`FLOW.md`。`FlowDirectory`仍只发现顶层单文件；递归发现目录包不属于当前范围。
-
-内容指纹、递归发现和迁移工具不属于当前范围。恢复运行会重新读取已记录的真实入口路径，因此目录包恢复时仍使用原`FLOW.md`和同一包根。
+包目录名是 Flow 标识。例如`release-check/FLOW.md`的标识为`release-check`。`FlowDirectory`递归发现包目录，并跳过`references/`和`scripts/`资源目录。恢复运行会重新读取已记录的真实入口路径，因此仍使用原`FLOW.md`和同一包根。
 
 ## 1. 文件开头
 
@@ -53,7 +44,7 @@ description: 适用于目标明确、需要完成代码修改并运行测试验�
 ---
 ```
 
-`name`和`description`均为非空内容。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。单文件的文件名去掉`.md`后是 Flow 标识；目录包的标识取`FLOW.md`父目录名。
+`name`和`description`均为非空内容。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。Flow 标识始终取`FLOW.md`父目录名。
 
 ## 2. 图与节点
 

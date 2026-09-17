@@ -1,12 +1,12 @@
 # Agent Flow Runtime
 
-`@jhihjian/agent-flow-runtime` executes portable Markdown Flow files. A Flow controls node routing, gates, retries, command-only parallel checks, and explicit joins. Agent-specific behavior stays outside the Markdown definition.
+`@jhihjian/agent-flow-runtime` executes portable Flow packages with a fixed `FLOW.md` entry. A Flow controls node routing, gates, retries, command-only parallel checks, and explicit joins. Agent-specific behavior stays outside the Markdown definition.
 
 Included examples:
 
-- `examples/code-change.md`: code change and verification loop.
-- `examples/simplify.md`: project simplification with a self-gated loop that continues until the remaining complexity has a documented reason.
-- `examples/flow-observability-implementation.md`: implementation and acceptance gates for Flow runtime observability.
+- `examples/code-change/`: code change and verification loop.
+- `examples/simplify/`: project simplification with a self-gated loop that continues until the remaining complexity has a documented reason.
+- `examples/flow-observability-implementation/`: implementation and acceptance gates for Flow runtime observability.
 
 ## Install
 
@@ -51,10 +51,10 @@ The package requires Node.js >= 22.19 and two peer dependencies, `@earendil-work
 The Flow file follows [the Flow specification](docs/flow-spec.md). Start a Flow in the current Pi session:
 
 ```bash
-pi --flow ./examples/code-change.md "修复登录超时问题"
-pi --flow ./examples/code-change.md -p "修复登录超时问题"
-pi --flow ./examples/code-change.md --mode json -p "修复登录超时问题"
-pi --flow ./examples/code-change.md --mode rpc
+pi --flow ./examples/code-change "修复登录超时问题"
+pi --flow ./examples/code-change -p "修复登录超时问题"
+pi --flow ./examples/code-change --mode json -p "修复登录超时问题"
+pi --flow ./examples/code-change --mode rpc
 pi --flow ./.flows/release-check "执行发布检查"
 pi --flow ./.flows/release-check/FLOW.md "执行发布检查"
 ```
@@ -62,18 +62,18 @@ pi --flow ./.flows/release-check/FLOW.md "执行发布检查"
 When testing a checkout before installing it, load the built extension explicitly:
 
 ```bash
-pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md -p "验证 Flow"
+pi -e ./dist/extension.js --flow ./test/fixtures/ordinary -p "验证 Flow"
 ```
 
-In Pi, use `/flow run <文件> <任务>`, `/flow list` for recent Run IDs, or `/flow show <runId>` for plain-text history. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
+In Pi, use `/flow run <包目录或FLOW.md> <任务>`, `/flow list` for recent Run IDs, or `/flow show <runId>` for plain-text history. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
-After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release-check/FLOW.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. Installed users point `--flow` at their own single Flow file, package directory, or resource-bearing package entry.
+After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release-check/FLOW.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. Installed users point `--flow` at their package directory or its `FLOW.md` entry.
 
 Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, outcome, Pi session reference, and Pi entry range for every Agent-node visit. When Pi resumes the same session, an unfinished CLI Flow is restored from this file and its interrupted Agent node is submitted again in that session. The interrupted node is recorded as a separate retry visit, so the original incomplete visit remains auditable. An interrupted custom-command node is marked failed rather than replayed, because its external side effect may already have occurred.
 
 ## SDK Quick Start
 
-Use the runtime as a library to load a single Flow file or Flow package and drive it with Pi SDK sessions:
+Use the runtime as a library to load a Flow package and drive it with Pi SDK sessions:
 
 ```typescript
 import {
@@ -133,7 +133,7 @@ For the offline minimal example (no model required), resume and takeover, sessio
 For a compact source-level reading guide, see [源码逻辑阅读图](docs/source-pseudocode-guide.md).
 
 - `src/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
-- `src/directory.ts` discovers and loads Flow files by filename identifier for reuse.
+- `src/flow-loader.ts` loads package directories and resolves their resources; `src/directory.ts` recursively discovers package entries for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
@@ -154,7 +154,7 @@ npm run test:integration
 Fixtures cover ordinary routing, a gate loop, and command parallelism with a join. Runtime tests use a Fake Agent adapter and command executor. The production smoke test is:
 
 ```bash
-pi -e ./dist/extension.js --flow ./test/fixtures/ordinary.md --mode json -p "运行 Flow"
+pi -e ./dist/extension.js --flow ./test/fixtures/ordinary --mode json -p "运行 Flow"
 ```
 
 The command should emit two successful `submit_flow_outcome` events, and `.pi/flow-runs.json` should contain a completed Flow run with two node records.

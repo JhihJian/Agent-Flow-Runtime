@@ -20,7 +20,7 @@ import type {
 } from "../src/types.ts";
 
 const fixture = (name: string) =>
-	readFile(join(import.meta.dirname, "fixtures", name), "utf8");
+	readFile(join(import.meta.dirname, "fixtures", name, "FLOW.md"), "utf8");
 
 class FakeAdapter implements AgentIntegrationAdapter {
 	readonly executed: string[] = [];
@@ -114,7 +114,7 @@ describe("FlowCoordinator", () => {
 			{ result: "已完成", content: "done" },
 		]);
 		const store = new InMemoryRunStore();
-		const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+		const flow = parseFlow(await fixture("ordinary"), "ordinary");
 		const result = await new FlowCoordinator(
 			flow,
 			store,
@@ -137,7 +137,7 @@ describe("FlowCoordinator", () => {
 			{ result: "通过", content: "approved" },
 		]);
 		const store = new InMemoryRunStore();
-		const flow = parseFlow(await fixture("gate-loop.md"), "gate-loop.md");
+		const flow = parseFlow(await fixture("gate-loop"), "gate-loop");
 		const result = await new FlowCoordinator(
 			flow,
 			store,
@@ -157,7 +157,7 @@ describe("FlowCoordinator", () => {
 			{ result: "已完成", content: "done" },
 		]);
 		const store = new InMemoryRunStore();
-		const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+		const flow = parseFlow(await fixture("ordinary"), "ordinary");
 		await store.createRun({
 			id: "interrupted-run",
 			flowId: flow.id,
@@ -168,7 +168,7 @@ describe("FlowCoordinator", () => {
 			sequence: 1,
 			historyCompleteness: "legacy",
 			startedAt: "2026-01-01T00:00:00.000Z",
-			flowPath: "/flows/ordinary.md",
+			flowPath: "/flows/ordinary/FLOW.md",
 			cwd: "/work",
 			sessionReference: "saved-pi-session",
 			currentNodeRef: "analyze",
@@ -207,8 +207,8 @@ describe("FlowCoordinator", () => {
 		const commands = new FakeCommandExecutor();
 		const store = new InMemoryRunStore();
 		const flow = parseFlow(
-			await fixture("command-parallel.md"),
-			"command-parallel.md",
+			await fixture("command-parallel"),
+			"command-parallel",
 		);
 		const result = await new FlowCoordinator(
 			flow,

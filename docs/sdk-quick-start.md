@@ -21,8 +21,8 @@ SDK 的核心是一次组装：
 
 | 组装件 | 职责 | 常用实现 |
 | --- | --- | --- |
-| `loadFlow(path)` | 加载单文件或目录包，返回定义、入口路径和包资源上下文 | CLI 和 SDK 的文件入口 |
-| `parseFlow(markdown, filename)` | 把 Flow Markdown 解析为 `FlowDefinition` | 纯函数，适合内存中的 Markdown |
+| `loadFlow(path)` | 加载包目录或`FLOW.md`，返回定义、入口路径和包资源上下文 | CLI 和 SDK 的文件入口 |
+| `parseFlow(markdown, id)` | 把内存中的 Flow Markdown 解析为 `FlowDefinition` | 纯函数，调用方显式提供标识 |
 | `RunStore` | 保存 Flow 运行和节点访问记录 | `InMemoryRunStore`、`JsonFileRunStore` |
 | `AgentRunModel` | 按运行维护 Agent 绑定，执行 Agent 节点 | 构造时传入一个 `AgentIntegrationAdapter` |
 | `FlowCoordinator` | 解释结果边，推动节点流转 | 构造时组合前三者 |
@@ -95,7 +95,7 @@ flowchart TD
 任务已结束。
 `;
 
-const flow = parseFlow(markdown, "demo.md");
+const flow = parseFlow(markdown, "demo");
 
 const fakeAdapter: AgentIntegrationAdapter = {
 	async createAgent({ runId }) {
@@ -146,8 +146,8 @@ import {
 } from "@jhihjian/agent-flow-runtime";
 
 const flow = parseFlow(
-	await readFile("./.flows/code-change.md", "utf8"),
-	"code-change.md",
+	await readFile("./.flows/code-change/FLOW.md", "utf8"),
+	"code-change",
 );
 
 const adapter = new PiAgentIntegrationAdapter({ cwd: process.cwd() });
@@ -203,9 +203,9 @@ const resumed = await coordinator.resume(runId, {
 
 | 分类 | 导出 | 用途 |
 | --- | --- | --- |
-| 解析 | `parseFlow(markdown, filename?)` | 解析 Flow Markdown，抛出 `FlowSyntaxError` |
-| 解析 | `loadFlow(path)` | 加载单文件、Flow 包目录或`FLOW.md`入口 |
-| 解析 | `FlowDirectory` | 按目录发现和加载 Flow 文件 |
+| 解析 | `parseFlow(markdown, id)` | 解析内存 Flow Markdown，抛出 `FlowSyntaxError` |
+| 解析 | `loadFlow(path)` | 加载 Flow 包目录或`FLOW.md`入口 |
+| 解析 | `FlowDirectory` | 递归发现和加载 Flow 包 |
 | 运行时 | `FlowCoordinator` | 解释结果边，`run` 启动，`resume` 恢复 |
 | 运行时 | `AgentRunModel` | 维护 Agent 绑定，执行 Agent 节点 |
 | 运行时 | `InMemoryRunStore` / `JsonFileRunStore` | 运行记录的内存与 JSON 文件存储 |

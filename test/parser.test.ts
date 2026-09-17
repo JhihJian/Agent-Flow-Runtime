@@ -8,11 +8,11 @@ import {
 } from "../src/parser.ts";
 
 const fixture = (name: string) =>
-	readFile(join(import.meta.dirname, "fixtures", name), "utf8");
+	readFile(join(import.meta.dirname, "fixtures", name, "FLOW.md"), "utf8");
 
 describe("parseFlow", () => {
 	it("parses ordinary results and destinations", async () => {
-		const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+		const flow = parseFlow(await fixture("ordinary"), "ordinary");
 		expect(flow.startNodeRef).toBe("analyze");
 		expect(flow.nodes.get("analyze")?.successors.get("已分析")).toEqual({
 			kind: "node",
@@ -24,7 +24,7 @@ describe("parseFlow", () => {
 	});
 
 	it("accepts a gate loop", async () => {
-		const flow = parseFlow(await fixture("gate-loop.md"), "gate-loop.md");
+		const flow = parseFlow(await fixture("gate-loop"), "gate-loop");
 		expect(flow.nodes.get("review")?.successors.get("返工")).toEqual({
 			kind: "node",
 			ref: "review",
@@ -33,8 +33,8 @@ describe("parseFlow", () => {
 
 	it("recognizes parallel branches, join, and branch result references", async () => {
 		const flow = parseFlow(
-			await fixture("command-parallel.md"),
-			"command-parallel.md",
+			await fixture("command-parallel"),
+			"command-parallel",
 		);
 		expect(flow.parallels.get("parallel")).toMatchObject({
 			branches: ["test", "lint"],
@@ -63,10 +63,10 @@ describe("parseFlow", () => {
 	});
 
 	it("rejects a command node without the fixed result", async () => {
-		const source = (await fixture("ordinary.md"))
+		const source = (await fixture("ordinary"))
 			.replace("```新建Agent", "```执行自定义命令")
 			.replace("分析任务：\n{outcome}", '{"command":"echo"}')
 			.replace("### 已分析", "### 其他结果");
-		expect(() => parseFlow(source, "invalid.md")).toThrow(FlowSyntaxError);
+		expect(() => parseFlow(source, "invalid")).toThrow(FlowSyntaxError);
 	});
 });

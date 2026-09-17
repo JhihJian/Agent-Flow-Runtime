@@ -28,7 +28,7 @@ import type {
 } from "../src/types.ts";
 
 const fixture = (name: string) =>
-	readFile(join(import.meta.dirname, "fixtures", name), "utf8");
+	readFile(join(import.meta.dirname, "fixtures", name, "FLOW.md"), "utf8");
 
 /** 最小 Agent 适配器，按预设顺序提交节点结果。 */
 class SequencedAdapter implements AgentIntegrationAdapter {
@@ -155,10 +155,7 @@ test("FlowCoordinator 将运行 cwd 传递给命令节点请求", async () => {
 		{ result: "通过", content: "approved" },
 	]);
 	const commands = new RecordingCommandExecutor();
-	const flow = parseFlow(
-		await fixture("command-parallel.md"),
-		"command-parallel.md",
-	);
+	const flow = parseFlow(await fixture("command-parallel"), "command-parallel");
 	const result = await new FlowCoordinator(
 		flow,
 		new InMemoryRunStore(),
@@ -253,7 +250,7 @@ test("多会话并发且缺少会话上下文时拒绝猜测归属", async () =>
 });
 
 test("运行事实保存 Flow 指纹、节点顺序和每次路由决定", async () => {
-	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const flow = parseFlow(await fixture("ordinary"), "ordinary");
 	const store = new InMemoryRunStore();
 	const run = await new FlowCoordinator(
 		flow,
@@ -292,10 +289,7 @@ test("运行事实保存 Flow 指纹、节点顺序和每次路由决定", async
 });
 
 test("命令非零退出仍是已完成业务结果并继续路由", async () => {
-	const flow = parseFlow(
-		await fixture("command-parallel.md"),
-		"command-parallel.md",
-	);
+	const flow = parseFlow(await fixture("command-parallel"), "command-parallel");
 	const commands: CommandExecutor = {
 		async execute(request) {
 			return {
@@ -347,7 +341,7 @@ test("命令非零退出仍是已完成业务结果并继续路由", async () =>
 });
 
 test("Agent 执行异常同时终结 NodeRun 和 Run", async () => {
-	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const flow = parseFlow(await fixture("ordinary"), "ordinary");
 	const store = new InMemoryRunStore();
 	const publisher = new FlowObservationPublisher();
 	const events: FlowObservationEvent[] = [];
@@ -391,7 +385,7 @@ test("Agent 执行异常同时终结 NodeRun 和 Run", async () => {
 });
 
 test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async () => {
-	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const flow = parseFlow(await fixture("ordinary"), "ordinary");
 	const store = new InMemoryRunStore();
 	await store.createRun({
 		id: "recoverable-run",
@@ -442,7 +436,7 @@ test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async
 test("JSON Store 持久化全部事实并将旧快照标记为 legacy", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "flow-facts-"));
 	const file = join(directory, "runs.json");
-	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const flow = parseFlow(await fixture("ordinary"), "ordinary");
 	const store = new JsonFileRunStore(file);
 	const run = await new FlowCoordinator(
 		flow,
@@ -494,10 +488,7 @@ test("JSON Store 持久化全部事实并将旧快照标记为 legacy", async ()
 });
 
 test("Inspector 用同一份投影还原普通路径、路由和并行轮次", async () => {
-	const flow = parseFlow(
-		await fixture("command-parallel.md"),
-		"command-parallel.md",
-	);
+	const flow = parseFlow(await fixture("command-parallel"), "command-parallel");
 	const store = new InMemoryRunStore();
 	const run = await new FlowCoordinator(
 		flow,
@@ -541,7 +532,7 @@ test("Inspector 用同一份投影还原普通路径、路由和并行轮次", a
 });
 
 test("Inspector 按 Run 校验 NodeRun，并按权限读取 Agent 证据", async () => {
-	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const flow = parseFlow(await fixture("ordinary"), "ordinary");
 	const store = new InMemoryRunStore();
 	const run = await new FlowCoordinator(
 		flow,
@@ -587,7 +578,7 @@ test("Inspector 按 Run 校验 NodeRun，并按权限读取 Agent 证据", async
 });
 
 test("Coordinator 在事实保存成功后发布普通路径事件", async () => {
-	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const flow = parseFlow(await fixture("ordinary"), "ordinary");
 	const events: FlowObservationEvent[] = [];
 	const publisher = new FlowObservationPublisher();
 	const subscription = publisher.subscribe("event-run", (event) => {
@@ -683,10 +674,7 @@ test("观测历史优先展示持久化的节点名称，并兼容旧记录", as
 });
 
 test("并行事件带有独立轮次引用，订阅者异常不影响 Run", async () => {
-	const flow = parseFlow(
-		await fixture("command-parallel.md"),
-		"command-parallel.md",
-	);
+	const flow = parseFlow(await fixture("command-parallel"), "command-parallel");
 	const errors: unknown[] = [];
 	const events: FlowObservationEvent[] = [];
 	const publisher = new FlowObservationPublisher({
@@ -732,7 +720,7 @@ test("RunStore 保存失败时不会发布未保存的节点成功事件", async
 			return super.commit(fact);
 		}
 	}
-	const flow = parseFlow(await fixture("ordinary.md"), "ordinary.md");
+	const flow = parseFlow(await fixture("ordinary"), "ordinary");
 	const publisher = new FlowObservationPublisher();
 	const events: FlowObservationEvent[] = [];
 	publisher.subscribe("failed-save", (event) => events.push(event));

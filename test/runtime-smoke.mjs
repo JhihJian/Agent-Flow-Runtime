@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { FlowDirectory } from "../dist/directory.js";
-import { parseFlow } from "../dist/parser.js";
+import { loadFlow } from "../dist/flow-loader.js";
 import { PiAgentIntegrationAdapter } from "../dist/pi.js";
 import {
 	AgentRunModel,
@@ -71,24 +72,21 @@ class FakeCommandExecutor {
 }
 
 async function fixture(name) {
-	return parseFlow(
-		await readFile(join(import.meta.dirname, "fixtures", name), "utf8"),
-		name,
-	);
+	return (await loadFlow(join(import.meta.dirname, "fixtures", name))).flow;
 }
 
 test("parses ordinary routing, a gate loop, and a command join", async () => {
-	const ordinary = await fixture("ordinary.md");
+	const ordinary = await fixture("ordinary");
 	assert.equal(ordinary.startNodeRef, "analyze");
 	assert.deepEqual(ordinary.nodes.get("finishNode").successors.get("已完成"), {
 		kind: "finish",
 	});
-	const loop = await fixture("gate-loop.md");
+	const loop = await fixture("gate-loop");
 	assert.deepEqual(loop.nodes.get("review").successors.get("返工"), {
 		kind: "node",
 		ref: "review",
 	});
-	const parallel = await fixture("command-parallel.md");
+	const parallel = await fixture("command-parallel");
 	assert.deepEqual(parallel.parallels.get("parallel"), {
 		ref: "parallel",
 		branches: ["test", "lint"],
@@ -96,7 +94,7 @@ test("parses ordinary routing, a gate loop, and a command join", async () => {
 	});
 });
 
-test("discovers reusable Flow files by filename identifier", async () => {
+test("discovers reusable Flow packages by directory identifier", async () => {
 	const directory = new FlowDirectory(join(import.meta.dirname, "fixtures"));
 	assert.deepEqual(
 		(await directory.list()).map((flow) => flow.id),
@@ -105,14 +103,29 @@ test("discovers reusable Flow files by filename identifier", async () => {
 	assert.equal((await directory.load("ordinary")).name, "普通流转");
 });
 
-test("runs the simplify flow through a self-gated loop", async () => {
-	const simplify = parseFlow(
-		await readFile(
-			join(import.meta.dirname, "..", "examples", "simplify.md"),
-			"utf8",
-		),
-		"simplify.md",
+test("discovers nested Flow packages and ignores resource directories", async () => {
+	const root = await mkdtemp(join(tmpdir(), "flow-directory-"));
+	const fixturePath = join(import.meta.dirname, "fixtures", "ordinary");
+	await mkdir(join(root, "group"), { recursive: true });
+	await mkdir(join(root, "references"), { recursive: true });
+	await cp(fixturePath, join(root, "group", "ordinary"), {
+		recursive: true,
+	});
+	await cp(fixturePath, join(root, "references", "ignored"), {
+		recursive: true,
+	});
+
+	const directory = new FlowDirectory(root);
+	assert.deepEqual(
+		(await directory.list()).map((flow) => flow.id),
+		["ordinary"],
 	);
+});
+
+test("runs the simplify flow through a self-gated loop", async () => {
+	const simplify = (
+		await loadFlow(join(import.meta.dirname, "..", "examples", "simplify"))
+	).flow;
 	assert.deepEqual(simplify.nodes.get("simplify").successors.get("已精简"), {
 		kind: "node",
 		ref: "simplify",
@@ -137,7 +150,7 @@ test("runs the simplify flow through a self-gated loop", async () => {
 });
 
 test("coordinates parallel commands and persists every node visit", async () => {
-	const flow = await fixture("command-parallel.md");
+	const flow = await fixture("command-parallel");
 	const adapter = new FakeAdapter([
 		{ result: "执行检查", content: "check" },
 		{ result: "通过", content: "approved" },
@@ -165,7 +178,7 @@ test("coordinates parallel commands and persists every node visit", async () => 
 });
 
 test("records repeated gate visits independently", async () => {
-	const flow = await fixture("gate-loop.md");
+	const flow = await fixture("gate-loop");
 	const store = new InMemoryRunStore();
 	const run = await new FlowCoordinator(
 		flow,
@@ -184,7 +197,7 @@ test("records repeated gate visits independently", async () => {
 });
 
 test("resumes an interrupted new-agent node in its persisted Pi session", async () => {
-	const flow = await fixture("ordinary.md");
+	const flow = await fixture("ordinary");
 	const adapter = new FakeAdapter([
 		{ result: "已分析", content: "analysis" },
 		{ result: "已完成", content: "done" },
@@ -196,7 +209,7 @@ test("resumes an interrupted new-agent node in its persisted Pi session", async 
 		task: "task",
 		status: "running",
 		startedAt: "2026-01-01T00:00:00.000Z",
-		flowPath: "/flows/ordinary.md",
+		flowPath: "/flows/ordinary/FLOW.md",
 		cwd: "/work",
 		sessionReference: "saved-pi-session",
 		currentNodeRef: "analyze",
@@ -224,7 +237,7 @@ test("resumes an interrupted new-agent node in its persisted Pi session", async 
 });
 
 test("routes a completed checkpoint without re-executing its node", async () => {
-	const flow = await fixture("ordinary.md");
+	const flow = await fixture("ordinary");
 	const adapter = new FakeAdapter([{ result: "已完成", content: "done" }]);
 	const store = new InMemoryRunStore();
 	await store.createRun({
@@ -260,7 +273,7 @@ test("routes a completed checkpoint without re-executing its node", async () => 
 });
 
 test("reuses completed parallel branches and restores their join inputs", async () => {
-	const flow = await fixture("command-parallel.md");
+	const flow = await fixture("command-parallel");
 	const adapter = new FakeAdapter([{ result: "通过", content: "approved" }]);
 	const commands = new FakeCommandExecutor();
 	const store = new InMemoryRunStore();
@@ -309,7 +322,7 @@ test("reuses completed parallel branches and restores their join inputs", async 
 });
 
 test("fails an interrupted custom command instead of replaying its side effect", async () => {
-	const flow = await fixture("command-parallel.md");
+	const flow = await fixture("command-parallel");
 	const commands = new FakeCommandExecutor();
 	const store = new InMemoryRunStore();
 	await store.createRun({
@@ -349,7 +362,7 @@ test("fails an interrupted custom command instead of replaying its side effect",
 });
 
 test("does not start other parallel branches when one command was interrupted", async () => {
-	const flow = await fixture("command-parallel.md");
+	const flow = await fixture("command-parallel");
 	const commands = new FakeCommandExecutor();
 	const store = new InMemoryRunStore();
 	await store.createRun({

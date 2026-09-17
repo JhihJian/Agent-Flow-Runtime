@@ -127,7 +127,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 	};
 
 	pi.registerFlag("flow", {
-		description: "Run a Markdown Flow file",
+		description: "Run a Flow package directory or FLOW.md entry",
 		type: "string",
 	});
 	pi.registerTool(
@@ -262,7 +262,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("flow", {
-		description: "Run or inspect a Flow: /flow run <file> <task>",
+		description: "Run or inspect a Flow: /flow run <package|FLOW.md> <task>",
 		handler: async (args, ctx) => {
 			bindContext(ctx);
 			const show = /^show\s+(\S+)$/.exec(args.trim());
@@ -286,7 +286,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 			}
 			const match = /^run\s+(\S+)\s+([\s\S]+)$/.exec(args.trim());
 			if (!match) {
-				ctx.ui.notify("用法: /flow run <文件> <任务>", "warning");
+				ctx.ui.notify("用法: /flow run <包目录或FLOW.md> <任务>", "warning");
 				return;
 			}
 			await startFlow(match[1], match[2], ctx);

@@ -19,19 +19,19 @@ import type {
 const PACKAGE_ENTRY = "FLOW.md";
 const REFERENCE_LINK = /(\[[^\]]*\]\()(references\/[^)\s]+)(\))/g;
 
-/**
- * Loads either a V1 Markdown file or a directory-based Flow package.
- * Directory packages have a fixed FLOW.md entry and use their directory name as ID.
- */
+/** Loads a Flow package directory or its fixed FLOW.md entry. */
 export async function loadFlow(path: string): Promise<LoadedFlow> {
 	const sourcePath = isAbsolute(path) ? path : resolve(path);
 	const source = await stat(sourcePath).catch((error) => {
 		throw new Error(
-			`无法读取 Flow 路径 ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`,
+			`无法读取 Flow 包 ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`,
 		);
 	});
 	if (!source.isDirectory() && !source.isFile()) {
-		throw new Error(`Flow 路径必须是文件或目录: ${sourcePath}`);
+		throw new Error(`Flow 包路径必须是目录或 ${PACKAGE_ENTRY}: ${sourcePath}`);
+	}
+	if (source.isFile() && basename(sourcePath) !== PACKAGE_ENTRY) {
+		throw new Error(`Flow 包入口必须命名为 ${PACKAGE_ENTRY}: ${sourcePath}`);
 	}
 	const entryPath = source.isDirectory()
 		? join(sourcePath, PACKAGE_ENTRY)
@@ -41,32 +41,23 @@ export async function loadFlow(path: string): Promise<LoadedFlow> {
 			`Flow 包缺少入口 ${PACKAGE_ENTRY}: ${entryPath} (${error instanceof Error ? error.message : String(error)})`,
 		);
 	});
-	if (!entry.isFile()) throw new Error(`Flow 入口必须是文件: ${entryPath}`);
+	if (!entry.isFile()) throw new Error(`Flow 包入口必须是文件: ${entryPath}`);
 
-	const packageRoot =
-		source.isDirectory() ||
-		(basename(entryPath) === PACKAGE_ENTRY &&
-			(await hasPackageDirectories(dirname(entryPath))))
-			? await realpath(dirname(entryPath))
-			: undefined;
-	const normalizedEntryPath = packageRoot
-		? await realpath(entryPath)
-		: entryPath;
-	if (packageRoot && !isInside(packageRoot, normalizedEntryPath)) {
+	const packageRoot = await realpath(dirname(entryPath));
+	const normalizedEntryPath = await realpath(entryPath);
+	if (!isInside(packageRoot, normalizedEntryPath)) {
 		throw new Error(`Flow 包入口不能位于包根之外: ${entryPath}`);
 	}
 	const flow = parseFlow(
 		await readFile(normalizedEntryPath, "utf8"),
-		normalizedEntryPath,
-		packageRoot ? basename(packageRoot) : undefined,
+		basename(packageRoot),
 	);
-	const resourcePaths = packageRoot
-		? await validatePackageResources(flow, packageRoot)
-		: undefined;
-	const resources = packageRoot
-		? { packageRoot, resourcePaths: resourcePaths ?? new Map() }
-		: undefined;
-	return { flow, path: normalizedEntryPath, resources };
+	const resourcePaths = await validatePackageResources(flow, packageRoot);
+	return {
+		flow,
+		path: normalizedEntryPath,
+		resources: { packageRoot, resourcePaths },
+	};
 }
 
 /** Rewrites package-local reference links to paths an Agent can read. */
@@ -182,14 +173,6 @@ function isResourcePath(
 	return segments.every(
 		(segment) => segment.length > 0 && segment !== "." && segment !== "..",
 	);
-}
-
-async function hasPackageDirectories(root: string): Promise<boolean> {
-	for (const name of ["references", "scripts"]) {
-		const entry = await stat(join(root, name)).catch(() => undefined);
-		if (entry?.isDirectory()) return true;
-	}
-	return false;
 }
 
 function isInside(root: string, target: string): boolean {

@@ -15,15 +15,15 @@
 
 ## [src/directory.ts](../src/directory.ts)
 
-依赖：`node:fs/promises`、`node:path`、`./parser.ts`、`./types.ts`
+依赖：`node:fs/promises`、`node:path`、`./flow-loader.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
 | `FlowListing` | 接口 | 是 | [src/directory.ts:6-11](../src/directory.ts#L6) |
-| `FlowDirectory` | 类 | 是 | [src/directory.ts:14-49](../src/directory.ts#L14) |
+| `FlowDirectory` | 类 | 是 | [src/directory.ts:14-68](../src/directory.ts#L14) |
 | `FlowDirectory.list` | 方法 | 是 | [src/directory.ts:21-38](../src/directory.ts#L21) |
-| `FlowDirectory.load` | 方法 | 是 | [src/directory.ts:40-44](../src/directory.ts#L40) |
-| `FlowDirectory.loadPath` | 方法 | 否 | [src/directory.ts:46-48](../src/directory.ts#L46) |
+| `FlowDirectory.load` | 方法 | 是 | [src/directory.ts:40-46](../src/directory.ts#L40) |
+| `FlowDirectory.discover` | 方法 | 否 | [src/directory.ts:48-67](../src/directory.ts#L48) |
 
 ## [src/extension.ts](../src/extension.ts)
 
@@ -43,16 +43,15 @@
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `loadFlow` | 函数 | 是 | [src/flow-loader.ts:26-70](../src/flow-loader.ts#L26) |
-| `resolvePromptResources` | 函数 | 是 | [src/flow-loader.ts:73-83](../src/flow-loader.ts#L73) |
-| `resolveCommandResources` | 函数 | 是 | [src/flow-loader.ts:86-99](../src/flow-loader.ts#L86) |
-| `validatePackageResources` | 函数 | 否 | [src/flow-loader.ts:101-129](../src/flow-loader.ts#L101) |
-| `validateResource` | 函数 | 否 | [src/flow-loader.ts:131-152](../src/flow-loader.ts#L131) |
-| `resolveResource` | 函数 | 否 | [src/flow-loader.ts:154-162](../src/flow-loader.ts#L154) |
-| `resourcePath` | 函数 | 否 | [src/flow-loader.ts:164-174](../src/flow-loader.ts#L164) |
-| `isResourcePath` | 函数 | 否 | [src/flow-loader.ts:176-185](../src/flow-loader.ts#L176) |
-| `hasPackageDirectories` | 函数 | 否 | [src/flow-loader.ts:187-193](../src/flow-loader.ts#L187) |
-| `isInside` | 函数 | 否 | [src/flow-loader.ts:195-198](../src/flow-loader.ts#L195) |
+| `loadFlow` | 函数 | 是 | [src/flow-loader.ts:23-61](../src/flow-loader.ts#L23) |
+| `resolvePromptResources` | 函数 | 是 | [src/flow-loader.ts:64-74](../src/flow-loader.ts#L64) |
+| `resolveCommandResources` | 函数 | 是 | [src/flow-loader.ts:77-90](../src/flow-loader.ts#L77) |
+| `validatePackageResources` | 函数 | 否 | [src/flow-loader.ts:92-120](../src/flow-loader.ts#L92) |
+| `validateResource` | 函数 | 否 | [src/flow-loader.ts:122-143](../src/flow-loader.ts#L122) |
+| `resolveResource` | 函数 | 否 | [src/flow-loader.ts:145-153](../src/flow-loader.ts#L145) |
+| `resourcePath` | 函数 | 否 | [src/flow-loader.ts:155-165](../src/flow-loader.ts#L155) |
+| `isResourcePath` | 函数 | 否 | [src/flow-loader.ts:167-176](../src/flow-loader.ts#L167) |
+| `isInside` | 函数 | 否 | [src/flow-loader.ts:178-181](../src/flow-loader.ts#L178) |
 
 ## [src/index.ts](../src/index.ts)
 
@@ -98,31 +97,31 @@
 
 ## [src/parser.ts](../src/parser.ts)
 
-依赖：`node:path`、`./types.ts`
+依赖：`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `GraphEdge` | 接口 | 否 | [src/parser.ts:26-30](../src/parser.ts#L26) |
-| `ParsedSection` | 接口 | 否 | [src/parser.ts:32-35](../src/parser.ts#L32) |
-| `FlowSyntaxError` | 类 | 是 | [src/parser.ts:37-42](../src/parser.ts#L37) |
-| `parseFlow` | 函数 | 是 | [src/parser.ts:44-82](../src/parser.ts#L44) |
-| `parseMetadata` | 函数 | 否 | [src/parser.ts:84-109](../src/parser.ts#L84) |
-| `extractSingleMermaid` | 函数 | 否 | [src/parser.ts:111-119](../src/parser.ts#L111) |
-| `parseGraph` | 函数 | 否 | [src/parser.ts:121-161](../src/parser.ts#L121) |
-| `parseSections` | 函数 | 否 | [src/parser.ts:163-190](../src/parser.ts#L163) |
-| `parseAction` | 函数 | 否 | [src/parser.ts:192-207](../src/parser.ts#L192) |
-| `parseCommandAction` | 函数 | 否 | [src/parser.ts:209-251](../src/parser.ts#L209) |
-| `branchReferencesAreStandalone` | 函数 | 否 | [src/parser.ts:253-266](../src/parser.ts#L253) |
-| `referencesOnlyInStdin` | 函数 | 否 | [src/parser.ts:268-285](../src/parser.ts#L268) |
-| `parseResults` | 函数 | 否 | [src/parser.ts:287-307](../src/parser.ts#L287) |
-| `validateAndWireGraph` | 函数 | 否 | [src/parser.ts:309-371](../src/parser.ts#L309) |
-| `destination` | 函数 | 否 | [src/parser.ts:373-382](../src/parser.ts#L373) |
-| `validateParallel` | 函数 | 否 | [src/parser.ts:384-460](../src/parser.ts#L384) |
-| `validateReachability` | 函数 | 否 | [src/parser.ts:462-484](../src/parser.ts#L462) |
-| `groupEdges` | 函数 | 否 | [src/parser.ts:486-497](../src/parser.ts#L486) |
-| `matchIndex` | 函数 | 否 | [src/parser.ts:499-503](../src/parser.ts#L499) |
-| `isRecord` | 函数 | 否 | [src/parser.ts:505-507](../src/parser.ts#L505) |
-| `renderCommandRequest` | 函数 | 是 | [src/parser.ts:509-536](../src/parser.ts#L509) |
+| `GraphEdge` | 接口 | 否 | [src/parser.ts:25-29](../src/parser.ts#L25) |
+| `ParsedSection` | 接口 | 否 | [src/parser.ts:31-34](../src/parser.ts#L31) |
+| `FlowSyntaxError` | 类 | 是 | [src/parser.ts:36-41](../src/parser.ts#L36) |
+| `parseFlow` | 函数 | 是 | [src/parser.ts:43-77](../src/parser.ts#L43) |
+| `parseMetadata` | 函数 | 否 | [src/parser.ts:79-104](../src/parser.ts#L79) |
+| `extractSingleMermaid` | 函数 | 否 | [src/parser.ts:106-114](../src/parser.ts#L106) |
+| `parseGraph` | 函数 | 否 | [src/parser.ts:116-156](../src/parser.ts#L116) |
+| `parseSections` | 函数 | 否 | [src/parser.ts:158-185](../src/parser.ts#L158) |
+| `parseAction` | 函数 | 否 | [src/parser.ts:187-202](../src/parser.ts#L187) |
+| `parseCommandAction` | 函数 | 否 | [src/parser.ts:204-246](../src/parser.ts#L204) |
+| `branchReferencesAreStandalone` | 函数 | 否 | [src/parser.ts:248-261](../src/parser.ts#L248) |
+| `referencesOnlyInStdin` | 函数 | 否 | [src/parser.ts:263-280](../src/parser.ts#L263) |
+| `parseResults` | 函数 | 否 | [src/parser.ts:282-302](../src/parser.ts#L282) |
+| `validateAndWireGraph` | 函数 | 否 | [src/parser.ts:304-366](../src/parser.ts#L304) |
+| `destination` | 函数 | 否 | [src/parser.ts:368-377](../src/parser.ts#L368) |
+| `validateParallel` | 函数 | 否 | [src/parser.ts:379-455](../src/parser.ts#L379) |
+| `validateReachability` | 函数 | 否 | [src/parser.ts:457-479](../src/parser.ts#L457) |
+| `groupEdges` | 函数 | 否 | [src/parser.ts:481-492](../src/parser.ts#L481) |
+| `matchIndex` | 函数 | 否 | [src/parser.ts:494-498](../src/parser.ts#L494) |
+| `isRecord` | 函数 | 否 | [src/parser.ts:500-502](../src/parser.ts#L500) |
+| `renderCommandRequest` | 函数 | 是 | [src/parser.ts:504-531](../src/parser.ts#L504) |
 
 ## [src/pi.ts](../src/pi.ts)
 

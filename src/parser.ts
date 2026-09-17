@@ -1,4 +1,3 @@
-import { basename, extname } from "node:path";
 import type {
 	CommandAction,
 	CommandRequest,
@@ -41,12 +40,8 @@ export class FlowSyntaxError extends Error {
 	}
 }
 
-export function parseFlow(
-	markdown: string,
-	filename = "flow.md",
-	id = basename(filename, extname(filename)),
-): FlowDefinition {
-	if (!id) throw new FlowSyntaxError("Flow 文件必须有文件名标识");
+export function parseFlow(markdown: string, id: string): FlowDefinition {
+	if (!id) throw new FlowSyntaxError("Flow 必须有非空标识");
 	const metadata = parseMetadata(markdown);
 	const graph = parseGraph(extractSingleMermaid(markdown));
 	const sections = parseSections(markdown);

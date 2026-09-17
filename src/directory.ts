@@ -1,7 +1,7 @@
-import { readdir, readFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
-import { parseFlow } from "./parser.ts";
-import type { FlowDefinition } from "./types.ts";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { loadFlow } from "./flow-loader.ts";
+import type { FlowDefinition, LoadedFlow } from "./types.ts";
 
 export interface FlowListing {
 	id: string;
@@ -10,7 +10,7 @@ export interface FlowListing {
 	path: string;
 }
 
-/** Discovers and loads portable Flow files without owning runtime state. */
+/** Discovers directory-based Flow packages without owning runtime state. */
 export class FlowDirectory {
 	private readonly directory: string;
 
@@ -19,31 +19,50 @@ export class FlowDirectory {
 	}
 
 	async list(): Promise<FlowListing[]> {
-		const entries = await readdir(this.directory, { withFileTypes: true });
-		return await Promise.all(
-			entries
-				.filter((entry) => entry.isFile() && extname(entry.name) === ".md")
-				.sort((left, right) => left.name.localeCompare(right.name))
-				.map(async (entry) => {
-					const path = join(this.directory, entry.name);
-					const flow = await this.loadPath(path);
-					return {
-						id: flow.id,
-						name: flow.name,
-						description: flow.description,
-						path,
-					};
-				}),
-		);
+		const flows = await this.discover(this.directory);
+		const ids = new Set<string>();
+		return flows
+			.sort((left, right) => left.flow.id.localeCompare(right.flow.id))
+			.map((loaded) => {
+				if (ids.has(loaded.flow.id)) {
+					throw new Error(`发现重复 Flow 标识: ${loaded.flow.id}`);
+				}
+				ids.add(loaded.flow.id);
+				return {
+					id: loaded.flow.id,
+					name: loaded.flow.name,
+					description: loaded.flow.description,
+					path: loaded.path,
+				};
+			});
 	}
 
 	async load(id: string): Promise<FlowDefinition> {
-		if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id))
-			throw new Error(`无效 Flow 标识: ${id}`);
-		return this.loadPath(join(this.directory, `${id}.md`));
+		const listing = (await this.list()).find(
+			(candidate) => candidate.id === id,
+		);
+		if (!listing) throw new Error(`Flow 不存在: ${id}`);
+		return (await loadFlow(listing.path)).flow;
 	}
 
-	private async loadPath(path: string): Promise<FlowDefinition> {
-		return parseFlow(await readFile(path, "utf8"), basename(path));
+	private async discover(directory: string): Promise<LoadedFlow[]> {
+		const entries = await readdir(directory, { withFileTypes: true });
+		const flows: LoadedFlow[] = [];
+		for (const entry of entries.sort((left, right) =>
+			left.name.localeCompare(right.name),
+		)) {
+			if (!entry.isDirectory()) continue;
+			if (entry.name === "references" || entry.name === "scripts") continue;
+			const path = join(directory, entry.name);
+			const children = await readdir(path, { withFileTypes: true });
+			if (
+				children.some((child) => child.isFile() && child.name === "FLOW.md")
+			) {
+				flows.push(await loadFlow(path));
+				continue;
+			}
+			flows.push(...(await this.discover(path)));
+		}
+		return flows;
 	}
 }

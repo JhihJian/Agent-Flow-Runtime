@@ -67,7 +67,7 @@ export interface FlowResourceContext {
 export interface LoadedFlow {
 	flow: FlowDefinition;
 	path: string;
-	resources?: FlowResourceContext;
+	resources: FlowResourceContext;
 }
 
 export interface OutcomeOption {

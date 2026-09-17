@@ -74,7 +74,7 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 	const flowCommand = commands.get("flow");
 	assert.ok(flowCommand, "扩展应注册 /flow 命令");
 	await flowCommand(
-		`run ${resolve(import.meta.dirname, "fixtures", "ordinary.md")} 完成测试`,
+		`run ${resolve(import.meta.dirname, "fixtures", "ordinary", "FLOW.md")} 完成测试`,
 		oldContext.value,
 	);
 

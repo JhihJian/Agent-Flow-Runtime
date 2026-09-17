@@ -46,7 +46,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  A[接收 Flow 路径、任务和 Pi 上下文] --> B[loadFlow 识别单文件或包入口]
+  A[接收包目录或 FLOW.md、任务和 Pi 上下文] --> B[loadFlow 读取包入口]
   B --> C[创建 Pi 适配器、运行记录存储和协调器]
   C --> D{首节点动作}
   D -->|复用Agent| E[带当前会话引用运行]
@@ -58,7 +58,7 @@ flowchart TD
 ```text
 startFlow(路径, 任务, Pi上下文):
     拒绝已有正在运行的 Flow
-    loaded = loadFlow(路径)
+    loaded = loadFlow(包目录或 FLOW.md)
     flow = loaded.flow
     创建 PiAgentIntegrationAdapter、JsonFileRunStore、FlowCoordinator
     如果首节点是复用Agent:
@@ -75,7 +75,7 @@ startFlow(路径, 任务, Pi上下文):
 
 <!-- source-guide:parse-flow -->
 <!-- source-guide:location:parse-flow -->
-**源码：** [src/parser.ts:44-82](../src/parser.ts#L44)，`解析 Flow`
+**源码：** [src/parser.ts:43-77](../src/parser.ts#L43)，`解析 Flow`
 <!-- /source-guide:location:parse-flow -->
 
 ```mermaid
@@ -89,8 +89,8 @@ flowchart TD
 ```
 
 ```text
-parseFlow(Markdown, 文件名, 可选标识):
-    id = 采用可选标识，缺省时从文件名取得
+parseFlow(Markdown, 标识):
+    id = 采用调用方提供的标识
     metadata = 校验唯一且非空的 name、description
     graph = 解析唯一的 flowchart TD
     sections = 解析每个节点标题下的动作和结果说明
