@@ -26,6 +26,7 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | --- | --- |
 | [Pi Agent 集成适配器实现设计](pi-agent-integration-adapter-design.md) | 了解 Pi 会话、节点提示、结果提交和节点交互记录如何接入运行时。 |
 | [Pi Flow 启动入口设计](pi-flow-host-design.md) | 了解如何在 Pi TUI、无头命令和 RPC 中启动指定 Flow。 |
+| [Pi 上下文锚点复用设计](pi-context-anchor-design.md) | 了解如何从 Pi 会话树的已准备位置派生独立会话，复用项目认知与稳定请求前缀。 |
 
 Flow 文件保持通用，Pi 文档只描述 Pi 的会话和启动实现。
 
