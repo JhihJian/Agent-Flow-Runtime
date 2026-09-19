@@ -41,7 +41,7 @@ flowchart LR
 
 <!-- source-guide:start-flow -->
 <!-- source-guide:location:start-flow -->
-**源码：** [src/extension.ts:306-385](../src/extension.ts#L306)，`启动 Flow`
+**源码：** [src/extension.ts:385-464](../src/extension.ts#L385)，`启动 Flow`
 <!-- /source-guide:location:start-flow -->
 
 ```mermaid

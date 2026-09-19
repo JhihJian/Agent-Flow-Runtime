@@ -33,7 +33,7 @@ pi install /absolute/path/to/Agent-Flow-Runtime
 After publishing the package, install a versioned package through Pi:
 
 ```bash
-pi install npm:@jhihjian/agent-flow-runtime@0.1.1
+pi install npm:@jhihjian/agent-flow-runtime@0.1.2
 ```
 
 Pi discovers `src/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Core Pi packages and `typebox` are peers, while `yaml` is installed as the runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
@@ -137,9 +137,9 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
-- `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI candidate outcomes are accepted after `turn_end`, then the next node is queued as a follow-up prompt.
+- `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI outcomes are only confirmed at Pi's `agent_settled` boundary, after compaction, retries, and queued work have completed. While a Flow is active, `--flow-compaction-timeout-ms` defaults to `120000`; an expired or failed summary request writes a marked fallback summary while retaining Pi's recent context.
 
-The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/flow-new-session` command and Pi's `ctx.newSession()` API. The command has a distinct name so it does not conflict with Pi's built-in interactive `/new`. The Flow coordinator survives extension reload through process-level handoff state, and the next node prompt is sent only after the replacement session is ready. Session-bound UI and event publishing callbacks are rebound to the replacement context, so Flow completion never uses a stale context. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
+The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/flow-new-session` command and Pi's `ctx.newSession()` API. The command has a distinct name so it does not conflict with Pi's built-in interactive `/new`. A CLI outcome is first recorded by its tool call and is only committed after `agent_settled`; this ensures automatic compaction, retry, and queued-input handling complete before the coordinator routes or replaces a session. The transition rejects calls while Pi is still active instead of waiting on the active run. Session-bound UI and event publishing callbacks are rebound to the replacement context, so Flow completion never uses a stale context. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
 
 ## Development
 

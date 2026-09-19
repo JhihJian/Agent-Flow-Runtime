@@ -177,7 +177,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		pending.candidate = { outcome, content };
 	}
 
-	/** Called by the extension turn_end event after Pi has persisted the interaction entries. */
+	/** Called by agent_settled after Pi has finished compacting and draining queued work. */
 	async finalizeCliTurn(): Promise<void> {
 		const pending = this.pendingCli;
 		if (!pending?.candidate || pending.submitted) return;

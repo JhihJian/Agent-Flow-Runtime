@@ -57,10 +57,16 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		assert.ok(tool, "扩展应注册 Flow 结果工具");
 		return tool;
 	};
+	const nodePrompts: string[] = [];
 	const newContext = context("new.jsonl", async (prompt) => {
+		nodePrompts.push(prompt);
 		const outcome = prompt.includes("分析任务") ? "已分析" : "已完成";
 		await outcomeTool().execute("tool-call", { outcome, content: outcome });
 		await emit("turn_end");
+		if (outcome === "已分析") {
+			assert.equal(nodePrompts.length, 1, "下游节点不能在 turn_end 内启动");
+		}
+		await emit("agent_settled");
 	});
 	oldContext = context("old.jsonl", undefined, async (options) => {
 		oldContext.invalidate();
@@ -120,6 +126,10 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 				},
 				async waitForIdle() {
 					assertCurrent();
+				},
+				isIdle() {
+					assertCurrent();
+					return true;
 				},
 				async newSession(options: { withSession?: AsyncHandler }) {
 					assertCurrent();

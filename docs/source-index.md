@@ -27,15 +27,19 @@
 
 ## [src/extension.ts](../src/extension.ts)
 
-依赖：`node:crypto`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./flow-loader.ts`、`./observability.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`
+依赖：`node:crypto`、`node:path`、`@earendil-works/pi-coding-agent`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./flow-loader.ts`、`./observability.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:35-462](../src/extension.ts#L35) |
-| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:464-470](../src/extension.ts#L464) |
-| `flowEventMessage` | 函数 | 否 | [src/extension.ts:472-479](../src/extension.ts#L472) |
-| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:481-483](../src/extension.ts#L481) |
-| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:485-490](../src/extension.ts#L485) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:42-541](../src/extension.ts#L42) |
+| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:543-549](../src/extension.ts#L543) |
+| `flowEventMessage` | 函数 | 否 | [src/extension.ts:551-558](../src/extension.ts#L551) |
+| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:560-562](../src/extension.ts#L560) |
+| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:564-569](../src/extension.ts#L564) |
+| `awaitWithAbort` | 函数 | 否 | [src/extension.ts:571-587](../src/extension.ts#L571) |
+| `flowCompactionTimeoutMs` | 函数 | 否 | [src/extension.ts:589-595](../src/extension.ts#L589) |
+| `flowCompactionPrompt` | 函数 | 否 | [src/extension.ts:597-608](../src/extension.ts#L597) |
+| `fallbackCompaction` | 函数 | 否 | [src/extension.ts:610-633](../src/extension.ts#L610) |
 
 ## [src/flow-loader.ts](../src/flow-loader.ts)
 

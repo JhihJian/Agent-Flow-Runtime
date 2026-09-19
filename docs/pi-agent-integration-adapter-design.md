@@ -103,7 +103,7 @@ CLI 会话句柄保存 Pi Flow 扩展 API、当前`SessionManager`、会话身�
 - `submit_flow_outcome`工具的用途和参数。
 - 将该工具作为完成节点的最后动作调用的要求。
 
-Pi 在该提示下自行完成推理和工具调用。SDK 会话路径通过`prompt()`等待 Pi 的本次执行结束。CLI 会话路径通过 Pi Flow 扩展注入节点提示，在 Pi 的`turn_end`事件中确认结果工具已经完成并形成交互范围。两条路径都返回同一种节点结果和节点会话给统一 Agent 运行模型。
+Pi 在该提示下自行完成推理和工具调用。SDK 会话路径通过`prompt()`等待 Pi 的本次执行结束。CLI 会话路径通过 Pi Flow 扩展注入节点提示，在结果工具调用时保存候选结果；扩展只在 Pi 的`agent_settled`事件中确认结果工具已经完成、自动 compact、重试和排队输入均已结算，并形成交互范围。两条路径都返回同一种节点结果和节点会话给统一 Agent 运行模型。
 
 ### 4.5 结果提交工具
 
@@ -114,7 +114,7 @@ Pi 在该提示下自行完成推理和工具调用。SDK 会话路径通过`pro
 
 SDK 会话路径中，工具读取活动节点上下文、校验结果名，并将“节点执行引用、结果名、结果内容、会话引用和交互引用”传给`节点执行`请求中的提交结果回调。回调返回接受结果后，工具调用 Pi 的终止能力并以`terminate: true`结束本轮执行。
 
-CLI 会话路径中，工具先保存候选结果并以`terminate: true`结束本轮执行。Pi Flow 扩展在`turn_end`事件中取得候选结果，完成交互范围记录后再调用提交结果回调。结果提交回调只确认本节点结果。后继节点由统一 Agent 运行模型在`节点执行`返回后交给流程运行协调器处理，下一节点提示以 Pi follow-up 消息排队。
+CLI 会话路径中，工具先保存候选结果并以`terminate: true`结束本轮执行。Pi Flow 扩展在`agent_settled`事件中取得候选结果，完成交互范围记录后再调用提交结果回调。`agent_settled`晚于`turn_end`、自动 compact、自动重试和排队输入清理，因此后继节点不会在当前 Agent 运行中创建新会话。结果提交回调只确认本节点结果。后继节点由统一 Agent 运行模型在`节点执行`返回后交给流程运行协调器处理，下一节点提示以 Pi follow-up 消息排队。
 
 一个节点上下文只接受第一次有效提交。提交工具设置为顺序执行，并在接受后中止当前 Pi 执行，保证本节点只形成一条结果提交事件。
 
@@ -133,7 +133,7 @@ sequenceDiagram
   S->>T: 调用结果提交工具
   T->>P: 保存并校验候选结果
   T-->>S: terminate: true
-  S->>P: turn_end
+  S->>P: agent_settled（compact、重试和排队输入已结算）
   P->>M: 提交结果回调
   M-->>P: 接受结果
   S-->>P: 节点执行完成
@@ -192,7 +192,7 @@ MVP 支持 SDK 内嵌会话的新建与恢复、Pi CLI 通过扩展注入`/flow-
 
 ## 10. 实现依据
 
-当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 路径通过扩展注册的`flow-new-session`命令接收注入的`/flow-new-session`，再调用`ctx.newSession()`创建清空上下文的新会话，并用进程级交接状态恢复节点执行，不会把`新建Agent`降级为复用旧会话。
+当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 路径通过扩展注册的`flow-new-session`命令接收注入的`/flow-new-session`，仅在 Pi 空闲时调用`ctx.newSession()`创建清空上下文的新会话，并用进程级交接状态恢复节点执行。活跃 Flow 的 compact 摘要使用`--flow-compaction-timeout-ms`（默认 120 秒）作为硬 deadline；模型请求失败、为空或超时会写入带 `flowCompactionFallback` 标记的降级摘要，保留近期消息而不阻塞 Flow。
 
 - [Pi SDK：AgentSession 与 SessionManager](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)
 - [Pi RPC 模式说明](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)
