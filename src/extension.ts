@@ -4,11 +4,6 @@ import { isAbsolute, join, resolve } from "node:path";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
-	SessionBeforeCompactEvent,
-} from "@earendil-works/pi-coding-agent";
-import {
-	convertToLlm,
-	serializeConversation,
 } from "@earendil-works/pi-coding-agent";
 import {
 	getCliFlowState,
@@ -35,8 +30,6 @@ import type {
 	FlowRunSummary,
 	UnifiedMessage,
 } from "./types.ts";
-
-const DEFAULT_FLOW_COMPACTION_TIMEOUT_MS = 120_000;
 
 /** Install with `pi install <package>` or load with `pi -e ./dist/extension.js`. */
 export default function flowExtension(pi: ExtensionAPI) {
@@ -136,12 +129,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 	pi.registerFlag("flow", {
 		description: "Run a Flow package directory or FLOW.md entry",
 		type: "string",
-	});
-	pi.registerFlag("flow-compaction-timeout-ms", {
-		description:
-			"Maximum milliseconds a Flow compaction summary may wait before using a fallback",
-		type: "string",
-		default: String(DEFAULT_FLOW_COMPACTION_TIMEOUT_MS),
 	});
 	pi.registerTool(
 		createFlowOutcomeTool({
@@ -268,67 +255,6 @@ export default function flowExtension(pi: ExtensionAPI) {
 		// outcome only after settlement prevents a new-session transition from waiting
 		// on the very agent run that is still delivering the turn_end event.
 		if (state.adapter) await state.adapter.finalizeCliTurn();
-	});
-
-	pi.on("session_before_compact", async (event, ctx) => {
-		if (!state.active) return;
-		const model = ctx.model;
-		if (!model)
-			return { compaction: fallbackCompaction(event, "missing_model") };
-
-		const timeoutMs = flowCompactionTimeoutMs(pi);
-		const deadline = AbortSignal.timeout(timeoutMs);
-		const signal = AbortSignal.any([event.signal, deadline]);
-		try {
-			const response = await awaitWithAbort(
-				ctx.modelRegistry.complete(
-					model,
-					{
-						messages: [
-							{
-								role: "user",
-								content: [{ type: "text", text: flowCompactionPrompt(event) }],
-								timestamp: Date.now(),
-							},
-						],
-					},
-					{
-						maxTokens: 8192,
-						signal,
-						cacheRetention: "none",
-						sessionId: randomUUID(),
-					},
-				),
-				signal,
-			);
-			const summary = response.content
-				.filter(
-					(part): part is { type: "text"; text: string } =>
-						part.type === "text",
-				)
-				.map((part) => part.text)
-				.join("\n")
-				.trim();
-			if (!summary)
-				return { compaction: fallbackCompaction(event, "empty_summary") };
-			return {
-				compaction: {
-					summary,
-					firstKeptEntryId: event.preparation.firstKeptEntryId,
-					tokensBefore: event.preparation.tokensBefore,
-					usage: response.usage,
-					details: { flowCompactionFallback: false },
-				},
-			};
-		} catch {
-			if (event.signal.aborted) return { cancel: true };
-			return {
-				compaction: fallbackCompaction(
-					event,
-					deadline.aborted ? "deadline_exceeded" : "summary_failed",
-				),
-			};
-		}
 	});
 
 	pi.on("input", async (event, ctx) => {
@@ -566,68 +492,4 @@ function formatRecentRuns(runs: FlowRunSummary[]): string {
 		"Recent Flow runs:",
 		...runs.map((run) => `- ${formatRunSummaryOption(run)}`),
 	].join("\n");
-}
-
-function awaitWithAbort<T>(
-	promise: Promise<T>,
-	signal: AbortSignal,
-): Promise<T> {
-	if (signal.aborted)
-		return Promise.reject(signal.reason ?? new Error("Operation aborted"));
-	return Promise.race([
-		promise,
-		new Promise<never>((_, reject) => {
-			signal.addEventListener(
-				"abort",
-				() => reject(signal.reason ?? new Error("Operation aborted")),
-				{ once: true },
-			);
-		}),
-	]);
-}
-
-function flowCompactionTimeoutMs(pi: ExtensionAPI): number {
-	const configured = pi.getFlag("flow-compaction-timeout-ms");
-	const value = typeof configured === "string" ? Number(configured) : NaN;
-	return Number.isInteger(value) && value >= 1_000 && value <= 3_600_000
-		? value
-		: DEFAULT_FLOW_COMPACTION_TIMEOUT_MS;
-}
-
-function flowCompactionPrompt(event: SessionBeforeCompactEvent): string {
-	const { messagesToSummarize, turnPrefixMessages, previousSummary } =
-		event.preparation;
-	const conversation = serializeConversation(
-		convertToLlm([...messagesToSummarize, ...turnPrefixMessages]),
-	);
-	return `Summarize this active Flow conversation so the same Agent can safely continue after context compaction.
-
-Preserve the task, completed node work, accepted Flow outcomes, pending work, important file paths, command results, errors, and next action. Do not execute the Flow or add facts. Use concise structured Markdown.
-
-${previousSummary ? `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n` : ""}<conversation>\n${conversation}\n</conversation>`;
-}
-
-function fallbackCompaction(
-	event: SessionBeforeCompactEvent,
-	reason:
-		| "missing_model"
-		| "empty_summary"
-		| "deadline_exceeded"
-		| "summary_failed",
-) {
-	const previous = event.preparation.previousSummary?.trim();
-	return {
-		summary: [
-			"## Flow Compaction Fallback",
-			"- The Flow summary request did not complete. Recent session messages are retained.",
-			`- Fallback reason: ${reason}.`,
-			"- Continue from the current Flow node and rely on its declared input and persisted Flow history.",
-			...(previous
-				? ["", "## Previous Summary", previous.slice(0, 12_000)]
-				: []),
-		].join("\n"),
-		firstKeptEntryId: event.preparation.firstKeptEntryId,
-		tokensBefore: event.preparation.tokensBefore,
-		details: { flowCompactionFallback: true, reason },
-	};
 }

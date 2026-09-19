@@ -192,7 +192,7 @@ MVP 支持 SDK 内嵌会话的新建与恢复、Pi CLI 通过扩展注入`/flow-
 
 ## 10. 实现依据
 
-当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 路径通过扩展注册的`flow-new-session`命令接收注入的`/flow-new-session`，仅在 Pi 空闲时调用`ctx.newSession()`创建清空上下文的新会话，并用进程级交接状态恢复节点执行。活跃 Flow 的 compact 摘要使用`--flow-compaction-timeout-ms`（默认 120 秒）作为硬 deadline；模型请求失败、为空或超时会写入带 `flowCompactionFallback` 标记的降级摘要，保留近期消息而不阻塞 Flow。
+当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 路径通过扩展注册的`flow-new-session`命令接收注入的`/flow-new-session`，仅在 Pi 空闲时调用`ctx.newSession()`创建清空上下文的新会话，并用进程级交接状态恢复节点执行。Flow 不覆写 Pi 的原生 compact 策略，也不以摘要超时作为日常调度条件；节点结果只在 Pi 的 compact、重试和排队输入均已结算后的`agent_settled`中确认。
 
 - [Pi SDK：AgentSession 与 SessionManager](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)
 - [Pi RPC 模式说明](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)

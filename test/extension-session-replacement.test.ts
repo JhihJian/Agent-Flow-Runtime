@@ -48,6 +48,11 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		},
 	};
 	flowExtension(pi as unknown as ExtensionAPI);
+	assert.equal(
+		events.has("session_before_compact"),
+		false,
+		"Flow Runtime 不应覆写 Pi 原生 compact",
+	);
 
 	let oldContext: ReturnType<typeof context>;
 	const outcomeTool = () => {
