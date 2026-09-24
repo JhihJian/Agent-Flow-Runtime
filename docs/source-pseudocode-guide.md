@@ -41,7 +41,7 @@ flowchart LR
 
 <!-- source-guide:start-flow -->
 <!-- source-guide:location:start-flow -->
-**源码：** [src/extension.ts:311-390](../src/extension.ts#L311)，`启动 Flow`
+**源码：** [src/extension.ts:318-397](../src/extension.ts#L318)，`启动 Flow`
 <!-- /source-guide:location:start-flow -->
 
 ```mermaid
@@ -281,7 +281,7 @@ SDK 模式在一次 `prompt` 返回后提交结果。CLI 模式必须等待 Pi �
 
 <!-- source-guide:finalize-cli-turn -->
 <!-- source-guide:location:finalize-cli-turn -->
-**源码：** [src/pi.ts:181-209](../src/pi.ts#L181)，`提交 CLI 节点结果`
+**源码：** [src/pi.ts:186-214](../src/pi.ts#L186)，`提交 CLI 节点结果`
 <!-- /source-guide:location:finalize-cli-turn -->
 
 ```mermaid
@@ -297,6 +297,10 @@ flowchart TD
 ```
 
 ```text
+session_before_compact:
+    如果当前 CLI 节点已有待确认的 Flow 结果候选，取消本次 compact
+    否则保留 Pi 原生 compact 行为
+
 finalizeCliTurn():
     没有候选结果或已提交时直接返回
     读取当前叶消息作为本次交互终点

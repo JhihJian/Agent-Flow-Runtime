@@ -48,10 +48,12 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		},
 	};
 	flowExtension(pi as unknown as ExtensionAPI);
+	const compactHandlers = events.get("session_before_compact") ?? [];
+	assert.equal(compactHandlers.length, 1, "Flow Runtime 应注册 compact 门禁");
 	assert.equal(
-		events.has("session_before_compact"),
-		false,
-		"Flow Runtime 不应覆写 Pi 原生 compact",
+		await compactHandlers[0]({ reason: "threshold" }, undefined),
+		undefined,
+		"没有待提交结果时应保留 Pi 原生 compact",
 	);
 
 	let oldContext: ReturnType<typeof context>;
@@ -67,6 +69,11 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		nodePrompts.push(prompt);
 		const outcome = prompt.includes("分析任务") ? "已分析" : "已完成";
 		await outcomeTool().execute("tool-call", { outcome, content: outcome });
+		assert.deepEqual(
+			await compactHandlers[0]({ reason: "threshold" }, newContext.value),
+			{ cancel: true },
+			"已有 Flow 结果候选时不得触发 compact",
+		);
 		await emit("turn_end");
 		if (outcome === "已分析") {
 			assert.equal(nodePrompts.length, 1, "下游节点不能在 turn_end 内启动");

@@ -257,6 +257,13 @@ export default function flowExtension(pi: ExtensionAPI) {
 		if (state.adapter) await state.adapter.finalizeCliTurn();
 	});
 
+	pi.on("session_before_compact", async () => {
+		// A Flow outcome is already the final action of this node. Compaction here
+		// only delays settlement and cannot improve the next node's context.
+		if (state.adapter?.hasPendingCliOutcome()) return { cancel: true };
+		return undefined;
+	});
+
 	pi.on("input", async (event, ctx) => {
 		bindContext(ctx);
 		if (event.source === "extension" || !state.configuredPath) {

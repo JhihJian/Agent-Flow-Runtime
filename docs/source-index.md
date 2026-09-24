@@ -31,11 +31,11 @@
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:35-467](../src/extension.ts#L35) |
-| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:469-475](../src/extension.ts#L469) |
-| `flowEventMessage` | 函数 | 否 | [src/extension.ts:477-484](../src/extension.ts#L477) |
-| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:486-488](../src/extension.ts#L486) |
-| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:490-495](../src/extension.ts#L490) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:35-474](../src/extension.ts#L35) |
+| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:476-482](../src/extension.ts#L476) |
+| `flowEventMessage` | 函数 | 否 | [src/extension.ts:484-491](../src/extension.ts#L484) |
+| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:493-495](../src/extension.ts#L493) |
+| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:497-502](../src/extension.ts#L497) |
 
 ## [src/flow-loader.ts](../src/flow-loader.ts)
 
@@ -134,27 +134,28 @@
 | `PendingCliNode` | 接口 | 否 | [src/pi.ts:35-40](../src/pi.ts#L35) |
 | `PiCliBridge` | 接口 | 是 | [src/pi.ts:42-51](../src/pi.ts#L42) |
 | `PiAgentAdapterOptions` | 接口 | 是 | [src/pi.ts:53-57](../src/pi.ts#L53) |
-| `PiAgentIntegrationAdapter` | 类 | 是 | [src/pi.ts:60-342](../src/pi.ts#L60) |
+| `PiAgentIntegrationAdapter` | 类 | 是 | [src/pi.ts:60-347](../src/pi.ts#L60) |
 | `PiAgentIntegrationAdapter.createAgent` | 方法 | 是 | [src/pi.ts:70-79](../src/pi.ts#L70) |
 | `PiAgentIntegrationAdapter.takeOverAgent` | 方法 | 是 | [src/pi.ts:81-105](../src/pi.ts#L81) |
 | `PiAgentIntegrationAdapter.executeNode` | 方法 | 是 | [src/pi.ts:107-140](../src/pi.ts#L107) |
 | `PiAgentIntegrationAdapter.getNodeSession` | 方法 | 是 | [src/pi.ts:142-157](../src/pi.ts#L142) |
 | `PiAgentIntegrationAdapter.releaseAgent` | 方法 | 是 | [src/pi.ts:159-167](../src/pi.ts#L159) |
 | `PiAgentIntegrationAdapter.submitCliOutcome` | 方法 | 是 | [src/pi.ts:170-178](../src/pi.ts#L170) |
-| `PiAgentIntegrationAdapter.finalizeCliTurn` | 方法 | 是 | [src/pi.ts:181-209](../src/pi.ts#L181) |
-| `PiAgentIntegrationAdapter.createSdkConnection` | 方法 | 否 | [src/pi.ts:211-234](../src/pi.ts#L211) |
-| `PiAgentIntegrationAdapter.createCliConnection` | 方法 | 否 | [src/pi.ts:236-245](../src/pi.ts#L236) |
-| `PiAgentIntegrationAdapter.executeCliNode` | 方法 | 否 | [src/pi.ts:247-269](../src/pi.ts#L247) |
-| `PiAgentIntegrationAdapter.flowOutcomeTool` | 方法 | 否 | [src/pi.ts:271-307](../src/pi.ts#L271) |
-| `PiAgentIntegrationAdapter.submitSdkOutcome` | 方法 | 否 | [src/pi.ts:309-324](../src/pi.ts#L309) |
-| `PiAgentIntegrationAdapter.resolvePending` | 方法 | 否 | [src/pi.ts:327-341](../src/pi.ts#L327) |
-| `createFlowOutcomeTool` | 函数 | 是 | [src/pi.ts:344-376](../src/pi.ts#L344) |
-| `createFlowInspectionTool` | 函数 | 是 | [src/pi.ts:379-405](../src/pi.ts#L379) |
-| `nodeSession` | 函数 | 否 | [src/pi.ts:407-417](../src/pi.ts#L407) |
-| `interactionReference` | 函数 | 否 | [src/pi.ts:419-424](../src/pi.ts#L419) |
-| `parseInteractionReference` | 函数 | 否 | [src/pi.ts:426-436](../src/pi.ts#L426) |
-| `messagesFromEntries` | 函数 | 否 | [src/pi.ts:438-466](../src/pi.ts#L438) |
-| `normalizeRole` | 函数 | 否 | [src/pi.ts:468-472](../src/pi.ts#L468) |
+| `PiAgentIntegrationAdapter.hasPendingCliOutcome` | 方法 | 是 | [src/pi.ts:181-183](../src/pi.ts#L181) |
+| `PiAgentIntegrationAdapter.finalizeCliTurn` | 方法 | 是 | [src/pi.ts:186-214](../src/pi.ts#L186) |
+| `PiAgentIntegrationAdapter.createSdkConnection` | 方法 | 否 | [src/pi.ts:216-239](../src/pi.ts#L216) |
+| `PiAgentIntegrationAdapter.createCliConnection` | 方法 | 否 | [src/pi.ts:241-250](../src/pi.ts#L241) |
+| `PiAgentIntegrationAdapter.executeCliNode` | 方法 | 否 | [src/pi.ts:252-274](../src/pi.ts#L252) |
+| `PiAgentIntegrationAdapter.flowOutcomeTool` | 方法 | 否 | [src/pi.ts:276-312](../src/pi.ts#L276) |
+| `PiAgentIntegrationAdapter.submitSdkOutcome` | 方法 | 否 | [src/pi.ts:314-329](../src/pi.ts#L314) |
+| `PiAgentIntegrationAdapter.resolvePending` | 方法 | 否 | [src/pi.ts:332-346](../src/pi.ts#L332) |
+| `createFlowOutcomeTool` | 函数 | 是 | [src/pi.ts:349-381](../src/pi.ts#L349) |
+| `createFlowInspectionTool` | 函数 | 是 | [src/pi.ts:384-410](../src/pi.ts#L384) |
+| `nodeSession` | 函数 | 否 | [src/pi.ts:412-422](../src/pi.ts#L412) |
+| `interactionReference` | 函数 | 否 | [src/pi.ts:424-429](../src/pi.ts#L424) |
+| `parseInteractionReference` | 函数 | 否 | [src/pi.ts:431-441](../src/pi.ts#L431) |
+| `messagesFromEntries` | 函数 | 否 | [src/pi.ts:443-471](../src/pi.ts#L443) |
+| `normalizeRole` | 函数 | 否 | [src/pi.ts:473-477](../src/pi.ts#L473) |
 
 ## [src/runtime.ts](../src/runtime.ts)
 

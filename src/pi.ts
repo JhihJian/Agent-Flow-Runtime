@@ -177,6 +177,11 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		pending.candidate = { outcome, content };
 	}
 
+	/** Flow 结果候选待确认时，禁止 Pi 在当前 turn 后压缩上下文。 */
+	hasPendingCliOutcome(): boolean {
+		return Boolean(this.pendingCli?.candidate && !this.pendingCli.submitted);
+	}
+
 	/** Called by agent_settled after Pi has finished compacting and draining queued work. */
 	async finalizeCliTurn(): Promise<void> {
 		const pending = this.pendingCli;
