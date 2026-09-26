@@ -1,6 +1,6 @@
 {
 	"name": "@jhihjian/agent-flow-runtime",
-	"version": "0.1.4",
+	"version": "0.2.0",
 	"description": "Portable Markdown Flow runtime and Pi extension",
 	"keywords": [
 		"pi-package",
