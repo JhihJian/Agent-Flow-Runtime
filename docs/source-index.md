@@ -218,7 +218,7 @@
 | `AgentRunModel.executeNode` | 方法 | 是 | [src/runtime.ts:466-523](../src/runtime.ts#L466) |
 | `AgentRunModel.getNodeSession` | 方法 | 是 | [src/runtime.ts:525-527](../src/runtime.ts#L525) |
 | `AgentRunModel.end` | 方法 | 是 | [src/runtime.ts:529-534](../src/runtime.ts#L529) |
-| `FlowCoordinator` | 类 | 是 | [src/runtime.ts:537-1864](../src/runtime.ts#L537) |
+| `FlowCoordinator` | 类 | 是 | [src/runtime.ts:537-1865](../src/runtime.ts#L537) |
 | `FlowCoordinator.run` | 方法 | 是 | [src/runtime.ts:575-618](../src/runtime.ts#L575) |
 | `FlowCoordinator.resume` | 方法 | 是 | [src/runtime.ts:621-632](../src/runtime.ts#L621) |
 | `FlowCoordinator.resumeRun` | 方法 | 否 | [src/runtime.ts:635-737](../src/runtime.ts#L635) |
@@ -238,27 +238,27 @@
 | `FlowCoordinator.enterParallel` | 方法 | 否 | [src/runtime.ts:1428-1475](../src/runtime.ts#L1428) |
 | `FlowCoordinator.completeRun` | 方法 | 否 | [src/runtime.ts:1477-1497](../src/runtime.ts#L1477) |
 | `FlowCoordinator.interruptNode` | 方法 | 否 | [src/runtime.ts:1499-1545](../src/runtime.ts#L1499) |
-| `FlowCoordinator.interruptActiveChildRuns` | 方法 | 否 | [src/runtime.ts:1548-1583](../src/runtime.ts#L1548) |
-| `FlowCoordinator.failInterruptedCommand` | 方法 | 否 | [src/runtime.ts:1585-1631](../src/runtime.ts#L1585) |
-| `FlowCoordinator.failNode` | 方法 | 否 | [src/runtime.ts:1633-1658](../src/runtime.ts#L1633) |
-| `FlowCoordinator.failRun` | 方法 | 否 | [src/runtime.ts:1660-1668](../src/runtime.ts#L1660) |
-| `FlowCoordinator.recordRecovery` | 方法 | 否 | [src/runtime.ts:1670-1692](../src/runtime.ts#L1670) |
-| `FlowCoordinator.requireParallelRound` | 方法 | 否 | [src/runtime.ts:1694-1710](../src/runtime.ts#L1694) |
-| `FlowCoordinator.destination` | 方法 | 否 | [src/runtime.ts:1712-1721](../src/runtime.ts#L1712) |
-| `FlowCoordinator.publishObservationChanges` | 方法 | 否 | [src/runtime.ts:1723-1805](../src/runtime.ts#L1723) |
-| `FlowCoordinator.publishObservation` | 方法 | 否 | [src/runtime.ts:1807-1836](../src/runtime.ts#L1807) |
-| `FlowCoordinator.commit` | 方法 | 否 | [src/runtime.ts:1838-1863](../src/runtime.ts#L1838) |
-| `FlowRuntimeError` | 类 | 否 | [src/runtime.ts:1866-1873](../src/runtime.ts#L1866) |
-| `now` | 函数 | 否 | [src/runtime.ts:1875-1877](../src/runtime.ts#L1875) |
-| `toFlowError` | 函数 | 否 | [src/runtime.ts:1879-1891](../src/runtime.ts#L1879) |
-| `fingerprintFlow` | 函数 | 否 | [src/runtime.ts:1893-1925](../src/runtime.ts#L1893) |
-| `normalizeRun` | 函数 | 否 | [src/runtime.ts:1927-1953](../src/runtime.ts#L1927) |
-| `normalizeNodeRun` | 函数 | 否 | [src/runtime.ts:1955-1966](../src/runtime.ts#L1955) |
-| `displayNodeName` | 函数 | 否 | [src/runtime.ts:1968-1972](../src/runtime.ts#L1968) |
-| `normalizeParallelRound` | 函数 | 否 | [src/runtime.ts:1974-1992](../src/runtime.ts#L1974) |
-| `renderAgentPrompt` | 函数 | 否 | [src/runtime.ts:1994-2006](../src/runtime.ts#L1994) |
-| `replaceObject` | 函数 | 否 | [src/runtime.ts:2008-2013](../src/runtime.ts#L2008) |
-| `clone` | 函数 | 否 | [src/runtime.ts:2015-2017](../src/runtime.ts#L2015) |
+| `FlowCoordinator.interruptActiveChildRuns` | 方法 | 否 | [src/runtime.ts:1548-1584](../src/runtime.ts#L1548) |
+| `FlowCoordinator.failInterruptedCommand` | 方法 | 否 | [src/runtime.ts:1586-1632](../src/runtime.ts#L1586) |
+| `FlowCoordinator.failNode` | 方法 | 否 | [src/runtime.ts:1634-1659](../src/runtime.ts#L1634) |
+| `FlowCoordinator.failRun` | 方法 | 否 | [src/runtime.ts:1661-1669](../src/runtime.ts#L1661) |
+| `FlowCoordinator.recordRecovery` | 方法 | 否 | [src/runtime.ts:1671-1693](../src/runtime.ts#L1671) |
+| `FlowCoordinator.requireParallelRound` | 方法 | 否 | [src/runtime.ts:1695-1711](../src/runtime.ts#L1695) |
+| `FlowCoordinator.destination` | 方法 | 否 | [src/runtime.ts:1713-1722](../src/runtime.ts#L1713) |
+| `FlowCoordinator.publishObservationChanges` | 方法 | 否 | [src/runtime.ts:1724-1806](../src/runtime.ts#L1724) |
+| `FlowCoordinator.publishObservation` | 方法 | 否 | [src/runtime.ts:1808-1837](../src/runtime.ts#L1808) |
+| `FlowCoordinator.commit` | 方法 | 否 | [src/runtime.ts:1839-1864](../src/runtime.ts#L1839) |
+| `FlowRuntimeError` | 类 | 否 | [src/runtime.ts:1867-1874](../src/runtime.ts#L1867) |
+| `now` | 函数 | 否 | [src/runtime.ts:1876-1878](../src/runtime.ts#L1876) |
+| `toFlowError` | 函数 | 否 | [src/runtime.ts:1880-1892](../src/runtime.ts#L1880) |
+| `fingerprintFlow` | 函数 | 否 | [src/runtime.ts:1894-1926](../src/runtime.ts#L1894) |
+| `normalizeRun` | 函数 | 否 | [src/runtime.ts:1928-1954](../src/runtime.ts#L1928) |
+| `normalizeNodeRun` | 函数 | 否 | [src/runtime.ts:1956-1967](../src/runtime.ts#L1956) |
+| `displayNodeName` | 函数 | 否 | [src/runtime.ts:1969-1973](../src/runtime.ts#L1969) |
+| `normalizeParallelRound` | 函数 | 否 | [src/runtime.ts:1975-1993](../src/runtime.ts#L1975) |
+| `renderAgentPrompt` | 函数 | 否 | [src/runtime.ts:1995-2007](../src/runtime.ts#L1995) |
+| `replaceObject` | 函数 | 否 | [src/runtime.ts:2009-2014](../src/runtime.ts#L2009) |
+| `clone` | 函数 | 否 | [src/runtime.ts:2016-2018](../src/runtime.ts#L2016) |
 
 ## [src/types.ts](../src/types.ts)
 

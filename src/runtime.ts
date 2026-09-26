@@ -1569,6 +1569,7 @@ export class FlowCoordinator {
 			next.status = "interrupted";
 			next.phase = "interrupted";
 			next.completedAt = now();
+			next.sequence = child.sequence + 1;
 			await this.store.commit({
 				run: next,
 				expectedSequence: child.sequence,

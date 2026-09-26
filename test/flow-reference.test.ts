@@ -21,7 +21,12 @@ import type {
 	CommandExecutor,
 	CommandRequest,
 	CommandResult,
+	FlowObservationEvent,
+	FlowObservationPublisherApi,
+	FlowObservationSubscription,
 	FlowPackage,
+	FlowRunRecord,
+	NodeRunRecord,
 	NodeSession,
 	OutcomeOption,
 	UnifiedMessage,
@@ -109,6 +114,16 @@ class FakeCommandExecutor implements CommandExecutor {
 	async execute(request: CommandRequest): Promise<CommandResult> {
 		this.requests.push(request);
 		return { status: "success", exitCode: 0, stdout: "ok", stderr: "" };
+	}
+}
+
+class RecordingPublisher implements FlowObservationPublisherApi {
+	readonly events: FlowObservationEvent[] = [];
+	publish(event: FlowObservationEvent): void {
+		this.events.push(event);
+	}
+	subscribe(): FlowObservationSubscription {
+		return { unsubscribe: () => undefined };
 	}
 }
 
@@ -741,6 +756,105 @@ test("崩溃窗口：子 Run 仍在运行，先递归恢复子 Run 再续接", a
 	});
 	assert.ok(adapter.takenOver.includes("child-session"));
 	assert.ok(adapter.executedOn.includes("child-session"));
+});
+
+test("父节点中断时活跃子 Run 被同步标记为 interrupted 且提交序号有效", async () => {
+	const store = new InMemoryRunStore();
+	const adapter = new FakeAdapter([]);
+	const commands = new FakeCommandExecutor();
+	const parent = packageOf(
+		parentNoEdge('{"flow": "release-check"}'),
+		"release",
+	);
+	const child = packageOf(CHILD_HAPPY, "release-check");
+	const registry = new Map([["release-check", child]]);
+
+	await store.createRun({
+		id: "parent-run",
+		flowId: "release",
+		flowVersion: "legacy:unknown",
+		task: "发布变更X",
+		status: "running",
+		phase: "executing_node",
+		sequence: 3,
+		historyCompleteness: "legacy",
+		startedAt: "2026-01-01T00:00:00.000Z",
+		currentNodeRef: "check",
+		currentInput: "变更X已准备",
+		currentNodeRunId: "nr-check",
+	});
+	await store.createNodeRun({
+		id: "nr-check",
+		runId: "parent-run",
+		sequence: 2,
+		nodeRef: "check",
+		nodeName: "执行发布检查",
+		actionKind: "执行Flow",
+		input: "变更X已准备",
+		status: "running",
+		startedAt: "2026-01-01T00:00:03.000Z",
+		childRunId: "child-run",
+		enteredFrom: { kind: "start" },
+	});
+	await store.createRun({
+		id: "child-run",
+		flowId: "release-check",
+		flowVersion: "legacy:unknown",
+		task: "变更X已准备",
+		status: "running",
+		phase: "executing_node",
+		sequence: 2,
+		historyCompleteness: "legacy",
+		startedAt: "2026-01-01T00:00:04.000Z",
+		currentNodeRef: "probe",
+		currentInput: "变更X已准备",
+		currentNodeRunId: "nr-probe",
+		parentRunId: "parent-run",
+		parentNodeRunId: "nr-check",
+	});
+	await store.createNodeRun({
+		id: "nr-probe",
+		runId: "child-run",
+		sequence: 2,
+		nodeRef: "probe",
+		nodeName: "执行检查",
+		actionKind: "新建Agent",
+		input: "变更X已准备",
+		status: "running",
+		startedAt: "2026-01-01T00:00:05.000Z",
+		enteredFrom: { kind: "start" },
+	});
+	const publisher = new RecordingPublisher();
+	const coordinator = new FlowCoordinator(
+		parent.flow,
+		store,
+		new AgentRunModel(adapter),
+		commands,
+		publisher,
+		undefined,
+		parent.resources,
+		registry,
+	);
+	const parentRun = await store.getRun("parent-run");
+	const check = requireNodeRun(await store.listNodeRuns("parent-run"), "check");
+	assert.ok(parentRun);
+
+	const internal = coordinator as unknown as {
+		interruptNode: (run: FlowRunRecord, record: NodeRunRecord) => Promise<void>;
+	};
+	await internal.interruptNode(parentRun, check);
+
+	assert.equal((await store.getRun("parent-run"))?.status, "interrupted");
+	const childAfter = await store.getRun("child-run");
+	assert.equal(childAfter?.status, "interrupted");
+	assert.equal(childAfter?.sequence, 3);
+	const probe = requireNodeRun(await store.listNodeRuns("child-run"), "probe");
+	assert.equal(probe.status, "interrupted");
+	const childEvents = publisher.events.filter(
+		(event) => event.runId === "child-run" && event.type === "run.interrupted",
+	);
+	assert.equal(childEvents.length, 1);
+	assert.equal(childEvents[0]?.sequence, childAfter?.sequence);
 });
 
 test("直接恢复子 Run 被拒绝并提示父 Run 标识", async () => {
