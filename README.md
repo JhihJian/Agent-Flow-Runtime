@@ -5,6 +5,7 @@
 Included examples:
 
 - `examples/code-change/`: code change and verification loop.
+- `examples/review-fix/`: review-and-fix loop with parallel checks and an annotated, self-explaining FLOW.md.
 - `examples/simplify/`: project simplification with a self-gated loop that continues until the remaining complexity has a documented reason.
 - `examples/flow-observability-implementation/`: implementation and acceptance gates for Flow runtime observability.
 
