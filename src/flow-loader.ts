@@ -12,6 +12,7 @@ import { parseFlow } from "./parser.ts";
 import type {
 	CommandRequest,
 	FlowDefinition,
+	FlowPackage,
 	FlowResourceContext,
 	LoadedFlow,
 } from "./types.ts";
@@ -21,6 +22,13 @@ const REFERENCE_LINK = /(\[[^\]]*\]\()(references\/[^)\s]+)(\))/g;
 
 /** Loads a Flow package directory or its fixed FLOW.md entry. */
 export async function loadFlow(path: string): Promise<LoadedFlow> {
+	const root = await loadFlowPackage(path);
+	const references = await loadReferenceClosure(root);
+	return { ...root, references };
+}
+
+/** Loads one Flow package without following 执行Flow references. */
+export async function loadFlowPackage(path: string): Promise<FlowPackage> {
 	const sourcePath = isAbsolute(path) ? path : resolve(path);
 	const source = await stat(sourcePath).catch((error) => {
 		throw new Error(
@@ -58,6 +66,44 @@ export async function loadFlow(path: string): Promise<LoadedFlow> {
 		path: normalizedEntryPath,
 		resources: { packageRoot, resourcePaths },
 	};
+}
+
+/**
+ * 构建引用闭包：按标识从包根上一级目录定位兄弟包，递归加载全部被引用
+ * Flow 及其资源，形成传递闭包。加载栈中出现重复标识（含自引用）即报错。
+ */
+async function loadReferenceClosure(
+	root: FlowPackage,
+): Promise<Map<string, FlowPackage>> {
+	const registry = new Map<string, FlowPackage>();
+	const siblingRoot = dirname(root.resources.packageRoot);
+	const load = async (pkg: FlowPackage, chain: string[]): Promise<void> => {
+		for (const id of collectReferenceIds(pkg.flow)) {
+			if (chain.includes(id)) {
+				throw new Error(`Flow 引用成环: ${[...chain, id].join(" -> ")}`);
+			}
+			if (registry.has(id)) continue;
+			const child = await loadFlowPackage(join(siblingRoot, id)).catch(
+				(error: unknown) => {
+					throw new Error(
+						`被引用的兄弟包无法加载: ${id} (${error instanceof Error ? error.message : String(error)})`,
+					);
+				},
+			);
+			registry.set(id, child);
+			await load(child, [...chain, id]);
+		}
+	};
+	await load(root, [root.flow.id]);
+	return registry;
+}
+
+function collectReferenceIds(flow: FlowDefinition): string[] {
+	const ids = new Set<string>();
+	for (const node of flow.nodes.values()) {
+		if (node.action.kind === "执行Flow") ids.add(node.action.flow);
+	}
+	return [...ids];
 }
 
 /** Rewrites package-local reference links to paths an Agent can read. */
@@ -106,6 +152,7 @@ async function validatePackageResources(
 			}
 			continue;
 		}
+		if (node.action.kind === "执行Flow") continue;
 		for (const match of node.action.prompt.matchAll(REFERENCE_LINK)) {
 			const path = match[2];
 			if (path) {

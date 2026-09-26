@@ -354,6 +354,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 			publisher,
 			undefined,
 			loaded.resources,
+			loaded.references,
 		);
 		const first = flow.nodes.get(flow.startNodeRef);
 		if (!first) throw new Error(`Flow 首节点不存在: ${flow.startNodeRef}`);
@@ -400,13 +401,23 @@ export default function flowExtension(pi: ExtensionAPI) {
 		const cwd = ctx.cwd;
 		const store = new JsonFileRunStore(join(cwd, ".pi", "flow-runs.json"));
 		const sessionReference = bridge.getSessionReference();
-		const candidates = (await store.listRunningRuns()).filter(
+		const matches = (await store.listRunningRuns()).filter(
 			(run) =>
 				run.cwd === cwd &&
 				run.sessionReference === sessionReference &&
-				typeof run.flowPath === "string",
+				run.flowPath,
 		);
-		if (!candidates.length) return;
+		const candidates = matches.filter((run) => !run.parentRunId);
+		if (!candidates.length) {
+			const child = matches.find((run) => run.parentRunId);
+			if (child?.parentRunId) {
+				state.notify?.(
+					`子 Flow 运行不支持直接恢复，请恢复父运行: ${child.parentRunId}`,
+					"error",
+				);
+			}
+			return;
+		}
 		if (candidates.length > 1) {
 			state.notify?.("发现多个待恢复的 Flow，无法确定要继续的运行", "error");
 			return;
@@ -450,6 +461,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 			publisher,
 			undefined,
 			loaded.resources,
+			loaded.references,
 		);
 		const promise = coordinator
 			.resume(run.id, { existingAgentReference: sessionReference, cwd })

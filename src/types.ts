@@ -27,7 +27,15 @@ export interface CommandAction {
 	branchReferences: string[];
 }
 
-export type FlowAction = AgentAction | CommandAction;
+export interface FlowReferenceAction {
+	kind: "执行Flow";
+	/** 目标 Flow 标识，即同目录下兄弟包的目录名。 */
+	flow: string;
+	/** 子 Run 任务。省略时取父节点输入原值；字符串中可用 {outcome} 替换。 */
+	task?: FlowValue;
+}
+
+export type FlowAction = AgentAction | CommandAction | FlowReferenceAction;
 
 export interface FlowNode {
 	ref: string;
@@ -63,11 +71,17 @@ export interface FlowResourceContext {
 	resourcePaths: ReadonlyMap<string, string>;
 }
 
-/** A Flow definition together with its normalized source location. */
-export interface LoadedFlow {
+/** A Flow package: parsed definition, entry path, and validated resources. */
+export interface FlowPackage {
 	flow: FlowDefinition;
 	path: string;
 	resources: FlowResourceContext;
+}
+
+/** A Flow package together with its loaded reference closure. */
+export interface LoadedFlow extends FlowPackage {
+	/** 引用闭包：从本 Flow 出发可传递到达的全部被引用 Flow 及其资源。 */
+	references: ReadonlyMap<string, FlowPackage>;
 }
 
 export interface OutcomeOption {
@@ -162,6 +176,7 @@ export type FlowErrorCategory =
 	| "outcome_validation"
 	| "route_not_found"
 	| "parallel_configuration"
+	| "flow_reference"
 	| "command_interrupted"
 	| "recovery"
 	| "persistence"
@@ -209,6 +224,8 @@ export interface NodeRunRecord {
 	retryOf?: string;
 	enteredFrom: NodeRunSource;
 	parallelRoundId?: string;
+	/** 执行Flow 节点启动的子 Run 标识。 */
+	childRunId?: string;
 }
 
 /** A persisted edge selection. It is never reconstructed from a current Flow file. */
@@ -282,6 +299,9 @@ export interface FlowRunRecord {
 	currentNodeRunId?: string;
 	currentParallelRoundId?: string;
 	error?: FlowError;
+	/** 引用执行时记录的父 Run 关联。子 Run 只随父 Run 恢复。 */
+	parentRunId?: string;
+	parentNodeRunId?: string;
 	/** @deprecated Read only while migrating old JSON snapshots. */
 	currentParallelRound?: ParallelRoundRecord;
 }
@@ -317,6 +337,8 @@ export interface RunStore {
 	listRouteDecisions(runId: string): Promise<RouteDecisionRecord[]>;
 	listParallelRounds(runId: string): Promise<ParallelRoundRecord[]>;
 	listRunRecoveries(runId: string): Promise<RunRecoveryRecord[]>;
+	/** 查询引用执行产生的子 Run，按启动时间排序。 */
+	listChildRuns(parentRunId: string): Promise<FlowRunRecord[]>;
 	/** Compatibility and test setup APIs. Coordinators must use commit instead. */
 	updateRun(run: FlowRunRecord): Promise<void>;
 	createNodeRun(record: NodeRunRecord): Promise<void>;
@@ -374,6 +396,7 @@ export interface FlowNodeRunView {
 	retryOf?: string;
 	enteredFrom: NodeRunSource;
 	parallelRoundId?: string;
+	childRunId?: string;
 }
 
 /** Stable, adapter-independent projection of one Run's persisted facts. */

@@ -48,6 +48,14 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 		name: "executeParallel",
 	},
 	{
+		id: "execute-flow-reference",
+		title: "执行 Flow 引用节点",
+		file: "src/runtime.ts",
+		kind: "method",
+		className: "FlowCoordinator",
+		name: "executeFlowReference",
+	},
+	{
 		id: "agent-execute-node",
 		title: "管理 Agent 节点",
 		file: "src/runtime.ts",

@@ -133,9 +133,9 @@ For the offline minimal example (no model required), resume and takeover, sessio
 For a compact source-level reading guide, see [源码逻辑阅读图](docs/source-pseudocode-guide.md).
 
 - `src/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
-- `src/flow-loader.ts` loads package directories and resolves their resources; `src/directory.ts` recursively discovers package entries for reuse.
+- `src/flow-loader.ts` loads package directories, resolves their resources, and builds the transitive reference closure for `执行Flow` nodes (sibling resolution, cycle detection); `src/directory.ts` recursively discovers package entries for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
-- `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits.
+- `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits; `执行Flow` nodes run a child Flow as an independent child Run through a sub-coordinator sharing the same store and adapters.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI outcomes are only confirmed at Pi's `agent_settled` boundary; when a result candidate is pending, the extension cancels the current node's compaction and waits only for retries and queued work to settle.
 

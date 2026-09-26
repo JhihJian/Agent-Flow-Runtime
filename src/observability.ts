@@ -339,6 +339,7 @@ function toNodeRunView(record: NodeRunRecord): FlowNodeRunView {
 		retryOf: record.retryOf,
 		enteredFrom: record.enteredFrom,
 		parallelRoundId: record.parallelRoundId,
+		childRunId: record.childRunId,
 	};
 }
 

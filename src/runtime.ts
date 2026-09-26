@@ -6,7 +6,12 @@ import {
 	resolveCommandResources,
 	resolvePromptResources,
 } from "./flow-loader.ts";
-import { renderCommandRequest } from "./parser.ts";
+import {
+	FLOW_REFERENCE_FAILURE_RESULT,
+	FLOW_REFERENCE_SUCCESS_RESULT,
+	renderCommandRequest,
+	renderFlowReferenceTask,
+} from "./parser.ts";
 import type {
 	AgentConnection,
 	AgentIntegrationAdapter,
@@ -20,6 +25,8 @@ import type {
 	FlowNode,
 	FlowObservationEvent,
 	FlowObservationPublisherApi,
+	FlowPackage,
+	FlowReferenceAction,
 	FlowResourceContext,
 	FlowRunRecord,
 	FlowRunSnapshot,
@@ -210,6 +217,13 @@ export class InMemoryRunStore implements RunStore {
 			.sort((left, right) => left.sequence - right.sequence)
 			.map(clone);
 	}
+
+	async listChildRuns(parentRunId: string): Promise<FlowRunRecord[]> {
+		return [...this.runs.values()]
+			.filter((run) => run.parentRunId === parentRunId)
+			.sort((left, right) => left.startedAt.localeCompare(right.startedAt))
+			.map(clone);
+	}
 }
 
 interface PersistedRuns {
@@ -375,6 +389,11 @@ export class JsonFileRunStore extends InMemoryRunStore {
 		await this.ready();
 		return super.listRunRecoveries(runId);
 	}
+
+	override async listChildRuns(parentRunId: string): Promise<FlowRunRecord[]> {
+		await this.ready();
+		return super.listChildRuns(parentRunId);
+	}
 }
 
 export class ProcessCommandExecutor implements CommandExecutor {
@@ -522,6 +541,8 @@ export class FlowCoordinator {
 	private readonly commandExecutor: CommandExecutor;
 	private readonly publisher?: FlowObservationPublisherApi;
 	private readonly resources?: FlowResourceContext;
+	/** 引用闭包：标识到已加载子 Flow 的映射，供执行Flow 节点与更深层引用使用。 */
+	private readonly references?: ReadonlyMap<string, FlowPackage>;
 	private readonly onObservationError: (
 		error: unknown,
 		event: FlowObservationEvent,
@@ -539,6 +560,7 @@ export class FlowCoordinator {
 			event: FlowObservationEvent,
 		) => void = () => undefined,
 		resources?: FlowResourceContext,
+		references?: ReadonlyMap<string, FlowPackage>,
 	) {
 		this.flow = flow;
 		this.store = store;
@@ -547,6 +569,7 @@ export class FlowCoordinator {
 		this.publisher = publisher;
 		this.onObservationError = onObservationError;
 		this.resources = resources;
+		this.references = references;
 	}
 
 	async run(
@@ -557,12 +580,14 @@ export class FlowCoordinator {
 			cwd?: string;
 			flowPath?: string;
 			sessionReference?: string;
+			parentRunId?: string;
+			parentNodeRunId?: string;
 		} = {},
 	): Promise<FlowRunRecord> {
 		const run: FlowRunRecord = {
 			id: options.runId ?? randomUUID(),
 			flowId: this.flow.id,
-			flowVersion: fingerprintFlow(this.flow),
+			flowVersion: fingerprintFlow(this.flow, this.references),
 			task,
 			status: "running",
 			phase: "starting",
@@ -572,6 +597,8 @@ export class FlowCoordinator {
 			flowPath: options.flowPath,
 			cwd: options.cwd,
 			sessionReference: options.sessionReference,
+			parentRunId: options.parentRunId,
+			parentNodeRunId: options.parentNodeRunId,
 			currentNodeRef: this.flow.startNodeRef,
 			currentInput: task,
 		};
@@ -597,11 +624,25 @@ export class FlowCoordinator {
 	): Promise<FlowRunRecord> {
 		const run = await this.store.getRun(runId);
 		if (!run) throw new Error(`Flow 运行不存在: ${runId}`);
+		if (run.parentRunId)
+			throw new Error(
+				`子 Flow 运行不支持直接恢复，请恢复父运行: ${run.parentRunId}`,
+			);
+		return this.resumeRun(runId, options);
+	}
+
+	/** 父级续接路径使用的恢复入口：子 Run 只随父 Run 恢复，不检查直接恢复。 */
+	private async resumeRun(
+		runId: string,
+		options: { existingAgentReference?: string; cwd?: string } = {},
+	): Promise<FlowRunRecord> {
+		const run = await this.store.getRun(runId);
+		if (!run) throw new Error(`Flow 运行不存在: ${runId}`);
 		if (run.flowId !== this.flow.id)
 			throw new Error(`Flow 运行不属于当前 Flow: ${runId}`);
 		if (
 			run.historyCompleteness === "complete" &&
-			run.flowVersion !== fingerprintFlow(this.flow)
+			run.flowVersion !== fingerprintFlow(this.flow, this.references)
 		) {
 			throw new Error(`Flow 版本与运行记录不匹配: ${runId}`);
 		}
@@ -645,7 +686,10 @@ export class FlowCoordinator {
 		const node = this.flow.nodes.get(nodeRef);
 		if (!node) throw new Error(`工作节点不存在: ${nodeRef}`);
 
-		if (current?.status === "running") {
+		if (current?.status === "running" || current?.status === "interrupted") {
+			if (node.action.kind === "执行Flow") {
+				return this.resumeFlowReferenceNode(run, current, node, resumedOptions);
+			}
 			await this.interruptNode(run, current);
 			if (node.action.kind === "执行自定义命令") {
 				return this.failInterruptedCommand(run, current);
@@ -959,6 +1003,7 @@ export class FlowCoordinator {
 			retryOf: retryOf?.id,
 			parallelRoundId: round?.id,
 		};
+		if (node.action.kind === "执行Flow") record.childRunId = randomUUID();
 		const recovery =
 			source.kind === "recovery" && retryOf
 				? {
@@ -1053,7 +1098,9 @@ export class FlowCoordinator {
 		}
 		try {
 			let outcome: NodeOutcome;
-			if (node.action.kind === "执行自定义命令") {
+			if (node.action.kind === "执行Flow") {
+				outcome = await this.executeFlowReference(run, record, node, cwd);
+			} else if (node.action.kind === "执行自定义命令") {
 				const request = resolveCommandResources(
 					{
 						...renderCommandRequest(
@@ -1113,12 +1160,188 @@ export class FlowCoordinator {
 						error,
 						node.action.kind === "执行自定义命令"
 							? "command_execution"
-							: "agent_execution",
+							: node.action.kind === "执行Flow"
+								? "flow_reference"
+								: "agent_execution",
 					),
 					round,
 					branchRef,
 				);
 			}
+			throw error;
+		}
+	}
+
+	/** 执行Flow 节点：把输入交给子 Flow 作为独立 Run 运行到终态，再映射回节点结果。 */
+	private async executeFlowReference(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		node: FlowNode,
+		cwd: string | undefined,
+	): Promise<NodeOutcome> {
+		if (node.action.kind !== "执行Flow")
+			throw new FlowRuntimeError(
+				"flow_reference",
+				`节点 ${node.ref} 不是 Flow 引用节点`,
+			);
+		const child = await this.startChildRun(run, record, node.action, cwd);
+		return this.childOutcome(node, child);
+	}
+
+	private async startChildRun(
+		run: FlowRunRecord,
+		record: NodeRunRecord,
+		action: FlowReferenceAction,
+		cwd: string | undefined,
+	): Promise<FlowRunRecord> {
+		const pkg = this.references?.get(action.flow);
+		if (!pkg)
+			throw new FlowRuntimeError(
+				"flow_reference",
+				`被引用的 Flow 未在闭包中加载: ${action.flow}`,
+			);
+		const childTask =
+			action.task === undefined
+				? record.input
+				: renderFlowReferenceTask(action.task, record.input);
+		const childRunId = record.childRunId ?? randomUUID();
+		try {
+			return await this.coordinatorFor(pkg).run(childTask, {
+				runId: childRunId,
+				cwd,
+				flowPath: pkg.path,
+				parentRunId: run.id,
+				parentNodeRunId: record.id,
+			});
+		} catch (error) {
+			const persisted = await this.store.getRun(childRunId);
+			if (persisted) return persisted;
+			throw error;
+		}
+	}
+
+	/** 子 Run 终态映射：completed 注入最终结论，failed 按节点写法处理。 */
+	private async childOutcome(
+		node: FlowNode,
+		child: FlowRunRecord,
+	): Promise<NodeOutcome> {
+		const conclusion = await this.childConclusion(child.id);
+		if (child.status === "completed") {
+			return { result: FLOW_REFERENCE_SUCCESS_RESULT, content: conclusion };
+		}
+		if (node.successors.has(FLOW_REFERENCE_FAILURE_RESULT)) {
+			return {
+				result: FLOW_REFERENCE_FAILURE_RESULT,
+				content: {
+					status: "failure",
+					runId: child.id,
+					flowId: child.flowId,
+					result: conclusion,
+					error: child.error ?? {
+						category: "flow_reference",
+						summary: "子 Flow 运行失败",
+					},
+				},
+			};
+		}
+		throw new FlowRuntimeError(
+			"flow_reference",
+			`子 Flow 运行失败 (${child.id}): ${child.error?.summary ?? "未知错误"}`,
+		);
+	}
+
+	/** 子 Run 最终结论：最后一个已完成工作节点的结果内容。 */
+	private async childConclusion(childRunId: string): Promise<FlowValue> {
+		const records = (await this.store.listNodeRuns(childRunId))
+			.filter((candidate) => candidate.status === "completed")
+			.sort((left, right) => left.sequence - right.sequence);
+		return records.at(-1)?.outcome?.content ?? null;
+	}
+
+	private coordinatorFor(pkg: FlowPackage): FlowCoordinator {
+		return new FlowCoordinator(
+			pkg.flow,
+			this.store,
+			this.agentModel,
+			this.commandExecutor,
+			this.publisher,
+			this.onObservationError,
+			pkg.resources,
+			this.references,
+		);
+	}
+
+	/** 父 NodeRun 中断后的引用节点恢复：先把子 Run 推到终态，再补全父节点结果并续接路由。 */
+	private async resumeFlowReferenceNode(
+		run: FlowRunRecord,
+		current: NodeRunRecord,
+		node: FlowNode,
+		options: { existingAgentReference?: string; cwd?: string },
+	): Promise<FlowRunRecord> {
+		const child = (await this.store.listChildRuns(run.id)).find(
+			(candidate) => candidate.parentNodeRunId === current.id,
+		);
+		let terminal: FlowRunRecord | undefined =
+			child && (child.status === "completed" || child.status === "failed")
+				? child
+				: undefined;
+		if (!terminal && child) {
+			const pkg = this.references?.get(child.flowId);
+			if (!pkg)
+				throw new FlowRuntimeError(
+					"flow_reference",
+					`被引用的 Flow 未在闭包中加载: ${child.flowId}`,
+				);
+			terminal = await this.coordinatorFor(pkg).resumeRun(child.id, {
+				cwd: options.cwd,
+			});
+		}
+		if (!terminal) {
+			// 没有子 Run：子 Flow 尚未启动，按中断重试整个节点。
+			await this.interruptNode(run, current);
+			await this.agentModel.start(
+				run.id,
+				options.existingAgentReference,
+				options.cwd,
+			);
+			return this.continueRun(
+				run,
+				current.nodeRef,
+				current.input,
+				options,
+				{ kind: "recovery", nodeRunId: current.id },
+				true,
+				undefined,
+				current,
+			);
+		}
+		try {
+			const outcome = await this.childOutcome(node, terminal);
+			if (current.status !== "completed")
+				await this.completeNode(run, current, outcome);
+			await this.agentModel.start(
+				run.id,
+				options.existingAgentReference,
+				options.cwd,
+			);
+			await this.recordRecovery(
+				run,
+				current.id,
+				"continue_routing",
+				"从已终态的子 Flow 运行补全节点结果并续接路由",
+			);
+			return this.continueRun(
+				run,
+				current.nodeRef,
+				current.input,
+				options,
+				current.enteredFrom,
+				true,
+				{ record: current, outcome },
+			);
+		} catch (error) {
+			if (current.status !== "failed")
+				await this.failNode(run, current, toFlowError(error, "flow_reference"));
 			throw error;
 		}
 	}
@@ -1318,6 +1541,45 @@ export class FlowCoordinator {
 				},
 			],
 		);
+		await this.interruptActiveChildRuns(run.id, record.id);
+	}
+
+	/** 父节点被中断时，同节点仍活跃的子 Run 同步标记为 interrupted。 */
+	private async interruptActiveChildRuns(
+		runId: string,
+		nodeRunId: string,
+	): Promise<void> {
+		const children = (await this.store.listChildRuns(runId)).filter(
+			(child) =>
+				child.status === "running" && child.parentNodeRunId === nodeRunId,
+		);
+		for (const child of children) {
+			const running = (await this.store.listNodeRuns(child.id)).filter(
+				(record) => record.status === "running",
+			);
+			for (const nodeRun of running) {
+				nodeRun.status = "interrupted";
+				nodeRun.completedAt = now();
+				nodeRun.error = {
+					category: "recovery",
+					summary: "父节点中断，子 Flow 运行同步中断",
+				};
+			}
+			const next = clone(child);
+			next.status = "interrupted";
+			next.phase = "interrupted";
+			next.completedAt = now();
+			await this.store.commit({
+				run: next,
+				expectedSequence: child.sequence,
+				nodeRuns: running,
+			});
+			this.publishObservation(next, {
+				type: "run.interrupted",
+				nodeRunId: undefined,
+				summary: `父节点中断，子 Flow 运行 ${child.id} 已同步中断`,
+			});
+		}
 	}
 
 	private async failInterruptedCommand(
@@ -1628,7 +1890,23 @@ function toFlowError(error: unknown, fallback: FlowErrorCategory): FlowError {
 	return { category: fallback, summary };
 }
 
-function fingerprintFlow(flow: FlowDefinition): string {
+function fingerprintFlow(
+	flow: FlowDefinition,
+	references?: ReadonlyMap<string, FlowPackage>,
+): string {
+	const childIds = new Set<string>();
+	for (const node of flow.nodes.values()) {
+		if (node.action.kind === "执行Flow") childIds.add(node.action.flow);
+	}
+	const children = [...childIds].sort().map((id) => {
+		const pkg = references?.get(id);
+		if (!pkg)
+			throw new FlowRuntimeError(
+				"flow_reference",
+				`被引用的 Flow 未在闭包中加载: ${id}`,
+			);
+		return fingerprintFlow(pkg.flow, references);
+	});
 	const definition = {
 		id: flow.id,
 		name: flow.name,
@@ -1643,7 +1921,7 @@ function fingerprintFlow(flow: FlowDefinition): string {
 		})),
 		parallels: [...flow.parallels.values()],
 	};
-	return `sha256:${createHash("sha256").update(JSON.stringify(definition)).digest("hex")}`;
+	return `sha256:${createHash("sha256").update(JSON.stringify({ definition, children })).digest("hex")}`;
 }
 
 function normalizeRun(run: FlowRunRecord): FlowRunRecord {

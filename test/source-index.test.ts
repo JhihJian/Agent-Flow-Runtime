@@ -19,7 +19,7 @@ test("为每个关键函数生成唯一的位置链接", async () => {
 	const locations = await collectTargetLocations(root);
 	const rendered = renderSourceGuide(guide, locations);
 
-	assert.equal(locations.length, 8);
+	assert.equal(locations.length, 9);
 	assert.equal(rendered, guide);
 	assert.equal(renderSourceIndex(root), index);
 	assert.match(rendered, /src\/runtime\.ts:/);

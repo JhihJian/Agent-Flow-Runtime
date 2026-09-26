@@ -1,6 +1,51 @@
 # Flow 规范
 
-本规范定义可运行 Flow 文件的格式。Flow 的用途和整体方式见 Flow 概览。
+本规范定义可运行 Flow 文件的格式。Flow 的用途和整体方式见[Flow 概览](flow-overview.md)。
+
+每条可执行 Flow 都是一个目录包。使用`--flow`或`/flow run`时，只能传入包目录或包内的`FLOW.md`；运行时直接执行该入口，不生成运行副本。
+
+## Flow 包目录
+
+目录约定参考 Skill：一个目录只有一个固定入口，其余文件按用途放在入口旁边。即使暂时不需要参考资料或脚本，也必须使用包目录。
+
+```text
+.flows/
+└── release-check/
+    ├── FLOW.md
+    ├── references/
+    │   └── release-checklist.md
+    └── scripts/
+        └── verify-version.mjs
+```
+
+规则只有四条：
+
+1. `FLOW.md`是唯一入口，包目录名是 Flow 标识。例如`release-check/FLOW.md`的标识为`release-check`。
+2. `FLOW.md`继续使用既有的 Flow 图、节点和`name`、`description`元信息，不增加目录格式专用字段。
+3. `references/`只放供 Agent 阅读的 Markdown。入口中用普通相对链接引用它，例如`[发布检查清单](references/release-checklist.md)`。
+4. `scripts/`只放命令节点调用的 Node.js ESM 脚本。命令参数从包根写相对路径，例如`"args": ["scripts/verify-version.mjs"]`。
+
+除上述约定外，包内其他文件暂不定义运行时含义。Flow 作者可以按维护需要增加测试或说明文件，但不应让它们参与流程执行。
+
+脚本文件属于 Flow 包，业务项目文件属于一次 Run 的工作目录。运行时会把标准 Markdown 内联链接中的`references/...`和命令`args`中独立的`scripts/...`定位到包内对应文件，命令进程的`cwd`仍保持业务项目目录。裸文本、引用式 Markdown 链接、复合命令参数和其他相对路径保持原样。
+
+脚本需要读取业务项目时使用进程`cwd`，需要读取同包模块时使用 ESM 相对导入或`import.meta.url`。Flow 文件中不写机器相关的绝对路径。被引用的`references/...`必须是`.md`文件，被调用的`scripts/...`必须是`.mjs`文件；路径不能包含`.`或`..`段。
+
+包目录名是 Flow 标识。例如`release-check/FLOW.md`的标识为`release-check`。`FlowDirectory`递归发现包目录，并跳过`references/`和`scripts/`资源目录。恢复运行会重新读取已记录的真实入口路径，因此仍使用原`FLOW.md`和同一包根。
+
+一个节点还可以引用另一个 Flow 作为子 Run 执行。被引用方与引用方同处一级目录，即互为兄弟包：
+
+```text
+.flows/
+├── release/
+│   └── FLOW.md        # 含「执行Flow release-check」节点
+└── release-check/
+    ├── FLOW.md
+    ├── references/
+    └── scripts/
+```
+
+引用解析根是引用包根的上一级目录：`执行Flow`按标识定位`<上一级>/<flow>/FLOW.md`，只能指向兄弟包。加载引用方时会递归加载全部被引用 Flow 及其资源并校验，形成闭包；加载栈中出现重复标识（含自引用）即在加载期报错。语义细节见[5.1 引用执行](#51-引用执行)。
 
 ## 1. 文件开头
 
@@ -13,7 +58,7 @@ description: 适用于目标明确、需要完成代码修改并运行测试验�
 ---
 ```
 
-每条 Flow 保存为`<flow-id>/FLOW.md`。`name`和`description`均为非空内容。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。目录名是 Flow 标识，用于关联运行记录。
+`name`和`description`均为非空内容。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。Flow 标识始终取`FLOW.md`父目录名。
 
 ## 2. 图与节点
 
@@ -57,18 +102,19 @@ flowchart TD
 - `新建Agent`：创建一个 Agent，并将它绑定到本次 Flow 运行。
 - `复用Agent`：继续本次 Flow 运行已绑定的 Agent。
 - `执行自定义命令`：执行代码块中的 JSON 命令请求。
+- `执行Flow`：把输入交给另一个 Flow，作为一次独立子 Run 运行到终态。
 
 Agent 动作的代码块内容是引导提示。自定义命令的代码块必须是一个 JSON 对象：
 
 ```json
 {
   "command": "node",
-  "args": ["scripts/check.js"],
+  "args": ["scripts/check.mjs"],
   "stdin": { "task": "{outcome}" }
 }
 ```
 
-`command`是当前执行环境中的命令名或路径。`args`是可选的字符串数组。`stdin`是可选的 JSON 值，运行模型以 UTF-8 JSON 写入命令的标准输入。
+`command`是当前执行环境中的命令名或路径。`args`是可选的字符串数组。`stdin`是可选的 JSON 值，运行模型以 UTF-8 JSON 写入命令的标准输入。目录包中独立的`scripts/...`参数从包根定位，其他参数沿用原值。命令进程的工作目录是本次 Flow 运行指定的`cwd`；未指定时继承宿主进程的工作目录。
 
 ````markdown
 ## 确认验证计划
@@ -152,6 +198,41 @@ Agent 动作结束时，运行模型把当前节点允许提交的结果名和�
 
 一次 Flow 运行开始时，可以带入一个已有 Agent 引用，也可以从空状态开始。统一 Agent 运行模型以运行标识维护该运行的 Agent 绑定。当前绑定为空时，首个 Agent 动作必须是`新建Agent`。`新建Agent`更新该运行的绑定，`复用Agent`继续该绑定。一个 Agent 实例同一时间只能绑定一个 Flow 运行；流程结束时解除绑定，已有会话仍由所属 Agent 平台管理。
 
+子 Run 独立绑定 Agent：子 Flow 的首个 Agent 动作必须是`新建Agent`，父运行的绑定在子 Flow 执行期间保持原状，子 Run 结束时解除子绑定。
+
+## 5.1 引用执行
+
+`执行Flow`的代码块是一个 JSON 对象：
+
+```json
+{
+  "flow": "release-check",
+  "task": "为以下变更执行发布检查：{outcome}"
+}
+```
+
+- `flow`：必填，目标 Flow 标识，即兄弟包目录名。
+- `task`：可选 JSON 值。省略时子 Run 的任务取父节点输入原值；提供时字符串中的`{outcome}`按命令节点`stdin`的既有语义替换。
+
+引用节点的出边二选一：
+
+- 无结果边直连（默认）：图中写`check[执行发布检查] --> next[汇总发布结果]`，节点没有三级结果标题。子 Run 完成时固定流转，子 Run 失败时父节点按执行失败处理，父 Run 进入失败态，错误携带子 Run 标识。
+- 双结果边：恰`已完成``已失败`两条结果边，各配非空三级说明。子 Flow 终态由运行时判定，不经 Agent 判断。
+
+成功路径的结果内容是子 Run 的最终结论，即最后一个已完成工作节点的结果内容，作为下一节点的`{outcome}`注入。「已失败」的结果内容固定为：
+
+```json
+{
+  "status": "failure",
+  "runId": "子 Run 标识",
+  "flowId": "release-check",
+  "result": "失败前最后一个已完成工作节点的结果内容，可为 null",
+  "error": { "category": "agent_execution", "summary": "……" }
+}
+```
+
+`error`取子 Run 的流程级错误。子 Flow 的全部事实写入子 Run，父 Run 中没有子节点记录；子 Run 通过自身的父 Run 关联字段定位，只随父 Run 恢复，不能直接恢复。父 Run 恢复时：父 NodeRun 已完成的沿用既有续接；父 NodeRun 中断且子 Run 已终态的，按节点写法补全父节点结果并继续路由；子 Run 仍在运行的，先递归恢复子 Run 到终态再续接。子 Flow 文件漂移与父文件漂移同样被组合指纹拒绝。
+
 ## 6. 并行与汇合
 
 并行开始点收到输入后启动一轮并行执行，为每个直接分支复制同一份输入。直接分支节点只有一条入边，且该入边来自所属并行开始点。V1 的并行分支只允许执行自定义命令。每个分支提交`已执行`并进入同一汇合节点，命令的执行状态保留在结果内容中。
@@ -174,5 +255,8 @@ V1 支持单层并行。汇合后的 Agent 节点依据分支结果决定继续�
 - Agent 节点的结果名由结果边定义；命令节点只有`已执行`结果边。
 - 并行开始点只有一条入边和两个或更多出边；直接分支节点只有来自所属并行开始点的一条入边，都是命令节点，且都以`已执行`进入同一汇合节点。
 - 汇合节点有两个或更多直接入边，来源节点恰好是同一个并行开始点的直接分支；命名结果引用仅出现在该汇合节点的`stdin`中，且覆盖每个来源节点。
+- `执行Flow`代码块是 JSON 对象，`flow`为字母开头且仅含字母、数字、连字符、下划线的非空标识，除`flow`与可选的`task`外不允许其他字段。
+- `执行Flow`节点的出边二选一：恰一条无结果直连边且没有三级结果标题；或恰`已完成``已失败`两条结果边，各配非空三级说明。`执行Flow`节点不得作为并行分支或汇合节点。
+- 引用的兄弟包存在且可解析，引用图无环。
 
 门禁是一个 Agent 节点的多条结果边。指回已有节点的结果边就是循环。解释器只检查结构，不判断 Agent 的专业结论。
