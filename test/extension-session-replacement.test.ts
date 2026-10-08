@@ -65,6 +65,8 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		return tool;
 	};
 	const nodePrompts: string[] = [];
+	const lineageEntries: Array<{ customType: string; data: unknown }> = [];
+	let newSessionOptions: NewSessionOptions | undefined;
 	const newContext = context("new.jsonl", async (prompt) => {
 		nodePrompts.push(prompt);
 		const outcome = prompt.includes("分析任务") ? "已分析" : "已完成";
@@ -81,6 +83,13 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		await emit("agent_settled");
 	});
 	oldContext = context("old.jsonl", undefined, async (options) => {
+		newSessionOptions = options;
+		await options.setup?.({
+			appendCustomEntry(customType, data) {
+				lineageEntries.push({ customType, data });
+				return "lineage-entry";
+			},
+		});
 		oldContext.invalidate();
 		await emit("session_shutdown");
 		await emit("session_start", { reason: "new" }, newContext.value);
@@ -102,12 +111,30 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		"完成通知应发送到替换后的会话",
 	);
 
+	assert.equal(
+		newSessionOptions?.parentSession,
+		undefined,
+		"新会话不得分支父会话历史",
+	);
+	assert.deepEqual(
+		lineageEntries,
+		[
+			{
+				customType: "agent-flow-runtime/session-lineage",
+				data: {
+					parentSession: "old.jsonl",
+					parentSessionId: "old.jsonl",
+					parentLeafEntryId: undefined,
+				},
+			},
+		],
+		"新会话应持久化不参与模型上下文的 Flow 谱系",
+	);
+
 	function context(
 		sessionFile: string,
 		onPrompt?: (prompt: string) => Promise<void>,
-		onNewSession?: (options: {
-			withSession?: AsyncHandler;
-		}) => Promise<unknown>,
+		onNewSession?: (options: NewSessionOptions) => Promise<unknown>,
 	) {
 		let valid = true;
 		const assertCurrent = () => {
@@ -143,7 +170,7 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 					assertCurrent();
 					return true;
 				},
-				async newSession(options: { withSession?: AsyncHandler }) {
+				async newSession(options: NewSessionOptions) {
 					assertCurrent();
 					return onNewSession?.(options);
 				},
@@ -161,3 +188,11 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		};
 	}
 });
+
+interface NewSessionOptions {
+	parentSession?: string;
+	setup?: (sessionManager: {
+		appendCustomEntry: (customType: string, data?: unknown) => string;
+	}) => Promise<void>;
+	withSession?: AsyncHandler;
+}

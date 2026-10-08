@@ -162,8 +162,21 @@ export default function flowExtension(pi: ExtensionAPI) {
 					throw new Error("Pi 尚未完成当前 Agent 运行，不能切换 Flow 会话");
 				}
 				const parentSession = ctx.sessionManager.getSessionFile();
+				const parentSessionId = ctx.sessionManager.getSessionId();
+				const parentLeafEntryId = ctx.sessionManager.getLeafId();
 				const result = await ctx.newSession({
-					parentSession,
+					// parentSession creates a Pi history branch and would resend its context.
+					// Keep Flow lineage as metadata in the isolated replacement session instead.
+					setup: async (sessionManager) => {
+						sessionManager.appendCustomEntry(
+							"agent-flow-runtime/session-lineage",
+							{
+								parentSession,
+								parentSessionId,
+								parentLeafEntryId,
+							},
+						);
+					},
 					withSession: async (replacementContext) => {
 						bindContext(
 							replacementContext,

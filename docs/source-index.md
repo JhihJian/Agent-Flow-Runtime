@@ -31,11 +31,11 @@
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:35-486](../src/extension.ts#L35) |
-| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:488-494](../src/extension.ts#L488) |
-| `flowEventMessage` | 函数 | 否 | [src/extension.ts:496-503](../src/extension.ts#L496) |
-| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:505-507](../src/extension.ts#L505) |
-| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:509-514](../src/extension.ts#L509) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:35-499](../src/extension.ts#L35) |
+| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:501-507](../src/extension.ts#L501) |
+| `flowEventMessage` | 函数 | 否 | [src/extension.ts:509-516](../src/extension.ts#L509) |
+| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:518-520](../src/extension.ts#L518) |
+| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:522-527](../src/extension.ts#L522) |
 
 ## [src/flow-loader.ts](../src/flow-loader.ts)
 

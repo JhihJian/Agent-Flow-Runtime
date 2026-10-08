@@ -191,8 +191,9 @@ SDK 会话解除绑定时结束当前`AgentSession`的运行资源并调用`disp
 
 MVP 支持 SDK 内嵌会话的新建与恢复、Pi CLI 通过扩展注入`/flow-new-session`完成会话替换、单会话串行节点执行、结构化结果提交、节点交互查询和流程结束释放。该命令使用独立名称，避免与 Pi 内置交互命令`/new`冲突。每个 CLI `新建Agent`都会替换为清空上下文的新会话，`复用Agent`继续当前会话。CLI 路径会把启动 Flow 时的当前模型交接给新会话的`session_start`处理器并恢复该模型，避免落回 Pi 全局默认模型；工具白名单、会话目录等其他运行环境配置由外部宿主或 Pi CLI 提供。
 
-## 10. 实现依据
+CLI 新建会话必须保留可追溯性，但不能把它实现为 Pi 的`parentSession`分支，因为该分支会使父会话历史参与模型上下文。扩展改为在新会话写入`agent-flow-runtime/session-lineage` custom entry，记录父会话文件、会话 ID 和叶节点 ID。Pi 不会把 custom entry 送入模型，因此审计关系和模型上下文相互独立。
 
+## 10. 实现依据
 当前实现位于[运行时源码](../src)和[Pi 扩展入口](../src/extension.ts)。它使用公开 Pi SDK 和扩展 API；运行与节点记录默认保存在工作目录的`.pi/flow-runs.json`。SDK 路径每次`新建Agent`创建独立会话；CLI 路径通过扩展注册的`flow-new-session`命令接收注入的`/flow-new-session`，仅在 Pi 空闲时调用`ctx.newSession()`创建清空上下文的新会话，并用进程级交接状态恢复节点执行。Flow 保留 Pi 的原生 compact 策略，但在已有待确认 Flow 结果时取消当前节点收尾阶段的 compact；节点结果只在 Pi 的重试和排队输入均已结算后的`agent_settled`中确认。
 
 - [Pi SDK：AgentSession 与 SessionManager](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)
