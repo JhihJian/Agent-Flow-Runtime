@@ -35,8 +35,16 @@ interface SdkHandle {
 interface PendingCliNode extends PendingSdkNode {
 	resolve: (session: NodeSession) => void;
 	reject: (error: Error) => void;
+	prompt: string;
+	retryCount: number;
 	endEntryId?: string;
 	candidate?: { outcome: string; content: string };
+}
+
+const MAX_MISSING_OUTCOME_RETRIES = 1;
+
+function missingOutcomeRetryPrompt(prompt: string): string {
+	return `${prompt}\n\n本节点上一轮执行结束时没有调用 submit_flow_outcome。请重新完成本节点工作，并在最后调用 submit_flow_outcome exactly once，提供有效的 outcome 和 content。`;
 }
 
 export interface PiCliBridge {
@@ -126,9 +134,14 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		};
 		handle.pending = pending;
 		try {
-			await handle.session.prompt(request.prompt);
-			if (!pending.submitted)
-				throw new Error("Pi Agent 没有调用 submit_flow_outcome");
+			let prompt = request.prompt;
+			for (let attempt = 0; ; attempt += 1) {
+				await handle.session.prompt(prompt);
+				if (pending.submitted) break;
+				if (attempt >= MAX_MISSING_OUTCOME_RETRIES)
+					throw new Error("Pi Agent 重试后仍没有调用 submit_flow_outcome");
+				prompt = missingOutcomeRetryPrompt(request.prompt);
+			}
 			const endEntryId = handle.manager.getLeafId() ?? undefined;
 			const sessionReference =
 				handle.session.sessionFile ?? handle.manager.getSessionFile();
@@ -185,7 +198,21 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	/** Called by agent_settled after Pi has finished compacting and draining queued work. */
 	async finalizeCliTurn(): Promise<void> {
 		const pending = this.pendingCli;
-		if (!pending?.candidate || pending.submitted) return;
+		if (!pending || pending.submitted) return;
+		if (!pending.candidate) {
+			if (pending.retryCount < MAX_MISSING_OUTCOME_RETRIES) {
+				pending.retryCount += 1;
+				this.options.cliBridge?.sendNodePrompt(
+					missingOutcomeRetryPrompt(pending.prompt),
+				);
+				return;
+			}
+			pending.reject(
+				new Error("Pi Agent 重试后仍没有调用 submit_flow_outcome"),
+			);
+			this.pendingCli = undefined;
+			return;
+		}
 		try {
 			pending.endEntryId = this.options.cliBridge?.getLeafEntryId();
 			await pending.submitOutcome({
@@ -264,6 +291,8 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 				nodeExecutionReference: request.nodeExecutionReference,
 				submitOutcome: request.submitOutcome,
 				outcomes: request.outcomes,
+				prompt: request.prompt,
+				retryCount: 0,
 				startEntryId: bridge.getLeafEntryId(),
 				submitted: false,
 				resolve,

@@ -284,7 +284,7 @@ AgentRunModel.executeNode(请求):
 
 <!-- source-guide:pi-execute-node -->
 <!-- source-guide:location:pi-execute-node -->
-**源码：** [src/pi.ts:107-140](../src/pi.ts#L107)，`执行 Pi 节点`
+**源码：** [src/pi.ts:115-153](../src/pi.ts#L115)，`执行 Pi 节点`
 <!-- /source-guide:location:pi-execute-node -->
 
 ```mermaid
@@ -316,7 +316,7 @@ SDK 模式在一次 `prompt` 返回后提交结果。CLI 模式必须等待 Pi �
 
 <!-- source-guide:finalize-cli-turn -->
 <!-- source-guide:location:finalize-cli-turn -->
-**源码：** [src/pi.ts:186-214](../src/pi.ts#L186)，`提交 CLI 节点结果`
+**源码：** [src/pi.ts:199-241](../src/pi.ts#L199)，`提交 CLI 节点结果`
 <!-- /source-guide:location:finalize-cli-turn -->
 
 ```mermaid
