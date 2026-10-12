@@ -65,8 +65,78 @@ describe("parseFlow", () => {
 	it("rejects a command node without the fixed result", async () => {
 		const source = (await fixture("ordinary"))
 			.replace("```新建Agent", "```执行自定义命令")
-			.replace("分析任务：\n{outcome}", '{"command":"echo"}')
+			.replace(
+				"分析任务：\n{outcome}",
+				'{"command":"echo","args":["{outcome}"]}',
+			)
 			.replace("### 已分析", "### 其他结果");
 		expect(() => parseFlow(source, "invalid")).toThrow(FlowSyntaxError);
+	});
+
+	it("首节点提示词缺少 {outcome} 时拒绝解析", async () => {
+		const source = (await fixture("ordinary")).replace("{outcome}", "");
+		expect(() => parseFlow(source, "invalid")).toThrow(/开始任务/);
+	});
+
+	it("首节点是命令动作时允许在命令请求中引用 {outcome}", async () => {
+		const source = (await fixture("ordinary"))
+			.replace("```新建Agent", "```执行自定义命令")
+			.replace(
+				"分析任务：\n{outcome}",
+				'{"command":"node","args":["-e","1"],"stdin":{"task":"{outcome}"}}',
+			)
+			.replace("### 已分析", "### 已执行")
+			.replace("|已分析|", "|已执行|");
+		const flow = parseFlow(source, "command-first");
+		expect(flow.startNodeRef).toBe("analyze");
+	});
+
+	it("首节点是 执行Flow 时省略 task 视为继承流程开始任务", () => {
+		const flow = parseFlow(
+			`---
+name: 引用
+description: 首节点引用子流程。
+---
+
+\`\`\`mermaid
+flowchart TD
+  start((开始)) --> check[执行检查]
+  check --> finish((结束))
+\`\`\`
+
+## 执行检查
+
+\`\`\`执行Flow
+{"flow": "check"}
+\`\`\`
+`,
+			"ref-inherit",
+		);
+		expect(flow.startNodeRef).toBe("check");
+	});
+
+	it("首节点是 执行Flow 且 task 未引用 {outcome} 时拒绝解析", () => {
+		expect(() =>
+			parseFlow(
+				`---
+name: 引用
+description: 首节点引用子流程。
+---
+
+\`\`\`mermaid
+flowchart TD
+  start((开始)) --> check[执行检查]
+  check --> finish((结束))
+\`\`\`
+
+## 执行检查
+
+\`\`\`执行Flow
+{"flow": "check", "task": "固定任务"}
+\`\`\`
+`,
+				"ref-fixed-task",
+			),
+		).toThrow(/开始任务/);
 	});
 });

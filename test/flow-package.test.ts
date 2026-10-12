@@ -204,7 +204,7 @@ flowchart TD
 ## 检查
 
 \`\`\`执行自定义命令
-{"command":"node","args":["-e","process.exit(0)"]}
+{"command":"node","args":["-e","process.exit(0)"],"stdin":{"task":"{outcome}"}}
 \`\`\`
 
 ### 已执行
@@ -242,6 +242,7 @@ flowchart TD
 
 \`\`\`新建Agent
 请阅读[不存在的资料](references/missing.md)。
+任务：{outcome}
 \`\`\`
 
 ### 完成
@@ -276,6 +277,7 @@ flowchart TD
 
 \`\`\`新建Agent
 请阅读[外部资料](references/external.md)。
+任务：{outcome}
 \`\`\`
 
 ### 完成
