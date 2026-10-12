@@ -12,6 +12,9 @@ import type {
 	AgentConnection,
 	AgentIntegrationAdapter,
 	AgentOutcomeSubmission,
+	FlowValue,
+	FlowVariablePatch,
+	FlowVariables,
 	NodeSession,
 	OutcomeOption,
 	UnifiedMessage,
@@ -38,7 +41,101 @@ interface PendingCliNode extends PendingSdkNode {
 	prompt: string;
 	retryCount: number;
 	endEntryId?: string;
-	candidate?: { outcome: string; content: string };
+	candidate?: {
+		outcome: string;
+		content: string;
+		variables?: FlowVariablePatch;
+	};
+}
+
+const flowValueSchema = Type.Cyclic(
+	{
+		FlowValue: Type.Union([
+			Type.String(),
+			Type.Number(),
+			Type.Boolean(),
+			Type.Null(),
+			Type.Array(Type.Ref("FlowValue")),
+			Type.Record(Type.String(), Type.Ref("FlowValue")),
+		]),
+	},
+	"FlowValue",
+);
+
+function validateVariableName(name: unknown): asserts name is string {
+	if (
+		typeof name !== "string" ||
+		!/^[\p{Script=Han}a-zA-Z0-9_-]+$/u.test(name) ||
+		["__proto__", "prototype", "constructor"].includes(name)
+	)
+		throw new Error(`非法 Flow 变量名: ${String(name)}`);
+}
+
+function validateJsonValue(
+	value: unknown,
+	ancestors = new Set<object>(),
+): asserts value is FlowValue {
+	if (
+		value === null ||
+		typeof value === "string" ||
+		typeof value === "boolean" ||
+		(typeof value === "number" && Number.isFinite(value))
+	)
+		return;
+	if (
+		typeof value !== "object" ||
+		ancestors.has(value) ||
+		(!Array.isArray(value) &&
+			Object.getPrototypeOf(value) !== Object.prototype &&
+			Object.getPrototypeOf(value) !== null)
+	)
+		throw new Error("Flow 变量值必须是 JSON 值");
+	ancestors.add(value);
+	const keys = Reflect.ownKeys(value);
+	if (Array.isArray(value) && keys.length !== value.length + 1)
+		throw new Error("Flow 变量值必须是 JSON 值");
+	for (const key of keys) {
+		if (Array.isArray(value) && key === "length") continue;
+		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		if (
+			typeof key !== "string" ||
+			!descriptor?.enumerable ||
+			!("value" in descriptor) ||
+			(Array.isArray(value) &&
+				(!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length))
+		)
+			throw new Error("Flow 变量值必须是 JSON 值");
+		validateJsonValue(descriptor.value, ancestors);
+	}
+	ancestors.delete(value);
+}
+
+function variablePatch(
+	variables?: FlowVariables,
+	deleteVariables?: string[],
+): FlowVariablePatch | undefined {
+	if (variables !== undefined) {
+		if (
+			variables === null ||
+			typeof variables !== "object" ||
+			Array.isArray(variables)
+		)
+			throw new Error("Flow variables 必须是 JSON 字典");
+		validateJsonValue(variables);
+		for (const name of Object.keys(variables)) validateVariableName(name);
+	}
+	if (deleteVariables !== undefined) {
+		if (!Array.isArray(deleteVariables))
+			throw new Error("Flow deleteVariables 必须是变量名数组");
+		for (const name of deleteVariables) {
+			validateVariableName(name);
+			if (variables && Object.hasOwn(variables, name))
+				throw new Error(`Flow 变量不能同时写入和删除: ${name}`);
+		}
+	}
+	return variables === undefined && deleteVariables === undefined
+		? undefined
+		: structuredClone({ set: variables, delete: deleteVariables });
 }
 
 const MAX_MISSING_OUTCOME_RETRIES = 1;
@@ -180,14 +277,23 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	}
 
 	/** Called by the Pi extension tool. It only records the candidate until turn_end. */
-	async submitCliOutcome(outcome: string, content: string): Promise<void> {
+	async submitCliOutcome(
+		outcome: string,
+		content: string,
+		variables?: FlowVariables,
+		deleteVariables?: string[],
+	): Promise<void> {
 		const pending = this.pendingCli;
 		if (!pending) throw new Error("当前没有等待结果的 Flow 节点");
 		if (pending.submitted || pending.candidate)
 			throw new Error("当前 Flow 节点已经提交结果");
 		if (!pending.outcomes.some((option) => option.name === outcome))
 			throw new Error(`当前节点不允许结果: ${outcome}`);
-		pending.candidate = { outcome, content };
+		pending.candidate = {
+			outcome,
+			content,
+			variables: variablePatch(variables, deleteVariables),
+		};
 	}
 
 	/** Flow 结果候选待确认时，禁止 Pi 在当前 turn 后压缩上下文。 */
@@ -219,6 +325,10 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 				nodeExecutionReference: pending.nodeExecutionReference,
 				result: pending.candidate.outcome,
 				content: pending.candidate.content,
+				variables: variablePatch(
+					pending.candidate.variables?.set,
+					pending.candidate.variables?.delete,
+				),
 				sessionReference: this.options.cliBridge?.getSessionReference(),
 				interactionReference: interactionReference(
 					pending.startEntryId,
@@ -320,6 +430,8 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 					description:
 						"Markdown conclusion and evidence for the next Flow node",
 				}),
+				variables: Type.Optional(Type.Record(Type.String(), flowValueSchema)),
+				deleteVariables: Type.Optional(Type.Array(Type.String())),
 			}),
 			executionMode: "sequential",
 			execute: async (_id, params, _signal, _onUpdate, ctx) => {
@@ -328,12 +440,19 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 					params.outcome,
 					params.content,
 					sessionFile,
+					params.variables,
+					params.deleteVariables,
 				);
 				return {
 					content: [
 						{ type: "text", text: `Flow outcome submitted: ${params.outcome}` },
 					],
-					details: { outcome: params.outcome, content: params.content },
+					details: {
+						outcome: params.outcome,
+						content: params.content,
+						variables: params.variables,
+						deleteVariables: params.deleteVariables,
+					},
 					terminate: true,
 				};
 			},
@@ -344,6 +463,8 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		outcome: string,
 		content: string,
 		sessionFile?: string,
+		variables?: FlowVariables,
+		deleteVariables?: string[],
 	): Promise<void> {
 		const pending = this.resolvePending(sessionFile);
 		if (pending.submitted) throw new Error("当前 Flow 节点已经提交结果");
@@ -353,6 +474,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			nodeExecutionReference: pending.nodeExecutionReference,
 			result: outcome,
 			content,
+			variables: variablePatch(variables, deleteVariables),
 		});
 		pending.submitted = true;
 	}
@@ -394,15 +516,27 @@ export function createFlowOutcomeTool(
 			content: Type.String({
 				description: "Markdown conclusion and evidence for the next Flow node",
 			}),
+			variables: Type.Optional(Type.Record(Type.String(), flowValueSchema)),
+			deleteVariables: Type.Optional(Type.Array(Type.String())),
 		}),
 		executionMode: "sequential",
 		execute: async (_id, params) => {
-			await adapter.submitCliOutcome(params.outcome, params.content);
+			await adapter.submitCliOutcome(
+				params.outcome,
+				params.content,
+				params.variables,
+				params.deleteVariables,
+			);
 			return {
 				content: [
 					{ type: "text", text: `Flow outcome submitted: ${params.outcome}` },
 				],
-				details: { outcome: params.outcome, content: params.content },
+				details: {
+					outcome: params.outcome,
+					content: params.content,
+					variables: params.variables,
+					deleteVariables: params.deleteVariables,
+				},
 				terminate: true,
 			};
 		},

@@ -10,7 +10,7 @@ import {
 	FLOW_REFERENCE_FAILURE_RESULT,
 	FLOW_REFERENCE_SUCCESS_RESULT,
 	renderCommandRequest,
-	renderFlowReferenceTask,
+	renderTemplate,
 } from "./parser.ts";
 import type {
 	AgentConnection,
@@ -28,9 +28,11 @@ import type {
 	FlowPackage,
 	FlowReferenceAction,
 	FlowResourceContext,
+	FlowRunInput,
 	FlowRunRecord,
 	FlowRunSnapshot,
 	FlowValue,
+	FlowVariables,
 	NodeOutcome,
 	NodeRunRecord,
 	NodeRunSource,
@@ -573,7 +575,7 @@ export class FlowCoordinator {
 	}
 
 	async run(
-		task: FlowValue,
+		input: FlowRunInput | FlowValue,
 		options: {
 			runId?: string;
 			existingAgentReference?: string;
@@ -584,11 +586,21 @@ export class FlowCoordinator {
 			parentNodeRunId?: string;
 		} = {},
 	): Promise<FlowRunRecord> {
+		const legacy = !isRunInput(input);
+		const task = legacy ? input : undefined;
+		const variables: FlowVariables = legacy
+			? {}
+			: {
+					...clone(this.flow.variables ?? {}),
+					...clone(input.variables ?? {}),
+				};
+		const initialInput = legacy ? input : null;
 		const run: FlowRunRecord = {
 			id: options.runId ?? randomUUID(),
 			flowId: this.flow.id,
 			flowVersion: fingerprintFlow(this.flow, this.references),
 			task,
+			variables,
 			status: "running",
 			phase: "starting",
 			sequence: 1,
@@ -600,7 +612,7 @@ export class FlowCoordinator {
 			parentRunId: options.parentRunId,
 			parentNodeRunId: options.parentNodeRunId,
 			currentNodeRef: this.flow.startNodeRef,
-			currentInput: task,
+			currentInput: initialInput,
 		};
 		await this.store.createRun(run);
 		const startNodeName =
@@ -612,9 +624,19 @@ export class FlowCoordinator {
 			nodeName: startNodeName,
 			summary: `Flow 运行已开始，首节点为“${startNodeName}”`,
 		});
-		return this.continueRun(run, this.flow.startNodeRef, task, options, {
-			kind: "start",
-		});
+		return this.continueRun(
+			run,
+			this.flow.startNodeRef,
+			initialInput,
+			options,
+			{
+				kind: "start",
+			},
+			false,
+			undefined,
+			undefined,
+			!legacy,
+		);
 	}
 
 	/** Continue a persisted Run. Incomplete Agent work becomes a new NodeRun. */
@@ -664,7 +686,7 @@ export class FlowCoordinator {
 			return this.continueRun(
 				run,
 				run.currentNodeRef ?? this.flow.startNodeRef,
-				run.currentInput ?? run.task,
+				run.currentInput ?? run.task ?? null,
 				resumedOptions,
 				{ kind: "start" },
 				true,
@@ -745,6 +767,7 @@ export class FlowCoordinator {
 		agentStarted = false,
 		initialResult?: { record: NodeRunRecord; outcome: NodeOutcome },
 		retryOf?: NodeRunRecord,
+		newInputSemantics = run.task === undefined,
 	): Promise<FlowRunRecord> {
 		if (!agentStarted) {
 			await this.agentModel.start(
@@ -800,6 +823,7 @@ export class FlowCoordinator {
 						branchOutcomes,
 						source,
 						retry,
+						newInputSemantics,
 					));
 				result = undefined;
 				retry = undefined;
@@ -934,14 +958,25 @@ export class FlowCoordinator {
 			for (const branchRef of parallel.branches) {
 				finalizedRound.branchStatuses[branchRef] = "completed";
 			}
-			await this.commit(run, () => ({ parallelRounds: [finalizedRound] }), [
-				{
-					type: "parallel.completed",
-					parallelRoundId: finalizedRound.id,
-					parallelStatus: "completed",
-					summary: `并行轮次“${finalizedRound.parallelRef}”的分支已全部完成，准备汇合`,
+			const mergedVariables = mergeParallelVariables(
+				run.variables ?? {},
+				finalizedRound.variablePatches ?? {},
+			);
+			await this.commit(
+				run,
+				(next) => {
+					next.variables = mergedVariables;
+					return { parallelRounds: [finalizedRound] };
 				},
-			]);
+				[
+					{
+						type: "parallel.completed",
+						parallelRoundId: finalizedRound.id,
+						parallelStatus: "completed",
+						summary: `并行轮次“${finalizedRound.parallelRef}”的分支已全部完成，准备汇合`,
+					},
+				],
+			);
 			replaceObject(round, finalizedRound);
 		}
 		return { input: round.input, outcomes: new Map(completed) };
@@ -955,6 +990,7 @@ export class FlowCoordinator {
 		branchOutcomes: ReadonlyMap<string, NodeOutcome>,
 		source: NodeRunSource,
 		retryOf?: NodeRunRecord,
+		newInputSemantics = false,
 	): Promise<{ record: NodeRunRecord; outcome: NodeOutcome }> {
 		const round =
 			source.kind === "parallel"
@@ -968,7 +1004,15 @@ export class FlowCoordinator {
 			retryOf,
 			round,
 		);
-		return this.executePreparedNode(run, record, cwd, branchOutcomes, round);
+		return this.executePreparedNode(
+			run,
+			record,
+			cwd,
+			branchOutcomes,
+			round,
+			undefined,
+			newInputSemantics,
+		);
 	}
 
 	private async startNode(
@@ -1080,6 +1124,7 @@ export class FlowCoordinator {
 		branchOutcomes: ReadonlyMap<string, NodeOutcome>,
 		round?: ParallelRoundRecord,
 		branchRef?: string,
+		newInputSemantics = false,
 	): Promise<{ record: NodeRunRecord; outcome: NodeOutcome }> {
 		const node = this.flow.nodes.get(record.nodeRef);
 		if (!node) {
@@ -1098,29 +1143,47 @@ export class FlowCoordinator {
 		}
 		try {
 			let outcome: NodeOutcome;
+			const nodeInput =
+				newInputSemantics && record.enteredFrom.kind === "start"
+					? undefined
+					: record.input;
 			if (node.action.kind === "执行Flow") {
-				outcome = await this.executeFlowReference(run, record, node, cwd);
+				outcome = await this.executeFlowReference(
+					run,
+					record,
+					node,
+					cwd,
+					nodeInput,
+				);
 			} else if (node.action.kind === "执行自定义命令") {
 				const request = resolveCommandResources(
 					{
 						...renderCommandRequest(
 							node.action.request,
-							record.input,
+							nodeInput,
 							branchOutcomes,
+							run.variables ?? {},
 						),
 						cwd,
 					},
 					this.resources,
 				);
 				const commandResult = await this.commandExecutor.execute(request);
+				const structured =
+					node.action.request.output === "variables"
+						? parseCommandVariables(commandResult.stdout)
+						: undefined;
 				outcome = {
 					result: "已执行",
-					content: {
+					content: structured?.content ?? {
 						status: commandResult.status,
 						exitCode: commandResult.exitCode,
 						stdout: commandResult.stdout,
 						stderr: commandResult.stderr,
 					},
+					variables: structured?.variables
+						? { set: structured.variables }
+						: undefined,
 				};
 			} else {
 				const result = await this.agentModel.executeNode({
@@ -1129,9 +1192,10 @@ export class FlowCoordinator {
 					nodeExecutionReference: record.id,
 					prompt: renderAgentPrompt(
 						node.action.prompt,
-						record.input,
+						nodeInput,
 						node,
 						this.resources,
+						run.variables ?? {},
 					),
 					outcomes: [...node.results].map(([name, description]) => ({
 						name,
@@ -1178,13 +1242,20 @@ export class FlowCoordinator {
 		record: NodeRunRecord,
 		node: FlowNode,
 		cwd: string | undefined,
+		_input: FlowValue | undefined,
 	): Promise<NodeOutcome> {
 		if (node.action.kind !== "执行Flow")
 			throw new FlowRuntimeError(
 				"flow_reference",
 				`节点 ${node.ref} 不是 Flow 引用节点`,
 			);
-		const child = await this.startChildRun(run, record, node.action, cwd);
+		const child = await this.startChildRun(
+			run,
+			record,
+			node.action,
+			cwd,
+			_input,
+		);
 		return this.childOutcome(node, child);
 	}
 
@@ -1193,6 +1264,7 @@ export class FlowCoordinator {
 		record: NodeRunRecord,
 		action: FlowReferenceAction,
 		cwd: string | undefined,
+		input: FlowValue | undefined,
 	): Promise<FlowRunRecord> {
 		const pkg = this.references?.get(action.flow);
 		if (!pkg)
@@ -1200,13 +1272,18 @@ export class FlowCoordinator {
 				"flow_reference",
 				`被引用的 Flow 未在闭包中加载: ${action.flow}`,
 			);
-		const childTask =
-			action.task === undefined
-				? record.input
-				: renderFlowReferenceTask(action.task, record.input);
+		const childInput = {
+			variables: {
+				...clone(run.variables ?? {}),
+				...(renderTemplate(action.variables ?? {}, {
+					outcome: input,
+					variables: run.variables ?? {},
+				}) as FlowVariables),
+			},
+		};
 		const childRunId = record.childRunId ?? randomUUID();
 		try {
-			return await this.coordinatorFor(pkg).run(childTask, {
+			return await this.coordinatorFor(pkg).run(childInput, {
 				runId: childRunId,
 				cwd,
 				flowPath: pkg.path,
@@ -1227,7 +1304,11 @@ export class FlowCoordinator {
 	): Promise<NodeOutcome> {
 		const conclusion = await this.childConclusion(child.id);
 		if (child.status === "completed") {
-			return { result: FLOW_REFERENCE_SUCCESS_RESULT, content: conclusion };
+			return {
+				result: FLOW_REFERENCE_SUCCESS_RESULT,
+				content: conclusion,
+				variables: { set: child.variables ?? {} },
+			};
 		}
 		if (node.successors.has(FLOW_REFERENCE_FAILURE_RESULT)) {
 			return {
@@ -1353,13 +1434,22 @@ export class FlowCoordinator {
 		round?: ParallelRoundRecord,
 		branchRef?: string,
 	): Promise<void> {
+		const updatedVariables = applyVariablePatch(
+			run.variables ?? {},
+			outcome.variables,
+		);
 		record.status = "completed";
 		record.outcome = outcome;
 		record.completedAt = now();
 		await this.commit(
 			run,
 			(next) => {
-				next.phase = branchRef ? "waiting_parallel" : "routing";
+				if (branchRef && round) {
+					round.variablePatches ??= {};
+					round.variablePatches[branchRef] = clone(outcome.variables ?? {});
+				} else {
+					next.variables = updatedVariables;
+				}
 				const updatedRound = round ? clone(round) : undefined;
 				if (updatedRound && !branchRef) {
 					updatedRound.status = "completed";
@@ -1450,6 +1540,7 @@ export class FlowCoordinator {
 			startedAt: now(),
 			branchNodeRunIds: {},
 			branchStatuses: {},
+			variablePatches: {},
 			sourceNodeRunId,
 		};
 		await this.commit(
@@ -1877,6 +1968,15 @@ function now(): string {
 	return new Date().toISOString();
 }
 
+function isRunInput(value: FlowValue | FlowRunInput): value is FlowRunInput {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value) &&
+		"variables" in value
+	);
+}
+
 function toFlowError(error: unknown, fallback: FlowErrorCategory): FlowError {
 	if (error instanceof FlowRuntimeError)
 		return { category: error.category, summary: error.message };
@@ -1921,6 +2021,7 @@ function fingerprintFlow(
 			successors: [...node.successors.entries()],
 		})),
 		parallels: [...flow.parallels.values()],
+		variables: flow.variables,
 	};
 	return `sha256:${createHash("sha256").update(JSON.stringify({ definition, children })).digest("hex")}`;
 }
@@ -1939,6 +2040,7 @@ function normalizeRun(run: FlowRunRecord): FlowRunRecord {
 					: "starting");
 	return {
 		...run,
+		variables: clone(legacy.variables ?? {}),
 		flowVersion: legacy.flowVersion ?? "legacy:unknown",
 		status,
 		phase,
@@ -1989,21 +2091,127 @@ function normalizeParallelRound(
 		startedAt: legacy.startedAt ?? now(),
 		branchNodeRunIds: { ...(legacy.branchNodeRunIds ?? {}) },
 		branchStatuses,
+		variablePatches: { ...(legacy.variablePatches ?? {}) },
 	} as ParallelRoundRecord;
 }
 
 function renderAgentPrompt(
 	prompt: string,
-	input: FlowValue,
+	input: FlowValue | undefined,
 	node: FlowNode,
 	resources?: FlowResourceContext,
+	variables: FlowVariables = {},
 ): string {
-	const renderedInput =
-		typeof input === "string" ? input : JSON.stringify(input, null, 2);
 	const outcomes = [...node.results]
 		.map(([name, description]) => `- ${name}: ${description}`)
 		.join("\n");
-	return `${resolvePromptResources(prompt, resources).replaceAll("{outcome}", renderedInput)}\n\n本节点只允许提交以下一个结果：\n${outcomes}\n\n完成工作后必须调用 submit_flow_outcome，并提供 outcome 和 content。`;
+	const rendered = resolvePromptResources(prompt, resources);
+	return `${renderTemplateForAgent(rendered, input, variables)}\n\n本节点只允许提交以下一个结果：\n${outcomes}\n\n完成工作后必须调用 submit_flow_outcome，并提供 outcome、content，可选提供 variables。`;
+}
+
+function renderTemplateForAgent(
+	prompt: string,
+	input: FlowValue | undefined,
+	variables: FlowVariables,
+): string {
+	return String(renderTemplate(prompt, { outcome: input, variables }));
+}
+
+function parseCommandVariables(
+	stdout: string,
+): { content?: FlowValue; variables?: FlowVariables } | undefined {
+	try {
+		const parsed: unknown = JSON.parse(stdout);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+			return undefined;
+		const record = parsed as Record<string, unknown>;
+		if (record.variables === undefined) return undefined;
+		if (!isFlowValueRecord(record.variables))
+			throw new FlowRuntimeError(
+				"variable_type",
+				"命令 variables 必须是 JSON 对象",
+			);
+		return {
+			content: isFlowValue(record.content) ? record.content : undefined,
+			variables: record.variables,
+		};
+	} catch (error) {
+		if (error instanceof FlowRuntimeError) throw error;
+		return undefined;
+	}
+}
+
+function isFlowValue(value: unknown): value is import("./types.ts").FlowValue {
+	if (
+		value === null ||
+		typeof value === "string" ||
+		typeof value === "number" ||
+		typeof value === "boolean"
+	)
+		return true;
+	if (Array.isArray(value)) return value.every(isFlowValue);
+	return isFlowValueRecord(value);
+}
+
+function isFlowValueRecord(value: unknown): value is FlowVariables {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value) &&
+		Object.values(value).every(isFlowValue)
+	);
+}
+
+function mergeParallelVariables(
+	base: FlowVariables,
+	patches: Record<string, import("./types.ts").FlowVariablePatch>,
+): FlowVariables {
+	const merged = clone(base);
+	const owners = new Map<
+		string,
+		{ branch: string; value: FlowValue | undefined }
+	>();
+	for (const branch of Object.keys(patches).sort()) {
+		const patch = patches[branch];
+		for (const [name, value] of Object.entries(patch.set ?? {})) {
+			const previous = owners.get(name);
+			if (previous && JSON.stringify(previous.value) !== JSON.stringify(value))
+				throw new FlowRuntimeError(
+					"variable_conflict",
+					`并行分支“${previous.branch}”与“${branch}”同时更新变量: ${name}`,
+				);
+			owners.set(name, { branch, value });
+			merged[name] = clone(value);
+		}
+		for (const name of patch.delete ?? []) {
+			const previous = owners.get(name);
+			if (previous)
+				throw new FlowRuntimeError(
+					"variable_conflict",
+					`并行分支更新与删除变量冲突: ${name}`,
+				);
+			owners.set(name, { branch, value: undefined });
+			delete merged[name];
+		}
+	}
+	return merged;
+}
+
+function applyVariablePatch(
+	variables: FlowVariables,
+	patch?: import("./types.ts").FlowVariablePatch,
+): FlowVariables {
+	const next = clone(variables);
+	for (const [name, value] of Object.entries(patch?.set ?? {})) {
+		if (["__proto__", "prototype", "constructor"].includes(name))
+			throw new FlowRuntimeError(
+				"variable_reference",
+				`非法 Flow 变量名: ${name}`,
+			);
+		next[name] = clone(value);
+	}
+	for (const name of patch?.delete ?? []) delete next[name];
+	return next;
 }
 
 function replaceObject<T extends object>(target: T, source: T): void {

@@ -41,7 +41,7 @@ flowchart LR
 
 <!-- source-guide:start-flow -->
 <!-- source-guide:location:start-flow -->
-**源码：** [src/extension.ts:331-411](../src/extension.ts#L331)，`启动 Flow`
+**源码：** [src/extension.ts:349-429](../src/extension.ts#L349)，`启动 Flow`
 <!-- /source-guide:location:start-flow -->
 
 ```mermaid
@@ -75,7 +75,7 @@ startFlow(路径, 任务, Pi上下文):
 
 <!-- source-guide:parse-flow -->
 <!-- source-guide:location:parse-flow -->
-**源码：** [src/parser.ts:50-84](../src/parser.ts#L50)，`解析 Flow`
+**源码：** [src/parser.ts:52-119](../src/parser.ts#L52)，`解析 Flow`
 <!-- /source-guide:location:parse-flow -->
 
 ```mermaid
@@ -106,7 +106,7 @@ parseFlow(Markdown, 标识):
 
 <!-- source-guide:coordinator-run -->
 <!-- source-guide:location:coordinator-run -->
-**源码：** [src/runtime.ts:575-618](../src/runtime.ts#L575)，`驱动一次运行`
+**源码：** [src/runtime.ts:577-640](../src/runtime.ts#L577)，`驱动一次运行`
 <!-- /source-guide:location:coordinator-run -->
 
 ```mermaid
@@ -145,7 +145,7 @@ run(任务, 可选已有会话):
 
 <!-- source-guide:execute-node -->
 <!-- source-guide:location:execute-node -->
-**源码：** [src/runtime.ts:950-972](../src/runtime.ts#L950)，`执行单个节点`
+**源码：** [src/runtime.ts:985-1016](../src/runtime.ts#L985)，`执行单个节点`
 <!-- /source-guide:location:execute-node -->
 
 ```mermaid
@@ -183,7 +183,7 @@ executeNode(run, 节点引用, 输入, 分支结果):
 
 <!-- source-guide:execute-flow-reference -->
 <!-- source-guide:location:execute-flow-reference -->
-**源码：** [src/runtime.ts:1176-1189](../src/runtime.ts#L1176)，`执行 Flow 引用节点`
+**源码：** [src/runtime.ts:1240-1260](../src/runtime.ts#L1240)，`执行 Flow 引用节点`
 <!-- /source-guide:location:execute-flow-reference -->
 
 ```mermaid
@@ -218,7 +218,7 @@ executeFlowReference(run, record, node, cwd):
 
 <!-- source-guide:execute-parallel -->
 <!-- source-guide:location:execute-parallel -->
-**源码：** [src/runtime.ts:861-948](../src/runtime.ts#L861)，`执行并行分支`
+**源码：** [src/runtime.ts:885-983](../src/runtime.ts#L885)，`执行并行分支`
 <!-- /source-guide:location:execute-parallel -->
 
 ```mermaid
@@ -250,7 +250,7 @@ executeParallel(run, 并行引用, 输入):
 
 <!-- source-guide:agent-execute-node -->
 <!-- source-guide:location:agent-execute-node -->
-**源码：** [src/runtime.ts:466-523](../src/runtime.ts#L466)，`管理 Agent 节点`
+**源码：** [src/runtime.ts:468-525](../src/runtime.ts#L468)，`管理 Agent 节点`
 <!-- /source-guide:location:agent-execute-node -->
 
 ```mermaid
@@ -284,7 +284,7 @@ AgentRunModel.executeNode(请求):
 
 <!-- source-guide:pi-execute-node -->
 <!-- source-guide:location:pi-execute-node -->
-**源码：** [src/pi.ts:115-153](../src/pi.ts#L115)，`执行 Pi 节点`
+**源码：** [src/pi.ts:212-250](../src/pi.ts#L212)，`执行 Pi 节点`
 <!-- /source-guide:location:pi-execute-node -->
 
 ```mermaid
@@ -316,7 +316,7 @@ SDK 模式在一次 `prompt` 返回后提交结果。CLI 模式必须等待 Pi �
 
 <!-- source-guide:finalize-cli-turn -->
 <!-- source-guide:location:finalize-cli-turn -->
-**源码：** [src/pi.ts:199-241](../src/pi.ts#L199)，`提交 CLI 节点结果`
+**源码：** [src/pi.ts:305-351](../src/pi.ts#L305)，`提交 CLI 节点结果`
 <!-- /source-guide:location:finalize-cli-turn -->
 
 ```mermaid

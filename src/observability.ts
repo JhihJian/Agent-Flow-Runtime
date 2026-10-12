@@ -291,7 +291,7 @@ function formatDestination(
 	return `${destination.kind}:${destination.ref}`;
 }
 
-function formatValue(value: FlowValue): string {
+function formatValue(value: FlowValue | undefined): string {
 	return typeof value === "string" ? value : JSON.stringify(value);
 }
 

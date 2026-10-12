@@ -6,6 +6,13 @@ export type FlowValue =
 	| FlowValue[]
 	| { [key: string]: FlowValue };
 
+export type FlowVariables = Record<string, FlowValue>;
+
+export type FlowVariablePatch = {
+	set?: FlowVariables;
+	delete?: string[];
+};
+
 export type AgentActionKind = "新建Agent" | "复用Agent";
 
 export interface AgentAction {
@@ -17,6 +24,8 @@ export interface CommandRequest {
 	command: string;
 	args?: string[];
 	stdin?: FlowValue;
+	/** 命令 stdout 是否按变量结果信封解析。 */
+	output?: "variables";
 	/** 命令进程的工作目录；缺省时继承当前进程 cwd。 */
 	cwd?: string;
 }
@@ -31,8 +40,10 @@ export interface FlowReferenceAction {
 	kind: "执行Flow";
 	/** 目标 Flow 标识，即同目录下兄弟包的目录名。 */
 	flow: string;
-	/** 子 Run 任务。省略时取父节点输入原值；字符串中可用 {outcome} 替换。 */
+	/** 旧版本 task 字段仅用于读取历史定义，运行时不再作为启动输入。 */
 	task?: FlowValue;
+	/** 子 Flow 启动时覆盖或补充的变量。 */
+	variables?: FlowVariables;
 }
 
 export type FlowAction = AgentAction | CommandAction | FlowReferenceAction;
@@ -63,6 +74,8 @@ export interface FlowDefinition {
 	startNodeRef: string;
 	nodes: Map<string, FlowNode>;
 	parallels: Map<string, ParallelStart>;
+	/** Flow 默认变量。 */
+	variables?: FlowVariables;
 }
 
 /** Files adjacent to a directory-based Flow entry. */
@@ -92,6 +105,7 @@ export interface OutcomeOption {
 export interface NodeOutcome {
 	result: string;
 	content: FlowValue;
+	variables?: FlowVariablePatch;
 }
 
 export interface AgentConnection {
@@ -181,6 +195,11 @@ export type FlowErrorCategory =
 	| "recovery"
 	| "persistence"
 	| "legacy"
+	| "variable_reference"
+	| "variable_type"
+	| "variable_conflict"
+	| "variable_persistence"
+	| "variable_recovery"
 	| "unknown";
 
 export interface FlowError {
@@ -258,6 +277,7 @@ export interface ParallelRoundRecord {
 	joinNodeRunId?: string;
 	joinInput?: FlowValue;
 	joinOutcome?: NodeOutcome;
+	variablePatches?: Record<string, FlowVariablePatch>;
 	sourceNodeRunId?: string;
 }
 
@@ -271,6 +291,11 @@ export interface RunRecoveryRecord {
 	summary: string;
 }
 
+export interface FlowRunInput {
+	variables?: FlowVariables;
+	task?: FlowValue;
+}
+
 /**
  * Current Run snapshot. Historical facts live in NodeRun, RouteDecision,
  * ParallelRound and RunRecovery records, rather than in the current cursor.
@@ -281,7 +306,8 @@ export interface FlowRunRecord {
 	/** Immutable content fingerprint calculated from the parsed Flow definition. */
 	flowVersion: string;
 
-	task: FlowValue;
+	task?: FlowValue;
+	variables?: FlowVariables;
 	status: RunStatus;
 	phase: RunPhase;
 	/** Monotonically incremented after every successful state-fact commit. */
@@ -349,7 +375,7 @@ export interface FlowRunSummary {
 	id: string;
 	flowId: string;
 	flowVersion: string;
-	task: FlowValue;
+	task?: FlowValue;
 	status: RunStatus;
 	phase: RunPhase;
 	sequence: number;

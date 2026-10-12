@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import { isAbsolute, join, resolve } from "node:path";
 import type {
@@ -23,13 +24,14 @@ import {
 	PiAgentIntegrationAdapter,
 	type PiCliBridge,
 } from "./pi.ts";
-
 import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
 import type {
 	FlowObservationEvent,
 	FlowRunSummary,
+	FlowVariables,
 	UnifiedMessage,
 } from "./types.ts";
+import { validateVariables } from "./variables.ts";
 
 /** Install with `pi install <package>` or load with `pi -e ./dist/extension.js`. */
 export default function flowExtension(pi: ExtensionAPI) {
@@ -126,8 +128,12 @@ export default function flowExtension(pi: ExtensionAPI) {
 		},
 	};
 
-	pi.registerFlag("flow", {
-		description: "Run a Flow package directory or FLOW.md entry",
+	pi.registerFlag("variables", {
+		description: "JSON 文件中的 Flow 变量",
+		type: "string",
+	});
+	pi.registerFlag("var", {
+		description: "Flow 变量，格式为 name=value，可重复",
 		type: "string",
 	});
 	pi.registerTool(
@@ -282,12 +288,17 @@ export default function flowExtension(pi: ExtensionAPI) {
 		if (event.source === "extension" || !state.configuredPath) {
 			return { action: "continue" };
 		}
-		await startFlow(state.configuredPath, event.text, ctx);
+		await startFlow(
+			state.configuredPath,
+			await parseFlowVariables(event.text, ctx),
+			ctx,
+		);
 		return { action: "handled" };
 	});
 
 	pi.registerCommand("flow", {
-		description: "Run or inspect a Flow: /flow run <package|FLOW.md> <task>",
+		description:
+			"Run or inspect a Flow: /flow run <package|FLOW.md> [自由文本]",
 		handler: async (args, ctx) => {
 			bindContext(ctx);
 			const show = /^show\s+(\S+)$/.exec(args.trim());
@@ -309,12 +320,19 @@ export default function flowExtension(pi: ExtensionAPI) {
 				ctx.ui.notify(formatRecentRuns(recent), "info");
 				return;
 			}
-			const match = /^run\s+(\S+)\s+([\s\S]+)$/.exec(args.trim());
+			const match = /^run\s+(\S+)(?:\s+([\s\S]+))?$/.exec(args.trim());
 			if (!match) {
-				ctx.ui.notify("用法: /flow run <包目录或FLOW.md> <任务>", "warning");
+				ctx.ui.notify(
+					"用法: /flow run <包目录或FLOW.md> [自由文本]",
+					"warning",
+				);
 				return;
 			}
-			await startFlow(match[1], match[2], ctx);
+			await startFlow(
+				match[1],
+				await parseFlowVariables(match[2] ?? "", ctx),
+				ctx,
+			);
 		},
 	});
 
@@ -330,7 +348,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 
 	async function startFlow(
 		path: string,
-		task: string,
+		variables: FlowVariables,
 		ctx: ExtensionContext,
 	): Promise<void> {
 		if (state.resuming) await state.resuming;
@@ -373,7 +391,7 @@ export default function flowExtension(pi: ExtensionAPI) {
 		if (!first) throw new Error(`Flow 首节点不存在: ${flow.startNodeRef}`);
 		const promise = coordinator
 			.run(
-				task,
+				{ variables },
 				first.action.kind === "复用Agent"
 					? {
 							runId,
@@ -408,6 +426,70 @@ export default function flowExtension(pi: ExtensionAPI) {
 			});
 		state.active = { path: loaded.path, promise };
 		await promise;
+	}
+
+	async function parseFlowVariables(
+		raw: string,
+		ctx: ExtensionContext,
+	): Promise<FlowVariables> {
+		const variables: FlowVariables = Object.create(null);
+		const file = pi.getFlag("variables");
+		if (typeof file === "string" && file.trim()) {
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(
+					await readFile(
+						isAbsolute(file) ? file : resolve(ctx.cwd, file),
+						"utf8",
+					),
+				);
+			} catch (error) {
+				throw new Error(
+					`读取 --variables 失败: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+			validateVariables(parsed);
+			Object.assign(variables, parsed);
+		}
+		const flags = pi.getFlag("var");
+		const pairs = Array.isArray(flags)
+			? flags
+			: typeof flags === "string"
+				? [flags]
+				: [];
+		for (const pair of pairs) {
+			const separator = pair.indexOf("=");
+			if (separator <= 0) throw new Error(`--var 必须使用 name=value: ${pair}`);
+			const name = pair.slice(0, separator);
+			validateVariables({ [name]: null });
+			variables[name] = pair.slice(separator + 1);
+		}
+		const tokens = raw.match(/(?:[^\s"]+|"[^"]*")+/g) ?? [];
+
+		const free: string[] = [];
+		for (let index = 0; index < tokens.length; index += 1) {
+			const token = tokens[index];
+			if (token === "--var" && tokens[index + 1]) {
+				const pair = tokens[++index];
+				const separator = pair.indexOf("=");
+				if (separator <= 0)
+					throw new Error(`--var 必须使用 name=value: ${pair}`);
+				const name = pair.slice(0, separator);
+				validateVariables({ [name]: null });
+				variables[name] = pair.slice(separator + 1);
+				continue;
+			}
+			const match = /^--var=([^=]+)=(.*)$/.exec(token);
+			if (match) {
+				validateVariables({ [match[1]]: null });
+				variables[match[1]] = match[2];
+				continue;
+			}
+			free.push(token.replace(/^"|"$/g, ""));
+		}
+		if (free.length) variables.输入 = free.join(" ");
+		validateVariables(variables);
+		return variables;
 	}
 
 	async function resumeFlow(ctx: ExtensionContext): Promise<void> {
