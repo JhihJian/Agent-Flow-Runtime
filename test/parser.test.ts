@@ -73,9 +73,9 @@ describe("parseFlow", () => {
 		expect(() => parseFlow(source, "invalid")).toThrow(FlowSyntaxError);
 	});
 
-	it("首节点提示词缺少 {outcome} 时拒绝解析", async () => {
+	it("首节点提示词允许缺少 {outcome}", async () => {
 		const source = (await fixture("ordinary")).replace("{outcome}", "");
-		expect(() => parseFlow(source, "invalid")).toThrow(/开始任务/);
+		expect(parseFlow(source, "no-outcome").startNodeRef).toBe("analyze");
 	});
 
 	it("首节点是命令动作时允许在命令请求中引用 {outcome}", async () => {
@@ -115,7 +115,7 @@ flowchart TD
 		expect(flow.startNodeRef).toBe("check");
 	});
 
-	it("首节点是 执行Flow 且 task 未引用 {outcome} 时拒绝解析", () => {
+	it("首节点是 执行Flow 时允许 task 为固定值", () => {
 		expect(() =>
 			parseFlow(
 				`---
@@ -137,6 +137,6 @@ flowchart TD
 `,
 				"ref-fixed-task",
 			),
-		).toThrow(/开始任务/);
+		).not.toThrow();
 	});
 });

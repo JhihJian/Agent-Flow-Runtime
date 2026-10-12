@@ -118,18 +118,16 @@
 | `branchReferencesAreStandalone` | 函数 | 否 | [src/parser.ts:286-299](../src/parser.ts#L286) |
 | `referencesOnlyInStdin` | 函数 | 否 | [src/parser.ts:301-318](../src/parser.ts#L301) |
 | `parseResults` | 函数 | 否 | [src/parser.ts:320-340](../src/parser.ts#L320) |
-| `validateAndWireGraph` | 函数 | 否 | [src/parser.ts:342-413](../src/parser.ts#L342) |
-| `wireFlowReferenceNode` | 函数 | 否 | [src/parser.ts:416-470](../src/parser.ts#L416) |
-| `destination` | 函数 | 否 | [src/parser.ts:472-481](../src/parser.ts#L472) |
-| `validateParallel` | 函数 | 否 | [src/parser.ts:483-559](../src/parser.ts#L483) |
-| `validateReachability` | 函数 | 否 | [src/parser.ts:561-583](../src/parser.ts#L561) |
-| `groupEdges` | 函数 | 否 | [src/parser.ts:585-596](../src/parser.ts#L585) |
-| `matchIndex` | 函数 | 否 | [src/parser.ts:598-602](../src/parser.ts#L598) |
-| `actionReferencesOutcome` | 函数 | 否 | [src/parser.ts:605-615](../src/parser.ts#L605) |
-| `flowValueContainsOutcome` | 函数 | 否 | [src/parser.ts:617-623](../src/parser.ts#L617) |
-| `isRecord` | 函数 | 否 | [src/parser.ts:625-627](../src/parser.ts#L625) |
-| `renderCommandRequest` | 函数 | 是 | [src/parser.ts:629-656](../src/parser.ts#L629) |
-| `renderFlowReferenceTask` | 函数 | 是 | [src/parser.ts:659-677](../src/parser.ts#L659) |
+| `validateAndWireGraph` | 函数 | 否 | [src/parser.ts:342-408](../src/parser.ts#L342) |
+| `wireFlowReferenceNode` | 函数 | 否 | [src/parser.ts:411-465](../src/parser.ts#L411) |
+| `destination` | 函数 | 否 | [src/parser.ts:467-476](../src/parser.ts#L467) |
+| `validateParallel` | 函数 | 否 | [src/parser.ts:478-554](../src/parser.ts#L478) |
+| `validateReachability` | 函数 | 否 | [src/parser.ts:556-578](../src/parser.ts#L556) |
+| `groupEdges` | 函数 | 否 | [src/parser.ts:580-591](../src/parser.ts#L580) |
+| `matchIndex` | 函数 | 否 | [src/parser.ts:593-597](../src/parser.ts#L593) |
+| `isRecord` | 函数 | 否 | [src/parser.ts:599-601](../src/parser.ts#L599) |
+| `renderCommandRequest` | 函数 | 是 | [src/parser.ts:603-630](../src/parser.ts#L603) |
+| `renderFlowReferenceTask` | 函数 | 是 | [src/parser.ts:633-651](../src/parser.ts#L633) |
 
 ## [src/pi.ts](../src/pi.ts)
 

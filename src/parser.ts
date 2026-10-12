@@ -370,11 +370,6 @@ function validateAndWireGraph(
 	if (first.result || !definition.nodes.has(first.to))
 		throw new FlowSyntaxError("start 必须无结果地指向一个工作节点");
 	definition.startNodeRef = first.to;
-	const firstNode = definition.nodes.get(definition.startNodeRef);
-	if (firstNode && !actionReferencesOutcome(firstNode.action))
-		throw new FlowSyntaxError(
-			`首个工作节点 ${firstNode.ref} 必须引用 {outcome}，否则流程开始任务无法进入流程`,
-		);
 	for (const node of definition.nodes.values()) {
 		const edges = outgoing.get(node.ref) ?? [];
 		if (node.action.kind === "执行Flow") {
@@ -599,27 +594,6 @@ function matchIndex(match: RegExpMatchArray): number {
 	if (match.index === undefined)
 		throw new FlowSyntaxError("Markdown 标题缺少位置");
 	return match.index;
-}
-
-/** 首个工作节点必须引用 {outcome}：流程开始任务只能经首节点动作进入流程。 */
-function actionReferencesOutcome(action: FlowAction): boolean {
-	switch (action.kind) {
-		case "新建Agent":
-		case "复用Agent":
-			return action.prompt.includes("{outcome}");
-		case "执行自定义命令":
-			return flowValueContainsOutcome(action.request as unknown as FlowValue);
-		case "执行Flow":
-			return action.task === undefined || flowValueContainsOutcome(action.task);
-	}
-}
-
-function flowValueContainsOutcome(value: FlowValue): boolean {
-	if (typeof value === "string") return value.includes("{outcome}");
-	if (Array.isArray(value)) return value.some(flowValueContainsOutcome);
-	if (isRecord(value))
-		return Object.values(value).some(flowValueContainsOutcome);
-	return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
