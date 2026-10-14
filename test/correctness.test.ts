@@ -246,6 +246,58 @@ test("SDK 与 CLI 结果工具共享无递归引用的兼容 schema", () => {
 	assert.equal(serializedSchema.includes('"$ref"'), false);
 });
 
+test("结果工具允许嵌套 JSON 值并在工具边界拒绝非 JSON 值", async () => {
+	const adapter = new PiAgentIntegrationAdapter();
+	const internal = adapter as unknown as { pendingCli: unknown };
+	internal.pendingCli = {
+		outcomes: [{ name: "完成", description: "完成" }],
+		submitted: false,
+		retryCount: 0,
+		prompt: "",
+		resolve: () => {},
+		reject: () => {},
+		nodeExecutionReference: "node-run",
+		submitOutcome: async () => {},
+	};
+	const tool = createFlowOutcomeTool(adapter);
+	const nestedVariables = {
+		证据: [{ 来源: "日志", 片段: ["一", { 页码: 2 }] }],
+	};
+
+	await tool.execute(
+		"call-nested",
+		{
+			outcome: "完成",
+			variables: nestedVariables,
+		},
+		undefined,
+		undefined,
+		undefined as never,
+	);
+	assert.deepEqual(
+		(internal.pendingCli as { candidate: { variables: unknown } }).candidate
+			.variables,
+		nestedVariables,
+	);
+	(internal.pendingCli as { candidate?: unknown }).candidate = undefined;
+
+	const circular: Record<string, unknown> = {};
+	circular.self = circular;
+	await assert.rejects(
+		tool.execute(
+			"call-circular",
+			{
+				outcome: "完成",
+				variables: { circular },
+			},
+			undefined,
+			undefined,
+			undefined as never,
+		),
+		/Flow 变量值必须是 JSON 值/,
+	);
+});
+
 test("会话没有等待节点时按会话路由报错而不是提交到其他会话", async () => {
 	const adapter = new PiAgentIntegrationAdapter();
 	const internal = adapter as unknown as AdapterInternals;
