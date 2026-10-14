@@ -68,6 +68,16 @@ variables:
 
 `name`和`description`均为非空内容。全局变量必须通过 `variables` 声明，每项必须有非空 `description`，可带 JSON 值 `default`。启动参数只能提供已声明变量，有默认值可省略，无默认值必须提供。节点可以覆盖全局变量，不能新增未声明变量。结果变量表不能与全局变量同名。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。Flow 标识始终取`FLOW.md`父目录名。
 
+### 宿主启动输入
+
+Pi 宿主的自由文本输入作为全局变量`任务`传入：
+
+```bash
+pi --flow ./.flows/release-check -p "执行发布检查"
+```
+
+需要读取任务的 Flow 必须声明`任务`并使用`{var.任务}`。结构化输入使用`--var name=value`或`--variables <json文件>`；后者先加载，前者覆盖同名值。自由文本不能与另一个`任务`输入同时提供。所有输入变量都必须声明，SDK 则直接传入`run({ variables: {...} })`。
+
 ## 2. 图与节点
 
 文件恰有一张`flowchart TD`。
