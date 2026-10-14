@@ -1,6 +1,12 @@
 ---
 name: Flow 运行观测能力开发
 description: 适用于为 Flow Runtime 增加运行历史查询、实时状态发布和多宿主展示能力，并要求通过完整验收门禁的开发任务。
+variables:
+  任务:
+    description: 本次运行观测能力开发任务
+  实现记录:
+    description: 当前实现契约、各层修改和验证证据，每个开发结果提交时更新
+    default: 尚未建立契约
 ---
 
 ```mermaid
@@ -33,7 +39,9 @@ flowchart TD
 
 ```新建Agent
 围绕以下任务建立本次开发的实现契约：
-{outcome}
+{var.任务}
+最新实现记录：{var.实现记录}
+每次提交开发结果时，在 variables.实现记录 中更新结论、修改范围、验证证据或返工原因。
 
 请先阅读：
 - docs/flow-observability-design.md
@@ -65,7 +73,7 @@ flowchart TD
 
 ```复用Agent
 根据已确认的实现契约，补齐 Runtime 能够解释一次完整 Run 的运行事实：
-{outcome}
+{var.实现记录}
 
 重点完成：
 - Run 和 NodeRun 的显式状态、阶段、错误和恢复语义。
@@ -90,7 +98,7 @@ Run、NodeRun 和并行轮次已经足够完整，能够在不依赖日志猜测
 
 ```复用Agent
 根据实现契约和已完成的运行事实层，实现 Runtime 内部的统一运行历史查询能力：
-{outcome}
+{var.实现记录}
 
 实现目标：
 - 提供 FlowRunInspector.inspectRun(runId)。
@@ -115,7 +123,7 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 
 ```复用Agent
 根据统一历史查询模型，实现运行过程的实时状态发布：
-{outcome}
+{var.实现记录}
 
 实现目标：
 - 定义 FlowObservationEvent 和 FlowObservationPublisher。
@@ -140,7 +148,7 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 
 ```复用Agent
 根据 FlowRunInspector 和 FlowObservationPublisher，接入运行观测的外部形态：
-{outcome}
+{var.实现记录}
 
 所有形态必须是薄适配器，共用同一份历史视图和事件模型：
 - SDK：提供 inspectRun 和订阅运行事件的方法。
@@ -164,7 +172,7 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 
 ```复用Agent
 准备对本次观测能力实现执行验收检查：
-{outcome}
+{var.实现记录}
 
 确认本轮检查范围包括运行事实、历史查询、实时发布、外部展示和恢复行为。不要在本节点修改代码。确认范围后进入并行测试和质量检查。完成后必须调用 submit_flow_outcome。
 ```
@@ -177,27 +185,37 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 
 ```执行自定义命令
 {
-  "command": "npm",
-  "args": ["test"]
+  "command": "node",
+  "args": ["-e", "const r=require('node:child_process').spawnSync('npm',['test'],Object.fromEntries([['encoding','utf8']]));console.log(JSON.stringify(Object.fromEntries([['variables',Object.fromEntries([['摘要',Object.fromEntries([['status',r.status===0?'success':'failure'],['exitCode',r.status],['stdout',r.stdout],['stderr',r.stderr]])]])]])));"],
+  "output": "variables"
 }
 ```
 
 ### 已执行
 
-已运行完整测试，结果保存在本节点结果内容中。
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 测试状态、退出码和输出摘要 |
+
+已运行完整测试，执行证据保存在 `commandResult`。
 
 ## 运行质量检查
 
 ```执行自定义命令
 {
-  "command": "npm",
-  "args": ["run", "check"]
+  "command": "node",
+  "args": ["-e", "const r=require('node:child_process').spawnSync('npm',['run','check'],Object.fromEntries([['encoding','utf8']]));console.log(JSON.stringify(Object.fromEntries([['variables',Object.fromEntries([['摘要',Object.fromEntries([['status',r.status===0?'success':'failure'],['exitCode',r.status],['stdout',r.stdout],['stderr',r.stderr]])]])]])));"],
+  "output": "variables"
 }
 ```
 
 ### 已执行
 
-已运行格式、类型和文档索引检查，结果保存在本节点结果内容中。
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 质量检查状态、退出码和输出摘要 |
+
+已运行格式、类型和文档索引检查，执行证据保存在 `commandResult`。
 
 ## 汇总检查结果
 
@@ -206,16 +224,21 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
   "command": "node",
   "args": [
     "-e",
-    "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>console.log(s))"
+    "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>console.log(JSON.stringify(Object.fromEntries([['variables',Object.fromEntries([['汇总结果',JSON.parse(s)]])]]))))"
   ],
+  "output": "variables",
   "stdin": {
-    "test": {test.outcome},
-    "quality": {quality.outcome}
+    "test": {branch.test.摘要},
+    "quality": {branch.quality.摘要}
   }
 }
 ```
 
 ### 已执行
+
+| 变量 | 含义 |
+| --- | --- |
+| 汇总结果 | 本轮测试和质量检查的业务摘要 |
 
 已汇总测试和质量检查结果，下一节点负责验收。
 
@@ -223,7 +246,7 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 
 ```复用Agent
 根据以下实现结果和检查汇总执行最终验收：
-{outcome}
+{input.汇总结果}
 
 必须逐项检查：
 - Flow 仍然只是可复用工作路径，Task、Run、NodeRun 概念没有混淆。
@@ -234,7 +257,7 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 - 断线、进程重启、节点失败、命令中断和观测推送失败有明确行为。
 - 测试、类型检查、格式检查和文档检查均有证据。
 
-只有所有门禁都满足时才能提交“通过”。发现可以修复的问题提交“返工”，并在 content 中明确返工位置和原因。若当前环境或需求无法支持可靠验收，提交“无法验收”并说明缺失条件。完成后必须调用 submit_flow_outcome。
+只有所有门禁都满足时才能提交“通过”。发现可以修复的问题提交“返工”，并在 variables.验收结论 中明确返工位置、原因和验证方式。无法可靠验收时提交“无法验收”，在同一变量中说明缺失条件。完成后必须调用 submit_flow_outcome。
 ```
 
 ### 通过
@@ -243,17 +266,25 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 
 ### 返工
 
-验收发现可修复的问题。结果内容必须列出问题、对应模块和下一轮验证方式，流程将进入返工节点。
+| 变量 | 含义 |
+| --- | --- |
+| 验收结论 | 问题、返工位置、原因和下一轮验证方式 |
+
+验收发现可修复的问题。`验收结论` 必须列出问题、对应模块和下一轮验证方式，流程将进入返工节点。
 
 ### 无法验收
 
-当前环境、依赖或外部条件不足以完成可靠验收。结果内容必须列出已检查范围、缺失条件和不能得出的结论。
+| 变量 | 含义 |
+| --- | --- |
+| 验收结论 | 已检查范围、缺失条件和无法得出的结论 |
+
+当前环境、依赖或外部条件不足以完成可靠验收。`验收结论` 必须列出已检查范围、缺失条件和不能得出的结论。
 
 ## 根据验收结果返工
 
 ```复用Agent
 根据上一次验收结果进行一次有边界的返工：
-{outcome}
+{input.验收结论}
 
 只修复验收指出的问题。先确认问题属于运行事实、历史查询、实时发布还是展示适配，再修改对应模块。不要通过降低测试标准、隐藏错误或增加与 Flow 无关的监控组件来绕过门禁。完成后说明修改内容、原因和可能影响，并调用 submit_flow_outcome。
 ```
@@ -264,4 +295,8 @@ Inspector 无法可靠还原节点顺序、进入原因或并行历史。请回�
 
 ### 无法安全返工
 
-当前问题无法在已有契约和证据范围内安全修复。结果内容必须说明阻塞原因、已尝试范围和需要外部决策的事项。
+| 变量 | 含义 |
+| --- | --- |
+| 阻塞原因 | 已尝试范围和需要外部决策的事项 |
+
+当前问题无法在已有契约和证据范围内安全修复。`阻塞原因` 必须说明阻塞原因、已尝试范围和需要外部决策的事项。

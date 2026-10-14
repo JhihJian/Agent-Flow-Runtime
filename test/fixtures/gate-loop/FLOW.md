@@ -1,6 +1,10 @@
 ---
 name: 门禁循环
 description: 用于验证门禁和返工循环。
+variables:
+  任务:
+    description: 本次检查任务
+    default: test
 ---
 
 ```mermaid
@@ -14,7 +18,7 @@ flowchart TD
 
 ```新建Agent
 检查以下输入：
-{outcome}
+{var.任务}
 ```
 
 ### 返工

@@ -8,8 +8,13 @@ import type {
 	FlowNode,
 	FlowReferenceAction,
 	FlowValue,
+	FlowVariableDeclarations,
 } from "./types.ts";
-import { validateVariableName, validateVariables } from "./variables.ts";
+import {
+	validateVariableDeclarations,
+	validateVariableName,
+	validateVariables,
+} from "./variables.ts";
 
 const IDENTIFIER = "[A-Za-z][A-Za-z0-9_-]*";
 const FLOW_REFERENCE_ID = /^[A-Za-z][A-Za-z0-9_-]*$/;
@@ -24,7 +29,8 @@ const PARALLEL_DECLARATION = new RegExp(
 const EDGE = new RegExp(
 	`^\\s*(${IDENTIFIER})\\s*-->\\s*(?:\\|([^|]+)\\|\\s*)?(${IDENTIFIER})\\s*$`,
 );
-const BRANCH_REFERENCE = new RegExp(`\\{(${IDENTIFIER})\\.outcome\\}`, "g");
+const BRANCH_REFERENCE =
+	/\{branch\.([A-Za-z][A-Za-z0-9_-]*)\.([\p{L}\p{N}_-]+)\}/gu;
 
 /** 执行Flow 节点成功路径的固定结果名，无结果边直连时同样挂在该名下。 */
 export const FLOW_REFERENCE_SUCCESS_RESULT = "已完成";
@@ -40,6 +46,7 @@ interface GraphEdge {
 interface ParsedSection {
 	action: FlowAction;
 	results: Map<string, string>;
+	resultVariables: NonNullable<FlowNode["resultVariables"]>;
 }
 
 export class FlowSyntaxError extends Error {
@@ -64,6 +71,7 @@ export function parseFlow(markdown: string, id: string): FlowDefinition {
 			name,
 			action: section.action,
 			results: section.results,
+			resultVariables: section.resultVariables,
 			successors: new Map(),
 		});
 	}
@@ -81,16 +89,19 @@ export function parseFlow(markdown: string, id: string): FlowDefinition {
 		nodes,
 		parallels: new Map(),
 	};
-	if (metadata.variables)
-		(
-			definition as FlowDefinition & { variables?: Record<string, FlowValue> }
-		).variables = metadata.variables;
+	if (metadata.variables) definition.variables = metadata.variables;
+	for (const node of nodes.values()) {
+		for (const declarations of node.resultVariables?.values() ?? []) {
+			for (const name of Object.keys(declarations)) {
+				if (Object.hasOwn(metadata.variables ?? {}, name))
+					throw new FlowSyntaxError(
+						`变量 ${name} 不能同时声明为全局变量和下一跳变量`,
+					);
+			}
+		}
+	}
 
 	validateAndWireGraph(definition, graph);
-	const noOutcome = new Set([
-		definition.startNodeRef,
-		...[...definition.parallels.values()].map((parallel) => parallel.joinRef),
-	]);
 	const joins = new Set(
 		[...definition.parallels.values()].map((parallel) => parallel.joinRef),
 	);
@@ -100,20 +111,14 @@ export function parseFlow(markdown: string, id: string): FlowDefinition {
 				? node.action.prompt
 				: node.action.kind === "执行自定义命令"
 					? (node.action.request as unknown as FlowValue)
-					: ((
-							node.action as FlowReferenceAction & {
-								variables?: Record<string, FlowValue>;
-							}
-						).variables ?? {});
-		validateTemplates(value, noOutcome.has(node.ref));
-		if (
-			node.action.kind === "执行自定义命令" &&
-			!joins.has(node.ref) &&
-			node.action.branchReferences.length
-		)
-			throw new FlowSyntaxError(
-				`节点 ${node.ref} 只有并行汇合节点可以引用分支结果`,
-			);
+					: node.action.kind === "执行Flow"
+						? (node.action.inputs ?? {})
+						: {};
+		validateTemplates(
+			value,
+			node.ref === definition.startNodeRef,
+			joins.has(node.ref),
+		);
 	}
 	return definition;
 }
@@ -121,7 +126,7 @@ export function parseFlow(markdown: string, id: string): FlowDefinition {
 function parseMetadata(markdown: string): {
 	name: string;
 	description: string;
-	variables?: Record<string, FlowValue>;
+	variables?: FlowVariableDeclarations;
 } {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
 	if (!match)
@@ -142,10 +147,10 @@ function parseMetadata(markdown: string): {
 		!parsed.description.trim()
 	)
 		throw new FlowSyntaxError("元信息必须包含非空的 name 和 description");
-	let variables: Record<string, FlowValue> | undefined;
+	let variables: FlowVariableDeclarations | undefined;
 	if (parsed.variables !== undefined) {
 		try {
-			validateVariables(parsed.variables);
+			validateVariableDeclarations(parsed.variables);
 		} catch (error) {
 			throw new FlowSyntaxError(
 				error instanceof Error ? error.message : String(error),
@@ -230,11 +235,14 @@ function parseSections(markdown: string): Map<string, ParsedSection> {
 			name,
 			body.slice(0, firstOutcome?.index ?? body.length),
 		);
+		const resultVariables: NonNullable<FlowNode["resultVariables"]> = new Map();
 		sections.set(name, {
 			action,
+			resultVariables,
 			results: parseResults(
 				name,
 				body.slice(firstOutcome?.index ?? body.length),
+				resultVariables,
 			),
 		});
 	}
@@ -279,23 +287,21 @@ function parseFlowReferenceAction(
 		);
 	}
 	for (const key of Object.keys(parsed)) {
-		if (key !== "flow" && key !== "variables")
+		if (key !== "flow" && key !== "inputs")
 			throw new FlowSyntaxError(
 				`节点“${nodeName}”的 Flow 引用不允许字段: ${key}`,
 			);
 	}
 	const action: FlowReferenceAction = { kind: "执行Flow", flow: parsed.flow };
-	if ("variables" in parsed) {
+	if ("inputs" in parsed) {
 		try {
-			validateVariables(parsed.variables);
+			validateVariables(parsed.inputs);
 		} catch (error) {
 			throw new FlowSyntaxError(
 				`节点“${nodeName}”: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
-		(
-			action as FlowReferenceAction & { variables?: Record<string, FlowValue> }
-		).variables = parsed.variables;
+		action.inputs = parsed.inputs;
 	}
 	return action;
 }
@@ -304,9 +310,8 @@ function parseCommandAction(nodeName: string, content: string): CommandAction {
 	const references = [...content.matchAll(BRANCH_REFERENCE)].map(
 		(match) => match[1],
 	);
-	const replaced = content.replace(
-		BRANCH_REFERENCE,
-		(_match, ref: string) => `"__flow_branch_${ref}__"`,
+	const replaced = content.replace(BRANCH_REFERENCE, (match) =>
+		JSON.stringify(match),
 	);
 	let parsed: unknown;
 	try {
@@ -362,8 +367,8 @@ function branchReferencesAreStandalone(
 	const standalone = [
 		...content.matchAll(
 			new RegExp(
-				`(?:^|[:,\\[])\\s*\\{(${IDENTIFIER})\\.outcome\\}\\s*(?=[,}\\]])`,
-				"gm",
+				`(?:^|[:,\\[])\\s*\\{branch\\.(${IDENTIFIER})\\.[\\p{L}\\p{N}_-]+\\}\\s*(?=[,}\\]])`,
+				"gmu",
 			),
 		),
 	];
@@ -372,26 +377,29 @@ function branchReferencesAreStandalone(
 
 function referencesOnlyInStdin(request: Record<string, unknown>): boolean {
 	const visit = (value: unknown, inStdin: boolean): boolean => {
-		if (
-			typeof value === "string" &&
-			value.startsWith("__flow_branch_") &&
-			value.endsWith("__")
-		)
-			return inStdin;
+		if (typeof value === "string")
+			return (
+				!value.includes("{branch.") ||
+				(inStdin &&
+					/^\{branch\.[A-Za-z][A-Za-z0-9_-]*\.[\p{L}\p{N}_-]+\}$/u.test(value))
+			);
 		if (Array.isArray(value))
 			return value.every((item) => visit(item, inStdin));
 		if (isRecord(value))
-			return Object.entries(value).every(([key, item]) =>
-				visit(item, inStdin || key === "stdin"),
+			return Object.entries(value).every(
+				([key, item]) => !key.includes("{branch.") && visit(item, inStdin),
 			);
 		return true;
 	};
-	return visit(request, false);
+	return Object.entries(request).every(([key, value]) =>
+		visit(value, key === "stdin"),
+	);
 }
 
 function parseResults(
 	nodeName: string,
 	resultArea: string,
+	resultVariables: NonNullable<FlowNode["resultVariables"]>,
 ): Map<string, string> {
 	const heading = /^### (.+?)\s*$/gm;
 	const headers = [...resultArea.matchAll(heading)];
@@ -407,8 +415,57 @@ function parseResults(
 		if (!result || !description || results.has(result))
 			throw new FlowSyntaxError(`节点“${nodeName}”的结果说明必须唯一且非空`);
 		results.set(result, description);
+		resultVariables.set(result, parseResultVariables(description));
 	}
 	return results;
+}
+
+function parseResultVariables(
+	description: string,
+): Record<string, { description: string }> {
+	const declarations: Record<string, { description: string }> =
+		Object.create(null);
+	const lines = description
+		.replace(/```[^\r\n]*\r?\n[\s\S]*?\r?\n```/g, "")
+		.split(/\r?\n/);
+	const cells = (line: string): string[] =>
+		line
+			.trim()
+			.replace(/^\|/, "")
+			.replace(/\|$/, "")
+			.split(/(?<!\\)\|/)
+			.map((cell) => cell.trim().replaceAll("\\|", "|"));
+	let found = false;
+	for (let index = 0; index < lines.length; index++) {
+		if (!/^\s*\|/.test(lines[index])) continue;
+		const header = cells(lines[index]);
+		if (header.length !== 2 || header[0] !== "变量" || header[1] !== "含义")
+			continue;
+		if (found) throw new FlowSyntaxError("每个结果只能声明一张变量表");
+		found = true;
+		const separator = cells(lines[++index] ?? "");
+		if (
+			separator.length !== 2 ||
+			separator.some((cell) => !/^:?-{3,}:?$/.test(cell))
+		)
+			throw new FlowSyntaxError("结果变量表缺少有效 Markdown 分隔行");
+		while (index + 1 < lines.length && /^\s*\|/.test(lines[index + 1])) {
+			const row = cells(lines[++index]);
+			if (row.length !== 2 || !row[1])
+				throw new FlowSyntaxError("结果变量表必须包含变量名和非空含义");
+			try {
+				validateVariableName(row[0]);
+			} catch (error) {
+				throw new FlowSyntaxError(
+					error instanceof Error ? error.message : String(error),
+				);
+			}
+			if (Object.hasOwn(declarations, row[0]))
+				throw new FlowSyntaxError(`结果变量重复: ${row[0]}`);
+			declarations[row[0]] = { description: row[1] };
+		}
+	}
+	return declarations;
 }
 
 function validateAndWireGraph(
@@ -608,11 +665,10 @@ function validateParallel(
 			`汇合节点 ${joinRef} 的入边必须恰好来自 ${parallelRef} 的直接分支`,
 		);
 	}
-	const refs = join.action.branchReferences;
+	const refs = new Set(join.action.branchReferences);
 	if (
-		refs.length !== branchRefs.length ||
-		new Set(refs).size !== refs.length ||
-		refs.some((ref) => !branchRefs.includes(ref))
+		refs.size !== branchRefs.length ||
+		[...refs].some((ref) => !branchRefs.includes(ref))
 	) {
 		throw new FlowSyntaxError(
 			`汇合节点 ${joinRef} 必须在 stdin 中引用每个直接分支的结果`,
@@ -672,20 +728,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export interface TemplateContext {
-	outcome?: FlowValue;
+interface TemplateContext {
+	input?: FlowValue;
 	variables?: Readonly<Record<string, FlowValue>>;
-	branchOutcomes?: ReadonlyMap<string, unknown>;
+	branches?: ReadonlyMap<string, unknown>;
 }
 
-const PLACEHOLDER = /\{\{([^{}]*)\}\}/g;
-const VALID_PLACEHOLDER = /^(outcome|var\.([\p{L}\p{N}_-]+))$/u;
+const PLACEHOLDER = /\{([^{}\r\n]*)\}/g;
+const VALID_PLACEHOLDER =
+	/^(?:(var|input)\.([\p{L}\p{N}_-]+)|branch\.([A-Za-z][A-Za-z0-9_-]*)\.([\p{L}\p{N}_-]+))$/u;
 
-function expandSinglePlaceholders(value: string): string {
-	return value.replace(
-		/(?<!\{)\{(outcome|var\.[\p{L}\p{N}_-]+)\}(?!\})/gu,
-		"{{$1}}",
-	);
+function templateReferences(value: string): RegExpExecArray[] {
+	if (value.includes("{{") || value.includes("}}"))
+		throw new FlowSyntaxError(`非法模板占位符: ${value}`);
+	const references: RegExpExecArray[] = [];
+	for (const match of value.matchAll(PLACEHOLDER)) {
+		// JSON 和代码中的普通花括号不属于模板。
+		if (
+			!/^[\p{L}\p{N}_.\s-]*$/u.test(match[1]) &&
+			!/^(var|input|branch)\./.test(match[1])
+		)
+			continue;
+		const token = VALID_PLACEHOLDER.exec(match[1]);
+		if (!token) throw new FlowSyntaxError(`非法模板占位符: ${match[0]}`);
+		try {
+			validateVariableName(token[2] ?? token[4]);
+		} catch (error) {
+			throw new FlowSyntaxError(
+				error instanceof Error ? error.message : String(error),
+			);
+		}
+		references.push(match);
+	}
+	const remaining = value.replace(PLACEHOLDER, "");
+	if (/\{(?:var|input|branch)(?:\.|$)/.test(remaining))
+		throw new FlowSyntaxError(`非法模板占位符: ${value}`);
+	return references;
 }
 
 function stringifyTemplateValue(value: FlowValue): string {
@@ -694,12 +772,29 @@ function stringifyTemplateValue(value: FlowValue): string {
 
 function lookupVariable(
 	name: string,
-	variables: Readonly<Record<string, FlowValue>>,
+	variables: unknown,
+	scope: string,
 ): FlowValue {
-	validateVariableName(name);
-	if (!Object.hasOwn(variables, name))
-		throw new FlowSyntaxError(`未定义 Flow 变量: ${name}`);
-	return variables[name];
+	if (!isRecord(variables) || !Object.hasOwn(variables, name))
+		throw new FlowSyntaxError(`当前作用域缺少 Flow 变量: ${scope}.${name}`);
+	return variables[name] as FlowValue;
+}
+
+function resolveReference(
+	reference: string,
+	context: TemplateContext,
+): FlowValue {
+	const token = VALID_PLACEHOLDER.exec(reference);
+	if (!token) throw new FlowSyntaxError(`非法模板占位符: ${reference}`);
+	if (token[1] === "var")
+		return lookupVariable(token[2], context.variables, "var");
+	if (token[1] === "input")
+		return lookupVariable(token[2], context.input, "input");
+	return lookupVariable(
+		token[4],
+		context.branches?.get(token[3]),
+		`branch.${token[3]}`,
+	);
 }
 
 function renderString(
@@ -707,98 +802,46 @@ function renderString(
 	context: TemplateContext,
 	structured: boolean,
 ): FlowValue {
-	value = expandSinglePlaceholders(value);
-	let source = "";
-	for (let index = 0; index < value.length; index += 1) {
-		if (value[index] === "\\" && value.slice(index + 1, index + 3) === "{{") {
-			const end = value.indexOf("}}", index + 3);
-			if (end >= 0) {
-				source += `__FLOW_LITERAL_OPEN__${value.slice(index + 3, end)}__FLOW_LITERAL_CLOSE__`;
-				index = end + 1;
-				continue;
-			}
-			source += "\u0000OPEN\u0000";
-			index += 2;
-		} else source += value[index];
-	}
-	const matches = [...source.matchAll(PLACEHOLDER)];
-	if (
-		(source.includes("{{") && matches.length === 0) ||
-		(source.includes("}}") && matches.length === 0)
-	)
-		throw new FlowSyntaxError(`非法模板占位符: ${value}`);
-	const full = source.match(/^\{\{([^{}]*)\}\}$/);
-	if (full) {
-		const match = VALID_PLACEHOLDER.exec(full[1].trim());
-		if (!match) throw new FlowSyntaxError(`非法模板占位符: ${full[1]}`);
-		const resolved =
-			match[1] === "outcome"
-				? context.outcome === undefined
-					? (() => {
-							throw new FlowSyntaxError("当前节点没有可用的 {{outcome}}");
-						})()
-					: context.outcome
-				: lookupVariable(match[2], context.variables ?? {});
-		return structured ? resolved : stringifyTemplateValue(resolved);
-	}
+	const references = templateReferences(value);
+	if (structured && references.length === 1 && references[0][0] === value)
+		return resolveReference(references[0][1], context);
 	let result = "";
 	let cursor = 0;
-	for (const match of matches) {
-		result += source.slice(cursor, match.index);
-		const token = VALID_PLACEHOLDER.exec(match[1].trim());
-		if (!token) throw new FlowSyntaxError(`非法模板占位符: ${match[1]}`);
-		const resolved =
-			token[1] === "outcome"
-				? context.outcome === undefined
-					? (() => {
-							throw new FlowSyntaxError("当前节点没有可用的 {{outcome}}");
-						})()
-					: context.outcome
-				: lookupVariable(token[2], context.variables ?? {});
-		result += stringifyTemplateValue(resolved);
+	for (const match of references) {
+		result += value.slice(cursor, match.index);
+		result += stringifyTemplateValue(resolveReference(match[1], context));
 		cursor = (match.index ?? 0) + match[0].length;
 	}
-	const unmatched = source.replace(PLACEHOLDER, "");
-	if (unmatched.includes("{{") || unmatched.includes("}}"))
-		throw new FlowSyntaxError(`非法模板占位符: ${value}`);
-	return (result + source.slice(cursor))
-		.replaceAll(
-			/__FLOW_LITERAL_OPEN__([\s\S]*?)__FLOW_LITERAL_CLOSE__/g,
-			"{{$1}}",
-		)
-		.replaceAll("\u0000OPEN\u0000", "{{");
+	return result + value.slice(cursor);
 }
 
-function validateTemplates(value: FlowValue, outcomeForbidden: boolean): void {
+function validateTemplates(
+	value: FlowValue,
+	firstNode: boolean,
+	join: boolean,
+): void {
 	if (typeof value === "string") {
-		value = expandSinglePlaceholders(value);
-		const unescaped = value.replaceAll(/\\\{\{[^{}]*\}\}/g, "");
-
-		const placeholderMatches = [...unescaped.matchAll(PLACEHOLDER)];
-		for (const match of placeholderMatches) {
-			const token = VALID_PLACEHOLDER.exec(match[1].trim());
-			if (!token) throw new FlowSyntaxError(`非法模板占位符: ${match[1]}`);
-			if (outcomeForbidden && token[1] === "outcome")
-				throw new FlowSyntaxError("首节点和汇合节点禁止使用 {{outcome}}");
+		for (const match of templateReferences(value)) {
+			const token = VALID_PLACEHOLDER.exec(match[1]);
+			if (firstNode && token?.[1] === "input")
+				throw new FlowSyntaxError("首节点没有下一跳输入，禁止使用 input 引用");
+			if (!join && token?.[3])
+				throw new FlowSyntaxError("只有并行汇合节点可以引用分支变量");
 		}
-		if (
-			unescaped.replace(PLACEHOLDER, "").includes("{{") ||
-			unescaped.replace(PLACEHOLDER, "").includes("}}")
-		)
-			throw new FlowSyntaxError(`非法模板占位符: ${value}`);
 	} else if (Array.isArray(value)) {
-		for (const child of value) validateTemplates(child, outcomeForbidden);
+		for (const child of value) validateTemplates(child, firstNode, join);
 	} else if (isRecord(value)) {
 		for (const child of Object.values(value))
-			validateTemplates(child as FlowValue, outcomeForbidden);
+			validateTemplates(child as FlowValue, firstNode, join);
 	}
 }
 
+/** 单独引用保留 JSON 值类型，嵌入正文的引用转为文本。 */
 export function renderTemplate(
 	value: FlowValue,
 	context: TemplateContext,
 ): FlowValue {
-	if (typeof value === "string") return renderString(value, context, false);
+	if (typeof value === "string") return renderString(value, context, true);
 	if (Array.isArray(value))
 		return value.map((child) => renderTemplate(child, context));
 	if (isRecord(value))
@@ -814,45 +857,28 @@ export function renderTemplate(
 export function renderCommandRequest(
 	request: CommandRequest,
 	input: FlowValue | undefined,
-	branchOutcomes: ReadonlyMap<string, unknown> = new Map(),
+	branches: ReadonlyMap<string, unknown> = new Map(),
 	variables: Readonly<Record<string, FlowValue>> = {},
 ): CommandRequest {
-	const withBranches = (value: FlowValue): FlowValue => {
-		if (typeof value === "string") {
-			const branch = /^__flow_branch_([A-Za-z][A-Za-z0-9_-]*)__$/.exec(value);
-			if (branch) {
-				const outcome = branchOutcomes.get(branch[1]);
-				if (outcome === undefined)
-					throw new FlowSyntaxError(`缺少当前并行轮次的分支结果: ${branch[1]}`);
-				return outcome as FlowValue;
-			}
-			return renderString(value, { outcome: input, variables }, true);
-		}
-		if (Array.isArray(value)) return value.map(withBranches);
-		if (isRecord(value))
-			return Object.fromEntries(
-				Object.entries(value).map(([key, child]) => [
-					key,
-					withBranches(child as FlowValue),
-				]),
-			);
-		return value;
+	const context: TemplateContext = { input, branches, variables };
+	const text = (value: string): string =>
+		String(renderString(value, context, false));
+	return {
+		...request,
+		command: text(request.command),
+		...(request.args ? { args: request.args.map(text) } : {}),
+		...(request.cwd !== undefined ? { cwd: text(request.cwd) } : {}),
+		...(request.stdin !== undefined
+			? { stdin: renderTemplate(request.stdin, context) }
+			: {}),
 	};
-	const text = (value: unknown): string =>
-		String(renderString(String(value), { outcome: input, variables }, false));
-	const rendered: Record<string, unknown> = { ...request };
-	rendered.command = text(request.command);
-	if (request.args) rendered.args = request.args.map(text);
-	if (request.cwd !== undefined) rendered.cwd = text(request.cwd);
-	if (request.stdin !== undefined) rendered.stdin = withBranches(request.stdin);
-	return rendered as unknown as CommandRequest;
 }
 
-/** 执行Flow 的 task 渲染。 */
+/** 显式子 Flow 输入的模板渲染。 */
 export function renderFlowReferenceTask(
-	task: FlowValue,
+	inputs: FlowValue,
 	input: FlowValue | undefined,
 	variables: Readonly<Record<string, FlowValue>> = {},
 ): FlowValue {
-	return renderTemplate(task, { outcome: input, variables });
+	return renderTemplate(inputs, { input, variables });
 }

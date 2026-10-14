@@ -13,7 +13,6 @@ import type {
 	AgentIntegrationAdapter,
 	AgentOutcomeSubmission,
 	FlowValue,
-	FlowVariablePatch,
 	FlowVariables,
 	NodeSession,
 	OutcomeOption,
@@ -43,24 +42,33 @@ interface PendingCliNode extends PendingSdkNode {
 	endEntryId?: string;
 	candidate?: {
 		outcome: string;
-		content: string;
-		variables?: FlowVariablePatch;
+		variables?: FlowVariables;
 	};
 }
 
-const flowValueSchema = Type.Cyclic(
-	{
-		FlowValue: Type.Union([
-			Type.String(),
-			Type.Number(),
-			Type.Boolean(),
-			Type.Null(),
-			Type.Array(Type.Ref("FlowValue")),
-			Type.Record(Type.String(), Type.Ref("FlowValue")),
-		]),
-	},
-	"FlowValue",
-);
+// 网关（LiteLLM→GLM 上游）无法解析 TypeBox Type.Cyclic 生成的嵌套 $defs/$ref 工具参数，
+// 会报 All available accounts exhausted。这里用一层扁平联合代替递归引用；
+// 变量值的完整递归校验由运行时 validateJsonValue 负责。
+const flowValueSchema = Type.Union([
+	Type.String(),
+	Type.Number(),
+	Type.Boolean(),
+	Type.Null(),
+	Type.Array(Type.Unknown()),
+	Type.Record(Type.String(), Type.Unknown()),
+]);
+
+function flowOutcomeParametersSchema() {
+	return Type.Object(
+		{
+			outcome: Type.String({
+				description: "One result name allowed by the current Flow node",
+			}),
+			variables: Type.Optional(Type.Record(Type.String(), flowValueSchema)),
+		},
+		{ additionalProperties: false },
+	);
+}
 
 function validateVariableName(name: unknown): asserts name is string {
 	if (
@@ -110,10 +118,9 @@ function validateJsonValue(
 	ancestors.delete(value);
 }
 
-function variablePatch(
+function submissionVariables(
 	variables?: FlowVariables,
-	deleteVariables?: string[],
-): FlowVariablePatch | undefined {
+): FlowVariables | undefined {
 	if (variables !== undefined) {
 		if (
 			variables === null ||
@@ -124,24 +131,13 @@ function variablePatch(
 		validateJsonValue(variables);
 		for (const name of Object.keys(variables)) validateVariableName(name);
 	}
-	if (deleteVariables !== undefined) {
-		if (!Array.isArray(deleteVariables))
-			throw new Error("Flow deleteVariables 必须是变量名数组");
-		for (const name of deleteVariables) {
-			validateVariableName(name);
-			if (variables && Object.hasOwn(variables, name))
-				throw new Error(`Flow 变量不能同时写入和删除: ${name}`);
-		}
-	}
-	return variables === undefined && deleteVariables === undefined
-		? undefined
-		: structuredClone({ set: variables, delete: deleteVariables });
+	return variables === undefined ? undefined : structuredClone(variables);
 }
 
 const MAX_MISSING_OUTCOME_RETRIES = 1;
 
 function missingOutcomeRetryPrompt(prompt: string): string {
-	return `${prompt}\n\n本节点上一轮执行结束时没有调用 submit_flow_outcome。请重新完成本节点工作，并在最后调用 submit_flow_outcome exactly once，提供有效的 outcome 和 content。`;
+	return `${prompt}\n\n本节点上一轮执行结束时没有调用 submit_flow_outcome。请重新完成本节点工作，并在最后调用 submit_flow_outcome exactly once，提供有效的 outcome，并通过可选 variables 提交已声明的全局变量或当前结果的下一跳变量。`;
 }
 
 export interface PiCliBridge {
@@ -279,9 +275,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	/** Called by the Pi extension tool. It only records the candidate until turn_end. */
 	async submitCliOutcome(
 		outcome: string,
-		content: string,
 		variables?: FlowVariables,
-		deleteVariables?: string[],
 	): Promise<void> {
 		const pending = this.pendingCli;
 		if (!pending) throw new Error("当前没有等待结果的 Flow 节点");
@@ -291,8 +285,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			throw new Error(`当前节点不允许结果: ${outcome}`);
 		pending.candidate = {
 			outcome,
-			content,
-			variables: variablePatch(variables, deleteVariables),
+			variables: submissionVariables(variables),
 		};
 	}
 
@@ -324,11 +317,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			await pending.submitOutcome({
 				nodeExecutionReference: pending.nodeExecutionReference,
 				result: pending.candidate.outcome,
-				content: pending.candidate.content,
-				variables: variablePatch(
-					pending.candidate.variables?.set,
-					pending.candidate.variables?.delete,
-				),
+				variables: submissionVariables(pending.candidate.variables),
 				sessionReference: this.options.cliBridge?.getSessionReference(),
 				interactionReference: interactionReference(
 					pending.startEntryId,
@@ -420,28 +409,16 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 				"Submit the current Flow node result after completing its work.",
 			promptSnippet: "Submit the required Flow node outcome",
 			promptGuidelines: [
-				"Call submit_flow_outcome exactly once as the final action of each Flow node.",
+				"Call submit_flow_outcome exactly once as the final action of each Flow node. Use outcome to select a declared result and optional variables to submit declared global or next-hop values.",
 			],
-			parameters: Type.Object({
-				outcome: Type.String({
-					description: "One result name allowed by the current Flow node",
-				}),
-				content: Type.String({
-					description:
-						"Markdown conclusion and evidence for the next Flow node",
-				}),
-				variables: Type.Optional(Type.Record(Type.String(), flowValueSchema)),
-				deleteVariables: Type.Optional(Type.Array(Type.String())),
-			}),
+			parameters: flowOutcomeParametersSchema(),
 			executionMode: "sequential",
 			execute: async (_id, params, _signal, _onUpdate, ctx) => {
 				const sessionFile = ctx?.sessionManager.getSessionFile();
 				await this.submitSdkOutcome(
 					params.outcome,
-					params.content,
+					params.variables as FlowVariables | undefined,
 					sessionFile,
-					params.variables,
-					params.deleteVariables,
 				);
 				return {
 					content: [
@@ -449,9 +426,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 					],
 					details: {
 						outcome: params.outcome,
-						content: params.content,
 						variables: params.variables,
-						deleteVariables: params.deleteVariables,
 					},
 					terminate: true,
 				};
@@ -461,10 +436,8 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 
 	private async submitSdkOutcome(
 		outcome: string,
-		content: string,
-		sessionFile?: string,
 		variables?: FlowVariables,
-		deleteVariables?: string[],
+		sessionFile?: string,
 	): Promise<void> {
 		const pending = this.resolvePending(sessionFile);
 		if (pending.submitted) throw new Error("当前 Flow 节点已经提交结果");
@@ -473,8 +446,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		await pending.submitOutcome({
 			nodeExecutionReference: pending.nodeExecutionReference,
 			result: outcome,
-			content,
-			variables: variablePatch(variables, deleteVariables),
+			variables: submissionVariables(variables),
 		});
 		pending.submitted = true;
 	}
@@ -507,25 +479,14 @@ export function createFlowOutcomeTool(
 			"Submit the current Flow node result after completing its work.",
 		promptSnippet: "Submit the required Flow node outcome",
 		promptGuidelines: [
-			"Call submit_flow_outcome exactly once as the final action of each Flow node.",
+			"Call submit_flow_outcome exactly once as the final action of each Flow node. Use outcome to select a declared result and optional variables to submit declared global or next-hop values.",
 		],
-		parameters: Type.Object({
-			outcome: Type.String({
-				description: "One result name allowed by the current Flow node",
-			}),
-			content: Type.String({
-				description: "Markdown conclusion and evidence for the next Flow node",
-			}),
-			variables: Type.Optional(Type.Record(Type.String(), flowValueSchema)),
-			deleteVariables: Type.Optional(Type.Array(Type.String())),
-		}),
+		parameters: flowOutcomeParametersSchema(),
 		executionMode: "sequential",
 		execute: async (_id, params) => {
 			await adapter.submitCliOutcome(
 				params.outcome,
-				params.content,
-				params.variables,
-				params.deleteVariables,
+				params.variables as FlowVariables | undefined,
 			);
 			return {
 				content: [
@@ -533,9 +494,7 @@ export function createFlowOutcomeTool(
 				],
 				details: {
 					outcome: params.outcome,
-					content: params.content,
 					variables: params.variables,
-					deleteVariables: params.deleteVariables,
 				},
 				terminate: true,
 			};

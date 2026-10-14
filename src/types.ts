@@ -6,12 +6,14 @@ export type FlowValue =
 	| FlowValue[]
 	| { [key: string]: FlowValue };
 
-export type FlowVariables = Record<string, FlowValue>;
-
-export type FlowVariablePatch = {
-	set?: FlowVariables;
-	delete?: string[];
+export type FlowVariableDeclaration = {
+	description: string;
+	default?: FlowValue;
 };
+
+export type FlowVariableDeclarations = Record<string, FlowVariableDeclaration>;
+
+export type FlowVariables = Record<string, FlowValue>;
 
 export type AgentActionKind = "新建Agent" | "复用Agent";
 
@@ -40,10 +42,8 @@ export interface FlowReferenceAction {
 	kind: "执行Flow";
 	/** 目标 Flow 标识，即同目录下兄弟包的目录名。 */
 	flow: string;
-	/** 旧版本 task 字段仅用于读取历史定义，运行时不再作为启动输入。 */
-	task?: FlowValue;
-	/** 子 Flow 启动时覆盖或补充的变量。 */
-	variables?: FlowVariables;
+	/** 子 Flow 启动时显式传入的全局变量。 */
+	inputs?: FlowVariables;
 }
 
 export type FlowAction = AgentAction | CommandAction | FlowReferenceAction;
@@ -53,6 +53,7 @@ export interface FlowNode {
 	name: string;
 	action: FlowAction;
 	results: Map<string, string>;
+	resultVariables?: Map<string, Record<string, { description: string }>>;
 	successors: Map<string, FlowDestination>;
 }
 
@@ -74,8 +75,8 @@ export interface FlowDefinition {
 	startNodeRef: string;
 	nodes: Map<string, FlowNode>;
 	parallels: Map<string, ParallelStart>;
-	/** Flow 默认变量。 */
-	variables?: FlowVariables;
+	/** Flow 全局变量声明及默认值。 */
+	variables?: FlowVariableDeclarations;
 }
 
 /** Files adjacent to a directory-based Flow entry. */
@@ -104,8 +105,7 @@ export interface OutcomeOption {
 
 export interface NodeOutcome {
 	result: string;
-	content: FlowValue;
-	variables?: FlowVariablePatch;
+	variables?: FlowVariables;
 }
 
 export interface AgentConnection {
@@ -243,6 +243,8 @@ export interface NodeRunRecord {
 	retryOf?: string;
 	enteredFrom: NodeRunSource;
 	parallelRoundId?: string;
+	/** 业务变量之外的命令执行证据。 */
+	commandResult?: CommandResult;
 	/** 执行Flow 节点启动的子 Run 标识。 */
 	childRunId?: string;
 }
@@ -277,7 +279,7 @@ export interface ParallelRoundRecord {
 	joinNodeRunId?: string;
 	joinInput?: FlowValue;
 	joinOutcome?: NodeOutcome;
-	variablePatches?: Record<string, FlowVariablePatch>;
+	variablePatches?: Record<string, FlowVariables>;
 	sourceNodeRunId?: string;
 }
 
@@ -293,7 +295,6 @@ export interface RunRecoveryRecord {
 
 export interface FlowRunInput {
 	variables?: FlowVariables;
-	task?: FlowValue;
 }
 
 /**
@@ -306,7 +307,6 @@ export interface FlowRunRecord {
 	/** Immutable content fingerprint calculated from the parsed Flow definition. */
 	flowVersion: string;
 
-	task?: FlowValue;
 	variables?: FlowVariables;
 	status: RunStatus;
 	phase: RunPhase;
@@ -328,7 +328,7 @@ export interface FlowRunRecord {
 	/** 引用执行时记录的父 Run 关联。子 Run 只随父 Run 恢复。 */
 	parentRunId?: string;
 	parentNodeRunId?: string;
-	/** @deprecated Read only while migrating old JSON snapshots. */
+	/** @deprecated 仅供历史快照读取，新运行时不再使用。 */
 	currentParallelRound?: ParallelRoundRecord;
 }
 
@@ -349,6 +349,12 @@ export interface FlowRunSnapshot {
 	routeDecisions: RouteDecisionRecord[];
 	parallelRounds: ParallelRoundRecord[];
 	recoveries: RunRecoveryRecord[];
+}
+
+export interface TemplateContext {
+	variables?: FlowVariables;
+	input?: FlowVariables;
+	branches?: ReadonlyMap<string, FlowVariables>;
 }
 
 export interface RunStore {
@@ -375,7 +381,6 @@ export interface FlowRunSummary {
 	id: string;
 	flowId: string;
 	flowVersion: string;
-	task?: FlowValue;
 	status: RunStatus;
 	phase: RunPhase;
 	sequence: number;

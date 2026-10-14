@@ -26,6 +26,7 @@ import type {
 	FlowObservationSubscription,
 	FlowPackage,
 	FlowRunRecord,
+	NodeOutcome,
 	NodeRunRecord,
 	NodeSession,
 	OutcomeOption,
@@ -49,9 +50,9 @@ class FakeAdapter implements AgentIntegrationAdapter {
 	readonly takenOver: string[] = [];
 	readonly executedOn: string[] = [];
 	readonly prompts: string[] = [];
-	readonly outcomes: Array<{ result: string; content: string }>;
+	readonly outcomes: NodeOutcome[];
 
-	constructor(outcomes: Array<{ result: string; content: string }> = []) {
+	constructor(outcomes: NodeOutcome[] = []) {
 		this.outcomes = [...outcomes];
 	}
 
@@ -89,7 +90,7 @@ class FakeAdapter implements AgentIntegrationAdapter {
 		await request.submitOutcome({
 			nodeExecutionReference: request.nodeExecutionReference,
 			result: next.result,
-			content: next.content,
+			variables: next.variables,
 			sessionReference: request.connection.sessionReference,
 			interactionReference: request.nodeExecutionReference,
 		});
@@ -138,6 +139,10 @@ function packageOf(markdown: string, id: string): FlowPackage {
 const CHILD_HAPPY = `---
 name: 发布检查
 description: 子流程。
+variables:
+  任务:
+    description: 子流程检查目标
+    default: child default
 ---
 
 ${FENCE}mermaid
@@ -149,10 +154,14 @@ ${FENCE}
 ## 执行检查
 
 ${FENCE}新建Agent
-检查：{outcome}
+检查：{var.任务}
 ${FENCE}
 
 ### 已完成
+
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 检查结论 |
 
 检查完成。
 `;
@@ -160,6 +169,10 @@ ${FENCE}
 const CHILD_REUSE_FIRST = `---
 name: 发布检查
 description: 子流程。
+variables:
+  任务:
+    description: 子流程检查目标
+    default: child default
 ---
 
 ${FENCE}mermaid
@@ -171,10 +184,14 @@ ${FENCE}
 ## 执行检查
 
 ${FENCE}复用Agent
-检查：{outcome}
+检查：{var.任务}
 ${FENCE}
 
 ### 已完成
+
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 检查结论 |
 
 检查完成。
 `;
@@ -182,6 +199,10 @@ ${FENCE}
 const CHILD_FAIL_LATE = `---
 name: 发布检查
 description: 子流程。
+variables:
+  任务:
+    description: 子流程检查目标
+    default: child default
 ---
 
 ${FENCE}mermaid
@@ -194,17 +215,21 @@ ${FENCE}
 ## 执行检查
 
 ${FENCE}新建Agent
-检查：{outcome}
+检查：{var.任务}
 ${FENCE}
 
 ### 已检查
+
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 初步结论 |
 
 已得到初步检查结论。
 
 ## 复核结果
 
 ${FENCE}复用Agent
-复核：{outcome}
+复核：{input.摘要}
 ${FENCE}
 
 ### 通过
@@ -212,10 +237,13 @@ ${FENCE}
 复核通过。
 `;
 
-function parentNoEdge(taskBlock: string): string {
+function parentNoEdge(referenceBlock: string): string {
 	return `---
 name: 发布
 description: 验证引用执行。
+variables:
+  任务:
+    description: 发布目标
 ---
 
 ${FENCE}mermaid
@@ -229,23 +257,27 @@ ${FENCE}
 ## 准备发布
 
 ${FENCE}新建Agent
-准备：{outcome}
+准备：{var.任务}
 ${FENCE}
 
 ### 已准备
+
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 已准备的变更 |
 
 已准备。
 
 ## 执行发布检查
 
 ${FENCE}执行Flow
-${taskBlock}
+${referenceBlock}
 ${FENCE}
 
 ## 汇总结果
 
 ${FENCE}执行自定义命令
-{"command": "merge", "stdin": {"task": "{outcome}"}}
+{"command": "merge", "stdin": {"task": "{var.任务}"}}
 ${FENCE}
 
 ### 已执行
@@ -257,6 +289,9 @@ ${FENCE}
 const PARENT_DOUBLE_EDGE = `---
 name: 发布
 description: 验证双结果边。
+variables:
+  任务:
+    description: 发布目标
 ---
 
 ${FENCE}mermaid
@@ -272,10 +307,14 @@ ${FENCE}
 ## 准备发布
 
 ${FENCE}新建Agent
-准备：{outcome}
+准备：{var.任务}
 ${FENCE}
 
 ### 已准备
+
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 已准备的变更 |
 
 已准备。
 
@@ -287,6 +326,10 @@ ${FENCE}
 
 ### 已完成
 
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 子 Flow 最终检查结论 |
+
 子 Flow 已走完自身路径。
 
 ### 已失败
@@ -296,7 +339,7 @@ ${FENCE}
 ## 成功处理
 
 ${FENCE}执行自定义命令
-{"command": "ok", "stdin": {"task": "{outcome}"}}
+{"command": "ok", "stdin": {"summary": "{input.摘要}"}}
 ${FENCE}
 
 ### 已执行
@@ -306,7 +349,7 @@ ${FENCE}
 ## 失败处理
 
 ${FENCE}执行自定义命令
-{"command": "handle", "stdin": {"task": "{outcome}"}}
+{"command": "handle", "stdin": {"task": "{var.任务}"}}
 ${FENCE}
 
 ### 已执行
@@ -317,6 +360,9 @@ ${FENCE}
 const PARENT_REUSE_AFTER_CHILD = `---
 name: 发布
 description: 验证父子 Agent 绑定隔离。
+variables:
+  任务:
+    description: 发布目标
 ---
 
 ${FENCE}mermaid
@@ -330,10 +376,14 @@ ${FENCE}
 ## 准备发布
 
 ${FENCE}新建Agent
-准备：{outcome}
+准备：{var.任务}
 ${FENCE}
 
 ### 已准备
+
+| 变量 | 含义 |
+| --- | --- |
+| 摘要 | 已准备的变更 |
 
 已准备。
 
@@ -346,7 +396,7 @@ ${FENCE}
 ## 汇报结果
 
 ${FENCE}复用Agent
-汇报：{outcome}
+汇报：{var.任务}
 ${FENCE}
 
 ### 已完成
@@ -384,16 +434,16 @@ function coordinator(
 	);
 }
 
-test("执行Flow 无结果边：子 Run 完成后注入最终结论并继续", async () => {
+test("执行Flow 无结果边：子 Run 完成后不回传未声明变量并继续", async () => {
 	const store = new InMemoryRunStore();
 	const adapter = new FakeAdapter([
-		{ result: "已准备", content: "变更X已准备" },
-		{ result: "已完成", content: "检查通过：可以发布" },
+		{ result: "已准备", variables: { 摘要: "变更X已准备" } },
+		{ result: "已完成", variables: { 摘要: "检查通过：可以发布" } },
 	]);
 	const commands = new FakeCommandExecutor();
 	const parent = packageOf(
 		parentNoEdge(
-			'{"flow": "release-check", "task": "为以下变更执行发布检查：{outcome}"}',
+			'{"flow": "release-check", "inputs": {"任务": "为以下变更执行发布检查：{input.摘要}"}}',
 		),
 		"release",
 	);
@@ -406,7 +456,7 @@ test("执行Flow 无结果边：子 Run 完成后注入最终结论并继续", a
 		commands,
 		parent,
 		registry,
-	).run("发布变更X");
+	).run({ variables: { 任务: "发布变更X" } });
 
 	assert.equal(result.status, "completed");
 	const records = await store.listNodeRuns(result.id);
@@ -414,22 +464,26 @@ test("执行Flow 无结果边：子 Run 完成后注入最终结论并继续", a
 	assert.ok(check.childRunId, "父 NodeRun 应记录 childRunId");
 	assert.deepEqual(check.outcome, {
 		result: "已完成",
-		content: "检查通过：可以发布",
+		variables: {},
 	});
 	const childRun = await store.getRun(check.childRunId);
 	assert.equal(childRun?.status, "completed");
 	assert.equal(childRun.parentRunId, result.id);
 	assert.equal(childRun.parentNodeRunId, check.id);
-	assert.equal(childRun.task, '为以下变更执行发布检查："变更X已准备"');
+	assert.deepEqual(childRun.variables, {
+		任务: "为以下变更执行发布检查：变更X已准备",
+	});
 	const summary = requireNodeRun(records, "summary");
-	assert.equal(summary.input, "检查通过：可以发布");
+	assert.deepEqual(summary.input, {});
+	assert.deepEqual(commands.requests.at(-1)?.stdin, { task: "发布变更X" });
+	assert.match(adapter.prompts[1], /为以下变更执行发布检查：变更X已准备/);
 	assert.deepEqual(adapter.created, [result.id, check.childRunId]);
 });
 
 test("执行Flow 无结果边：子 Run 失败使父 Run 失败且错误携带子 Run 标识", async () => {
 	const store = new InMemoryRunStore();
 	const adapter = new FakeAdapter([
-		{ result: "已准备", content: "变更X已准备" },
+		{ result: "已准备", variables: { 摘要: "变更X已准备" } },
 	]);
 	const commands = new FakeCommandExecutor();
 	const parent = packageOf(
@@ -440,7 +494,9 @@ test("执行Flow 无结果边：子 Run 失败使父 Run 失败且错误携带�
 	const registry = new Map([["release-check", child]]);
 
 	await assert.rejects(
-		coordinator(store, adapter, commands, parent, registry).run("发布变更X"),
+		coordinator(store, adapter, commands, parent, registry).run({
+			variables: { 任务: "发布变更X" },
+		}),
 		/子 Flow 运行失败/,
 	);
 	const [parentRun] = (await store.listAllRuns()).filter(
@@ -458,12 +514,12 @@ test("执行Flow 无结果边：子 Run 失败使父 Run 失败且错误携带�
 	assert.equal(childRun?.status, "failed");
 });
 
-test("执行Flow 双结果边：成功走已完成，失败走已失败且结果内容形状正确", async () => {
+test("执行Flow 双结果边：失败走已失败且不产生下一跳变量", async () => {
 	const store = new InMemoryRunStore();
 	const adapter = new FakeAdapter([
-		{ result: "已准备", content: "变更X已准备" },
-		{ result: "已检查", content: "检查结论：基本通过" },
-		{ result: "不存在的门禁", content: "不应被接受" },
+		{ result: "已准备", variables: { 摘要: "变更X已准备" } },
+		{ result: "已检查", variables: { 摘要: "检查结论：基本通过" } },
+		{ result: "不存在的门禁", variables: { 摘要: "不应被接受" } },
 	]);
 	const commands = new FakeCommandExecutor();
 	const parent = packageOf(PARENT_DOUBLE_EDGE, "release");
@@ -476,21 +532,17 @@ test("执行Flow 双结果边：成功走已完成，失败走已失败且结果
 		commands,
 		parent,
 		registry,
-	).run("发布变更X");
+	).run({ variables: { 任务: "发布变更X" } });
 	assert.equal(result.status, "completed");
 	const records = await store.listNodeRuns(result.id);
 	const check = requireNodeRun(records, "check");
 	assert.ok(check.childRunId);
 	assert.equal(check.outcome?.result, "已失败");
-	assert.deepEqual(check.outcome?.content, {
-		status: "failure",
-		runId: check.childRunId,
-		flowId: "release-check",
-		result: "检查结论：基本通过",
-		error: {
-			category: "outcome_validation",
-			summary: "节点不允许结果: 不存在的门禁",
-		},
+	assert.deepEqual(check.outcome?.variables, {});
+	const childRun = await store.getRun(check.childRunId);
+	assert.deepEqual(childRun?.error, {
+		category: "outcome_validation",
+		summary: "节点不允许结果: 不存在的门禁",
 	});
 	const visited = records.map((record) => record.nodeRef);
 	assert.ok(visited.includes("handle"));
@@ -501,8 +553,8 @@ test("执行Flow 双结果边：成功走已完成，失败走已失败且结果
 test("执行Flow 双结果边：子 Run 成功注入最终结论并走已完成", async () => {
 	const store = new InMemoryRunStore();
 	const adapter = new FakeAdapter([
-		{ result: "已准备", content: "变更X已准备" },
-		{ result: "已完成", content: "检查通过：可以发布" },
+		{ result: "已准备", variables: { 摘要: "变更X已准备" } },
+		{ result: "已完成", variables: { 摘要: "检查通过：可以发布" } },
 	]);
 	const commands = new FakeCommandExecutor();
 	const parent = packageOf(PARENT_DOUBLE_EDGE, "release");
@@ -515,23 +567,30 @@ test("执行Flow 双结果边：子 Run 成功注入最终结论并走已完成"
 		commands,
 		parent,
 		registry,
-	).run("发布变更X");
+	).run({ variables: { 任务: "发布变更X" } });
 	assert.equal(result.status, "completed");
 	const records = await store.listNodeRuns(result.id);
 	const check = requireNodeRun(records, "check");
 	assert.deepEqual(check.outcome, {
 		result: "已完成",
-		content: "检查通过：可以发布",
+		variables: { 摘要: "检查通过：可以发布" },
 	});
 	assert.equal(commands.requests.at(-1)?.command, "ok");
+	assert.deepEqual(commands.requests.at(-1)?.stdin, {
+		summary: "检查通过：可以发布",
+	});
+	assert.ok(check.childRunId);
+	assert.deepEqual((await store.getRun(check.childRunId))?.variables, {
+		任务: "child default",
+	});
 });
 
 test("子 Flow 新建Agent 不影响父绑定，父复用Agent 拿到原 Agent", async () => {
 	const store = new InMemoryRunStore();
 	const adapter = new FakeAdapter([
-		{ result: "已准备", content: "变更X已准备" },
-		{ result: "已完成", content: "检查通过：可以发布" },
-		{ result: "已完成", content: "已汇报" },
+		{ result: "已准备", variables: { 摘要: "变更X已准备" } },
+		{ result: "已完成", variables: { 摘要: "检查通过：可以发布" } },
+		{ result: "已完成" },
 	]);
 	const commands = new FakeCommandExecutor();
 	const parent = packageOf(PARENT_REUSE_AFTER_CHILD, "release");
@@ -544,7 +603,7 @@ test("子 Flow 新建Agent 不影响父绑定，父复用Agent 拿到原 Agent",
 		commands,
 		parent,
 		registry,
-	).run("发布变更X");
+	).run({ variables: { 任务: "发布变更X" } });
 	assert.equal(result.status, "completed");
 	assert.equal(adapter.takenOver.length, 0);
 	assert.equal(adapter.created.length, 2);
@@ -570,14 +629,14 @@ test("崩溃窗口：子 Run 已终态、父 NodeRun 中断，恢复幂等续接
 		id: "parent-run",
 		flowId: "release",
 		flowVersion: "legacy:unknown",
-		task: "发布变更X",
+		variables: { 任务: "发布变更X" },
 		status: "interrupted",
 		phase: "executing_node",
 		sequence: 5,
 		historyCompleteness: "legacy",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		currentNodeRef: "check",
-		currentInput: "变更X已准备",
+		currentInput: { 摘要: "变更X已准备" },
 		currentNodeRunId: "nr-check",
 	});
 	await store.createNodeRun({
@@ -587,11 +646,11 @@ test("崩溃窗口：子 Run 已终态、父 NodeRun 中断，恢复幂等续接
 		nodeRef: "prep",
 		nodeName: "准备发布",
 		actionKind: "新建Agent",
-		input: "发布变更X",
+		input: {},
 		status: "completed",
 		startedAt: "2026-01-01T00:00:01.000Z",
 		completedAt: "2026-01-01T00:00:02.000Z",
-		outcome: { result: "已准备", content: "变更X已准备" },
+		outcome: { result: "已准备", variables: { 摘要: "变更X已准备" } },
 		enteredFrom: { kind: "start" },
 	});
 	await store.createNodeRun({
@@ -601,7 +660,7 @@ test("崩溃窗口：子 Run 已终态、父 NodeRun 中断，恢复幂等续接
 		nodeRef: "check",
 		nodeName: "执行发布检查",
 		actionKind: "执行Flow",
-		input: "变更X已准备",
+		input: { 摘要: "变更X已准备" },
 		status: "interrupted",
 		startedAt: "2026-01-01T00:00:03.000Z",
 		childRunId: "child-run",
@@ -615,7 +674,7 @@ test("崩溃窗口：子 Run 已终态、父 NodeRun 中断，恢复幂等续接
 		id: "child-run",
 		flowId: "release-check",
 		flowVersion: "legacy:unknown",
-		task: "变更X已准备",
+		variables: { 任务: "变更X已准备" },
 		status: "completed",
 		phase: "completed",
 		sequence: 3,
@@ -632,11 +691,11 @@ test("崩溃窗口：子 Run 已终态、父 NodeRun 中断，恢复幂等续接
 		nodeRef: "probe",
 		nodeName: "执行检查",
 		actionKind: "新建Agent",
-		input: "变更X已准备",
+		input: {},
 		status: "completed",
 		startedAt: "2026-01-01T00:00:05.000Z",
 		completedAt: "2026-01-01T00:00:06.000Z",
-		outcome: { result: "已完成", content: "检查通过：可以发布" },
+		outcome: { result: "已完成", variables: { 摘要: "检查通过：可以发布" } },
 		enteredFrom: { kind: "start" },
 	});
 
@@ -655,11 +714,11 @@ test("崩溃窗口：子 Run 已终态、父 NodeRun 中断，恢复幂等续接
 	assert.equal(check.status, "completed");
 	assert.deepEqual(check.outcome, {
 		result: "已完成",
-		content: "检查通过：可以发布",
+		variables: {},
 	});
 	const summary = requireNodeRun(records, "summary");
 	assert.equal(summary.status, "completed");
-	assert.equal(summary.input, "检查通过：可以发布");
+	assert.deepEqual(summary.input, {});
 	assert.equal(adapter.created.length, 0);
 	const recoveries = await store.listRunRecoveries("parent-run");
 	assert.ok(
@@ -682,14 +741,14 @@ test("崩溃窗口：子 Run 仍在运行，先递归恢复子 Run 再续接", a
 		id: "parent-run",
 		flowId: "release",
 		flowVersion: "legacy:unknown",
-		task: "发布变更X",
+		variables: { 任务: "发布变更X" },
 		status: "running",
 		phase: "executing_node",
 		sequence: 4,
 		historyCompleteness: "legacy",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		currentNodeRef: "check",
-		currentInput: "变更X已准备",
+		currentInput: { 摘要: "变更X已准备" },
 		currentNodeRunId: "nr-check",
 	});
 	await store.createNodeRun({
@@ -699,7 +758,7 @@ test("崩溃窗口：子 Run 仍在运行，先递归恢复子 Run 再续接", a
 		nodeRef: "check",
 		nodeName: "执行发布检查",
 		actionKind: "执行Flow",
-		input: "变更X已准备",
+		input: { 摘要: "变更X已准备" },
 		status: "running",
 		startedAt: "2026-01-01T00:00:03.000Z",
 		childRunId: "child-run",
@@ -709,7 +768,7 @@ test("崩溃窗口：子 Run 仍在运行，先递归恢复子 Run 再续接", a
 		id: "child-run",
 		flowId: "release-check",
 		flowVersion: "legacy:unknown",
-		task: "变更X已准备",
+		variables: { 任务: "变更X已准备" },
 		status: "running",
 		phase: "executing_node",
 		sequence: 2,
@@ -717,7 +776,7 @@ test("崩溃窗口：子 Run 仍在运行，先递归恢复子 Run 再续接", a
 		startedAt: "2026-01-01T00:00:04.000Z",
 		sessionReference: "child-session",
 		currentNodeRef: "probe",
-		currentInput: "变更X已准备",
+		currentInput: {},
 		currentNodeRunId: "nr-probe",
 		parentRunId: "parent-run",
 		parentNodeRunId: "nr-check",
@@ -729,12 +788,15 @@ test("崩溃窗口：子 Run 仍在运行，先递归恢复子 Run 再续接", a
 		nodeRef: "probe",
 		nodeName: "执行检查",
 		actionKind: "新建Agent",
-		input: "变更X已准备",
+		input: {},
 		status: "running",
 		startedAt: "2026-01-01T00:00:05.000Z",
 		enteredFrom: { kind: "start" },
 	});
-	adapter.outcomes.push({ result: "已完成", content: "递归恢复的检查结论" });
+	adapter.outcomes.push({
+		result: "已完成",
+		variables: { 摘要: "递归恢复的检查结论" },
+	});
 
 	const result = await coordinator(
 		store,
@@ -752,7 +814,7 @@ test("崩溃窗口：子 Run 仍在运行，先递归恢复子 Run 再续接", a
 	assert.equal(check.id, "nr-check");
 	assert.deepEqual(check.outcome, {
 		result: "已完成",
-		content: "递归恢复的检查结论",
+		variables: {},
 	});
 	assert.ok(adapter.takenOver.includes("child-session"));
 	assert.ok(adapter.executedOn.includes("child-session"));
@@ -773,14 +835,14 @@ test("父节点中断时活跃子 Run 被同步标记为 interrupted 且提交�
 		id: "parent-run",
 		flowId: "release",
 		flowVersion: "legacy:unknown",
-		task: "发布变更X",
+		variables: { 任务: "发布变更X" },
 		status: "running",
 		phase: "executing_node",
 		sequence: 3,
 		historyCompleteness: "legacy",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		currentNodeRef: "check",
-		currentInput: "变更X已准备",
+		currentInput: { 摘要: "变更X已准备" },
 		currentNodeRunId: "nr-check",
 	});
 	await store.createNodeRun({
@@ -790,7 +852,7 @@ test("父节点中断时活跃子 Run 被同步标记为 interrupted 且提交�
 		nodeRef: "check",
 		nodeName: "执行发布检查",
 		actionKind: "执行Flow",
-		input: "变更X已准备",
+		input: { 摘要: "变更X已准备" },
 		status: "running",
 		startedAt: "2026-01-01T00:00:03.000Z",
 		childRunId: "child-run",
@@ -800,14 +862,14 @@ test("父节点中断时活跃子 Run 被同步标记为 interrupted 且提交�
 		id: "child-run",
 		flowId: "release-check",
 		flowVersion: "legacy:unknown",
-		task: "变更X已准备",
+		variables: { 任务: "变更X已准备" },
 		status: "running",
 		phase: "executing_node",
 		sequence: 2,
 		historyCompleteness: "legacy",
 		startedAt: "2026-01-01T00:00:04.000Z",
 		currentNodeRef: "probe",
-		currentInput: "变更X已准备",
+		currentInput: {},
 		currentNodeRunId: "nr-probe",
 		parentRunId: "parent-run",
 		parentNodeRunId: "nr-check",
@@ -819,7 +881,7 @@ test("父节点中断时活跃子 Run 被同步标记为 interrupted 且提交�
 		nodeRef: "probe",
 		nodeName: "执行检查",
 		actionKind: "新建Agent",
-		input: "变更X已准备",
+		input: {},
 		status: "running",
 		startedAt: "2026-01-01T00:00:05.000Z",
 		enteredFrom: { kind: "start" },
@@ -866,14 +928,14 @@ test("直接恢复子 Run 被拒绝并提示父 Run 标识", async () => {
 		id: "child-run",
 		flowId: "release-check",
 		flowVersion: "legacy:unknown",
-		task: "变更X已准备",
+		variables: { 任务: "变更X已准备" },
 		status: "running",
 		phase: "executing_node",
 		sequence: 2,
 		historyCompleteness: "legacy",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		currentNodeRef: "probe",
-		currentInput: "变更X已准备",
+		currentInput: {},
 		parentRunId: "parent-run",
 		parentNodeRunId: "nr-check",
 	});
@@ -886,7 +948,7 @@ test("直接恢复子 Run 被拒绝并提示父 Run 标识", async () => {
 test("引用不在闭包中时在创建 Run 前按 flow_reference 失败", async () => {
 	const store = new InMemoryRunStore();
 	const adapter = new FakeAdapter([
-		{ result: "已准备", content: "变更X已准备" },
+		{ result: "已准备", variables: { 摘要: "变更X已准备" } },
 	]);
 	const commands = new FakeCommandExecutor();
 	const parent = packageOf(
@@ -894,7 +956,9 @@ test("引用不在闭包中时在创建 Run 前按 flow_reference 失败", async
 		"release",
 	);
 	await assert.rejects(
-		coordinator(store, adapter, commands, parent, new Map()).run("发布变更X"),
+		coordinator(store, adapter, commands, parent, new Map()).run({
+			variables: { 任务: "发布变更X" },
+		}),
 		/被引用的 Flow 未在闭包中加载/,
 	);
 	assert.deepEqual(await store.listAllRuns(), []);
@@ -999,13 +1063,15 @@ test("子 Flow 文件漂移后，父 Run 恢复被组合指纹拒绝", async () 
 	const parentDir = await writePackage(
 		root,
 		"release",
-		parentNoEdge('{"flow": "release-check", "task": "检查：{outcome}"}'),
+		parentNoEdge(
+			'{"flow": "release-check", "inputs": {"任务": "检查：{input.摘要}"}}',
+		),
 	);
 	const childDir = await writePackage(root, "release-check", CHILD_HAPPY);
 	const store = new InMemoryRunStore();
 	const adapter = new FakeAdapter([
-		{ result: "已准备", content: "变更X已准备" },
-		{ result: "已完成", content: "检查通过：可以发布" },
+		{ result: "已准备", variables: { 摘要: "变更X已准备" } },
+		{ result: "已完成", variables: { 摘要: "检查通过：可以发布" } },
 	]);
 	const commands = new FakeCommandExecutor();
 	const first = await loadFlow(parentDir);
@@ -1015,7 +1081,7 @@ test("子 Flow 文件漂移后，父 Run 恢复被组合指纹拒绝", async () 
 		commands,
 		first,
 		first.references,
-	).run("发布变更X");
+	).run({ variables: { 任务: "发布变更X" } });
 	assert.equal(result.status, "completed");
 
 	await writeFile(
@@ -1138,7 +1204,7 @@ ${FENCE}
 ## 发起检查
 
 ${FENCE}新建Agent
-发起：{outcome}
+发起：{var.任务}
 ${FENCE}
 
 ### 开始
@@ -1189,19 +1255,23 @@ test("解析无结果边执行Flow：固定挂在已完成名下且无三级结�
 	assert.equal(action.kind, "执行Flow");
 	if (action.kind === "执行Flow") {
 		assert.equal(action.flow, "release-check");
-		assert.equal(action.task, undefined);
+		assert.equal(action.inputs, undefined);
 	}
 });
 
-test("renderFlowReferenceTask 按命令节点语义替换字符串中的 {outcome}", () => {
+test("renderFlowReferenceTask 使用显式 input 变量替换嵌套输入", () => {
 	assert.deepEqual(
 		renderFlowReferenceTask(
-			{ text: "检查：{outcome}", list: [{ nested: "{outcome}" }], keep: 1 },
-			"变更X",
+			{
+				text: "检查：{input.摘要}",
+				list: [{ nested: "{input.摘要}" }],
+				keep: 1,
+			},
+			{ 摘要: "变更X" },
 		),
 		{
-			text: '检查："变更X"',
-			list: [{ nested: '"变更X"' }],
+			text: "检查：变更X",
+			list: [{ nested: "变更X" }],
 			keep: 1,
 		},
 	);

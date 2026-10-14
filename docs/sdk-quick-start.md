@@ -63,6 +63,9 @@ import {
 const markdown = `---
 name: 演示流程
 description: SDK 快速开始的最小示例。
+variables:
+  任务:
+    description: 演示任务
 ---
 
 \`\`\`mermaid
@@ -76,10 +79,14 @@ flowchart TD
 
 \`\`\`新建Agent
 分析任务：
-{outcome}
+{var.任务}
 \`\`\`
 
 ### 已分析
+
+| 变量 | 含义 |
+| --- | --- |
+| 分析结论 | 下一节点需要的分析结论 |
 
 已得到下一步所需结论。
 
@@ -87,10 +94,14 @@ flowchart TD
 
 \`\`\`复用Agent
 根据分析结果完成任务：
-{outcome}
+{input.分析结论}
 \`\`\`
 
 ### 已完成
+
+| 变量 | 含义 |
+| --- | --- |
+| 结论 | 最终完成结论 |
 
 任务已结束。
 `;
@@ -108,7 +119,9 @@ const fakeAdapter: AgentIntegrationAdapter = {
 		await request.submitOutcome({
 			nodeExecutionReference: request.nodeExecutionReference,
 			result: request.outcomes[0].name,
-			content: "演示结果内容",
+			variables: request.outcomes[0].name === "已分析"
+				? { 分析结论: "演示分析结论" }
+				: { 结论: "演示完成" },
 		});
 		return { id: request.nodeExecutionReference };
 	},
@@ -125,11 +138,11 @@ const coordinator = new FlowCoordinator(
 	new AgentRunModel(fakeAdapter),
 );
 
-const run = await coordinator.run("验证登录超时问题");
+const run = await coordinator.run({ variables: { 任务: "验证登录超时问题" } });
 console.log(run.status); // completed
 ```
 
-假适配器总是提交当前节点的第一个结果，适合线性 Flow 的演示和测试。真实场景换成下一节的 `PiAgentIntegrationAdapter` 即可，其余代码不变。
+假适配器总是提交当前节点的第一个结果，并仅提交该结果变量表中声明的字段，适合线性 Flow 的演示和测试。SDK 回调使用 `result`，Agent 的 `submit_flow_outcome` 工具使用 `outcome`，两者均可提供扁平的 `variables` 对象。
 
 ## 4. 用 Pi 会话执行 Agent 节点
 
@@ -157,7 +170,7 @@ const coordinator = new FlowCoordinator(
 	new AgentRunModel(adapter),
 );
 
-const run = await coordinator.run("修复登录超时问题");
+const run = await coordinator.run({ variables: { 任务: "修复登录超时问题" } });
 console.log(run.status); // completed
 ```
 
@@ -185,7 +198,7 @@ Pi 会话日志与 Pi CLI 交互模式的会话同目录同格式：工作目录
 
 ```typescript
 // 场景一：从已有 Pi 会话文件开始，接管为本次运行的 Agent
-const run = await coordinator.run("继续上次的任务", {
+const run = await coordinator.run({ variables: { 任务: "继续上次的任务" } }, {
 	existingAgentReference: "/home/me/.pi/agent/sessions/--data-dev-SUMM--/abc.jsonl",
 });
 
@@ -215,6 +228,7 @@ const resumed = await coordinator.resume(runId, {
 | Pi 集成 | `createFlowOutcomeTool` | 供 CLI bridge 宿主注册结果提交工具，SDK 宿主不需要 |
 | 类型 | `FlowDefinition`、`FlowNode`、`FlowRunRecord`、`NodeRunRecord` | Flow 与运行记录的结构类型 |
 | 类型 | `AgentIntegrationAdapter`、`AgentConnection`、`NodeSession` | 自定义 Agent 平台接入的边界接口 |
+| 类型 | `FlowVariables`、`FlowVariableDeclarations`、`NodeOutcome`、`FlowRunInput` | 全局声明、显式启动变量及节点 `result + variables` 协议 |
 | 类型 | `RunStore`、`CommandExecutor`、`CommandRequest`、`CommandResult` | 自定义存储与命令执行的边界接口 |
 
 自定义 Agent 平台只需实现 `AgentIntegrationAdapter` 接口：创建、接管、执行节点（内含 `submitOutcome` 回调）、读取交互、释放。Pi 之外的宿主可以完全复用运行时。

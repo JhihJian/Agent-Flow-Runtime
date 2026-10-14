@@ -70,7 +70,7 @@ In Pi, use `/flow run <包目录或FLOW.md> <任务>`, `/flow list` for recent R
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release-check/FLOW.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. Installed users point `--flow` at their package directory or its `FLOW.md` entry.
 
-Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, outcome, Pi session reference, and Pi entry range for every Agent-node visit. When Pi resumes the same session, an unfinished CLI Flow is restored from this file and its interrupted Agent node is submitted again in that session. The interrupted node is recorded as a separate retry visit, so the original incomplete visit remains auditable. An interrupted custom-command node is marked failed rather than replayed, because its external side effect may already have occurred.
+Flow records are stored in `.pi/flow-runs.json` under the working directory. Each record includes the input, `result` and declared variables, Pi session reference, and Pi entry range for every Agent-node visit. When Pi resumes the same session, an unfinished CLI Flow is restored from this file and its interrupted Agent node is submitted again in that session. The interrupted node is recorded as a separate retry visit, so the original incomplete visit remains auditable. An interrupted custom-command node is marked failed rather than replayed, because its external side effect may already have occurred.
 
 ## SDK Quick Start
 
@@ -98,9 +98,11 @@ const coordinator = new FlowCoordinator(
   loaded.resources,
 );
 
-const run = await coordinator.run("修复登录超时问题");
+const run = await coordinator.run({ variables: { 任务: "修复登录超时问题" } });
 console.log(run.status); // "completed"
 ```
+
+Flow data uses explicitly declared variables. Declare global variables in metadata and initialize them with `run({ variables: {...} })`. Agent prompts read `{var.任务}`; result tables declare next-hop outputs read through `{input.xxx}`. Parallel joins read `{branch.<ref>.<name>}`. Submit `outcome` in the Agent tool or `result` in SDK callbacks, together with optional flat `variables`. Command nodes opt in with `output: "variables"` and emit `{"variables": {...}}`; `commandResult` remains execution evidence.
 
 The same Runtime facade provides read and observe access for SDK hosts:
 
@@ -139,6 +141,7 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits; `执行Flow` nodes run a child Flow as an independent child Run through a sub-coordinator sharing the same store and adapters.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI outcomes are only confirmed at Pi's `agent_settled` boundary; when a result candidate is pending, the extension cancels the current node's compaction and waits only for retries and queued work to settle.
+- [发布级冒烟门禁设计](docs/release-smoke-design.md) defines the offline release gate for the complete path, parallel conflicts, and recovery, plus the boundary with real Pi/provider integration.
 
 The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/flow-new-session` command and Pi's `ctx.newSession()` API. The command has a distinct name so it does not conflict with Pi's built-in interactive `/new`. A CLI outcome is first recorded by its tool call and is only committed after `agent_settled`; a pending outcome candidate cancels compaction for the current node, while retries and queued-input handling still complete before the coordinator routes or replaces a session. The transition rejects calls while Pi is still active instead of waiting on the active run. Session-bound UI and event publishing callbacks are rebound to the replacement context, so Flow completion never uses a stale context. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
 
@@ -149,8 +152,12 @@ npm run build
 npx tsc --noEmit
 npx biome check --write .
 npm test
+npm run test:smoke
+npm run test:release
 npm run test:integration
 ```
+
+发布前推荐执行 `npm run test:release`。它按顺序运行静态检查、构建、发布级离线冒烟门禁和现有测试；冒烟门禁的覆盖范围及其与真实 Pi/provider 连接的边界见[发布级冒烟门禁设计](docs/release-smoke-design.md)。
 
 Fixtures cover ordinary routing, a gate loop, and command parallelism with a join. Runtime tests use a Fake Agent adapter and command executor. The production smoke test is:
 

@@ -33,7 +33,7 @@ flowchart LR
 | `FlowDefinition` | `parser.ts` | 已校验的静态节点、结果边和并行定义。 |
 | `FlowRunRecord` | `FlowCoordinator` | 一次运行的状态、当前节点或当前并行轮次。 |
 | `NodeRunRecord` | `FlowCoordinator` | 每次进入节点的输入、结果、时间和会话引用。 |
-| `NodeOutcome` | 节点执行方 | `result`选择下一条边，`content`成为后续输入。 |
+| `NodeOutcome` | 节点执行方 | `result`选择下一条边，声明的 `variables` 按作用域传递。 |
 
 ## 函数级逻辑图
 
@@ -41,7 +41,7 @@ flowchart LR
 
 <!-- source-guide:start-flow -->
 <!-- source-guide:location:start-flow -->
-**源码：** [src/extension.ts:349-429](../src/extension.ts#L349)，`启动 Flow`
+**源码：** [src/extension.ts:353-433](../src/extension.ts#L353)，`启动 Flow`
 <!-- /source-guide:location:start-flow -->
 
 ```mermaid
@@ -75,7 +75,7 @@ startFlow(路径, 任务, Pi上下文):
 
 <!-- source-guide:parse-flow -->
 <!-- source-guide:location:parse-flow -->
-**源码：** [src/parser.ts:52-119](../src/parser.ts#L52)，`解析 Flow`
+**源码：** [src/parser.ts:59-124](../src/parser.ts#L59)，`解析 Flow`
 <!-- /source-guide:location:parse-flow -->
 
 ```mermaid
@@ -106,7 +106,7 @@ parseFlow(Markdown, 标识):
 
 <!-- source-guide:coordinator-run -->
 <!-- source-guide:location:coordinator-run -->
-**源码：** [src/runtime.ts:577-640](../src/runtime.ts#L577)，`驱动一次运行`
+**源码：** [src/runtime.ts:581-636](../src/runtime.ts#L581)，`驱动一次运行`
 <!-- /source-guide:location:coordinator-run -->
 
 ```mermaid
@@ -133,7 +133,7 @@ run(任务, 可选已有会话):
         结果 = executeNode(当前节点, 当前输入)
         去向 = 查询(当前节点, 结果.result)
         结束时完成运行并返回
-        普通节点时保存下一节点和结果内容，继续循环
+        普通节点时保存下一节点的声明变量输入，继续循环
         并行时执行分支，再执行汇合节点并继续路由
     任意异常时记录失败，解除绑定后重新抛出
 ```
@@ -145,7 +145,7 @@ run(任务, 可选已有会话):
 
 <!-- source-guide:execute-node -->
 <!-- source-guide:location:execute-node -->
-**源码：** [src/runtime.ts:985-1016](../src/runtime.ts#L985)，`执行单个节点`
+**源码：** [src/runtime.ts:999-1030](../src/runtime.ts#L999)，`执行单个节点`
 <!-- /source-guide:location:execute-node -->
 
 ```mermaid
@@ -166,8 +166,8 @@ executeNode(run, 节点引用, 输入, 分支结果):
     node = 从 FlowDefinition 取得节点
     record = 创建并保存本次 NodeRunRecord
     如果是命令节点:
-        request = 替换 {outcome} 与 {分支.outcome}
-        outcome = 已执行 + 命令执行结果
+        request = 替换 {var.xxx}、{input.xxx} 与汇合节点的 {branch.ref.xxx}
+        outcome = 已执行 + 可选的变量信封
     否则:
         prompt = 注入输入和允许结果
         outcome, session = AgentRunModel.executeNode(...)
@@ -183,31 +183,28 @@ executeNode(run, 节点引用, 输入, 分支结果):
 
 <!-- source-guide:execute-flow-reference -->
 <!-- source-guide:location:execute-flow-reference -->
-**源码：** [src/runtime.ts:1240-1260](../src/runtime.ts#L1240)，`执行 Flow 引用节点`
+**源码：** [src/runtime.ts:1245-1265](../src/runtime.ts#L1245)，`执行 Flow 引用节点`
 <!-- /source-guide:location:execute-flow-reference -->
 
 ```mermaid
 flowchart TD
   A[进入执行Flow 节点] --> B[从闭包注册表取得子 Flow]
-  B --> C{task 是否省略}
-  C -->|省略| D[子任务取父节点输入原值]
-  C -->|提供| E[按命令语义替换 task 中的 outcome]
-  D --> F[组装子协调器，共用存储与适配器]
-  E --> F
-  F --> G[子 Run 运行到终态]
-  G -->|completed| H[注入最终结论为已完成]
-  G -->|failed 且有已失败边| I[组装失败详情为已失败]
-  G -->|failed 且无已失败边| J[父节点执行失败，父 Run 进入失败态]
+  B --> C[渲染显式 inputs]
+  C --> D[组装子协调器，共用存储与适配器]
+  D --> E[子 Run 只接收声明的启动变量]
+  E --> F[子 Run 运行到终态]
+  F -->|completed| G[只提取父结果声明的下一跳变量]
+  F -->|failed 且有已失败边| H[选择已失败且不产生下一跳变量]
+  F -->|failed 且无已失败边| I[父节点执行失败，父 Run 进入失败态]
 ```
 
 ```text
 executeFlowReference(run, record, node, cwd):
     pkg = 闭包注册表取得 action.flow 对应包
-    childTask = task 省略时取输入，否则渲染 {outcome}
+    childInputs = 渲染 action.inputs 中的 var 和 input 引用
     child = 子协调器以 record.childRunId 创建并运行子 Run
-    conclusion = 子 Run 最后一个已完成工作节点的结果内容
-    若子 Run completed: 返回 已完成 + conclusion
-    若有已失败边: 返回 已失败 + {status, runId, flowId, result, error}
+    若子 Run completed: 返回 已完成 + 父结果声明的 variables
+    若有已失败边: 返回 已失败 + 空 variables
     否则: 抛出携带子 Run 标识的 flow_reference 错误
 ```
 <!-- /source-guide:execute-flow-reference -->
@@ -218,7 +215,7 @@ executeFlowReference(run, record, node, cwd):
 
 <!-- source-guide:execute-parallel -->
 <!-- source-guide:location:execute-parallel -->
-**源码：** [src/runtime.ts:885-983](../src/runtime.ts#L885)，`执行并行分支`
+**源码：** [src/runtime.ts:887-997](../src/runtime.ts#L887)，`执行并行分支`
 <!-- /source-guide:location:execute-parallel -->
 
 ```mermaid
@@ -250,7 +247,7 @@ executeParallel(run, 并行引用, 输入):
 
 <!-- source-guide:agent-execute-node -->
 <!-- source-guide:location:agent-execute-node -->
-**源码：** [src/runtime.ts:468-525](../src/runtime.ts#L468)，`管理 Agent 节点`
+**源码：** [src/runtime.ts:469-529](../src/runtime.ts#L469)，`管理 Agent 节点`
 <!-- /source-guide:location:agent-execute-node -->
 
 ```mermaid
@@ -284,7 +281,7 @@ AgentRunModel.executeNode(请求):
 
 <!-- source-guide:pi-execute-node -->
 <!-- source-guide:location:pi-execute-node -->
-**源码：** [src/pi.ts:212-250](../src/pi.ts#L212)，`执行 Pi 节点`
+**源码：** [src/pi.ts:208-246](../src/pi.ts#L208)，`执行 Pi 节点`
 <!-- /source-guide:location:pi-execute-node -->
 
 ```mermaid
@@ -316,7 +313,7 @@ SDK 模式在一次 `prompt` 返回后提交结果。CLI 模式必须等待 Pi �
 
 <!-- source-guide:finalize-cli-turn -->
 <!-- source-guide:location:finalize-cli-turn -->
-**源码：** [src/pi.ts:305-351](../src/pi.ts#L305)，`提交 CLI 节点结果`
+**源码：** [src/pi.ts:298-340](../src/pi.ts#L298)，`提交 CLI 节点结果`
 <!-- /source-guide:location:finalize-cli-turn -->
 
 ```mermaid
@@ -353,7 +350,7 @@ CLI 路径把工具调用先保存为候选结果，直到 `turn_end` 才正式�
 | 目标 | 首先阅读 | 然后阅读 |
 | --- | --- | --- |
 | 理解 Flow 文件为何会被拒绝 | 解析 Flow | `parser.ts`中的各项校验和 `test/parser.test.ts`。 |
-| 排查节点没有走到预期分支 | 驱动一次运行 | 执行单个节点，再查看运行记录中的 `result` 与 `content`。 |
+| 排查节点没有走到预期分支 | 驱动一次运行 | 执行单个节点，再查看运行记录中的 `result` 与 `variables`。 |
 | 排查引用执行或子 Run 恢复问题 | 执行 Flow 引用节点 | `flow-loader.ts`的闭包加载与 `test/flow-reference.test.ts`。 |
 | 排查并行汇合输入错误 | 执行并行分支 | 执行单个节点与 Flow 规范中的并行约束。 |
 | 排查 Agent 提交失败或结果丢失 | 管理 Agent 节点 | 执行 Pi 节点、提交 CLI 节点结果与 `test/adapter-contract.test.ts`。 |

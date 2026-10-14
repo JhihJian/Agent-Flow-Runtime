@@ -14,6 +14,7 @@ import type {
 	CommandExecutor,
 	CommandRequest,
 	CommandResult,
+	NodeOutcome,
 	NodeSession,
 	OutcomeOption,
 	UnifiedMessage,
@@ -28,9 +29,9 @@ class FakeAdapter implements AgentIntegrationAdapter {
 	readonly created: string[] = [];
 	readonly takenOver: string[] = [];
 	readonly sessions = new Map<string, UnifiedMessage[]>();
-	private readonly outcomes: Array<{ result: string; content: string }>;
+	private readonly outcomes: NodeOutcome[];
 
-	constructor(outcomes: Array<{ result: string; content: string }>) {
+	constructor(outcomes: NodeOutcome[]) {
 		this.outcomes = outcomes;
 	}
 
@@ -66,7 +67,7 @@ class FakeAdapter implements AgentIntegrationAdapter {
 		await request.submitOutcome({
 			nodeExecutionReference: request.nodeExecutionReference,
 			result: next.result,
-			content: next.content,
+			variables: next.variables,
 			sessionReference: "fake-session",
 			interactionReference: request.nodeExecutionReference,
 		});
@@ -101,7 +102,12 @@ class FakeCommandExecutor implements CommandExecutor {
 		return {
 			status: "success",
 			exitCode: 0,
-			stdout: request.command,
+			stdout: JSON.stringify({
+				variables:
+					request.command === "merge"
+						? { 汇总结果: "merged" }
+						: { 摘要: request.command },
+			}),
 			stderr: "",
 		};
 	}
@@ -110,8 +116,8 @@ class FakeCommandExecutor implements CommandExecutor {
 describe("FlowCoordinator", () => {
 	it("runs ordinary Agent nodes and stores independent records", async () => {
 		const adapter = new FakeAdapter([
-			{ result: "已分析", content: "analysis" },
-			{ result: "已完成", content: "done" },
+			{ result: "已分析", variables: { 分析结论: "analysis" } },
+			{ result: "已完成" },
 		]);
 		const store = new InMemoryRunStore();
 		const flow = parseFlow(await fixture("ordinary"), "ordinary");
@@ -119,7 +125,7 @@ describe("FlowCoordinator", () => {
 			flow,
 			store,
 			new AgentRunModel(adapter),
-		).run("task");
+		).run({ variables: { 任务: "task" } });
 		expect(result.status).toBe("completed");
 		const records = await store.listNodeRuns(result.id);
 		expect(records).toHaveLength(2);
@@ -127,34 +133,34 @@ describe("FlowCoordinator", () => {
 			"分析任务",
 			"完成任务",
 		]);
-		expect(records.map((record) => record.input)).toEqual(["task", "analysis"]);
+		expect(records.map((record) => record.input)).toEqual([
+			{},
+			{ 分析结论: "analysis" },
+		]);
 		expect(adapter.released).toHaveLength(1);
 	});
 
 	it("runs a gate loop as distinct visits", async () => {
-		const adapter = new FakeAdapter([
-			{ result: "返工", content: "try again" },
-			{ result: "通过", content: "approved" },
-		]);
+		const adapter = new FakeAdapter([{ result: "返工" }, { result: "通过" }]);
 		const store = new InMemoryRunStore();
 		const flow = parseFlow(await fixture("gate-loop"), "gate-loop");
 		const result = await new FlowCoordinator(
 			flow,
 			store,
 			new AgentRunModel(adapter),
-		).run("task");
+		).run({ variables: { 任务: "task" } });
 		const records = await store.listNodeRuns(result.id);
 		expect(records.map((record) => record.nodeRef)).toEqual([
 			"review",
 			"review",
 		]);
-		expect(records[1].input).toBe("try again");
+		expect(records[1].input).toEqual({});
 	});
 
 	it("resumes an interrupted new-agent node in its persisted Pi session", async () => {
 		const adapter = new FakeAdapter([
-			{ result: "已分析", content: "analysis" },
-			{ result: "已完成", content: "done" },
+			{ result: "已分析", variables: { 分析结论: "analysis" } },
+			{ result: "已完成" },
 		]);
 		const store = new InMemoryRunStore();
 		const flow = parseFlow(await fixture("ordinary"), "ordinary");
@@ -162,7 +168,7 @@ describe("FlowCoordinator", () => {
 			id: "interrupted-run",
 			flowId: flow.id,
 			flowVersion: "legacy:unknown",
-			task: "task",
+			variables: { 任务: "task" },
 			status: "running",
 			phase: "executing_node",
 			sequence: 1,
@@ -172,7 +178,7 @@ describe("FlowCoordinator", () => {
 			cwd: "/work",
 			sessionReference: "saved-pi-session",
 			currentNodeRef: "analyze",
-			currentInput: "task",
+			currentInput: {},
 		});
 		await store.createNodeRun({
 			id: "interrupted-node",
@@ -180,7 +186,7 @@ describe("FlowCoordinator", () => {
 			sequence: 2,
 			nodeRef: "analyze",
 			actionKind: "新建Agent",
-			input: "task",
+			input: {},
 			status: "running",
 			startedAt: "2026-01-01T00:01:00.000Z",
 			enteredFrom: { kind: "start" },
@@ -201,8 +207,8 @@ describe("FlowCoordinator", () => {
 
 	it("runs command branches in parallel and gives the join this round's outcomes", async () => {
 		const adapter = new FakeAdapter([
-			{ result: "执行检查", content: "check task" },
-			{ result: "通过", content: "approved" },
+			{ result: "执行检查", variables: { 检查上下文: "check task" } },
+			{ result: "通过" },
 		]);
 		const commands = new FakeCommandExecutor();
 		const store = new InMemoryRunStore();
@@ -215,7 +221,7 @@ describe("FlowCoordinator", () => {
 			store,
 			new AgentRunModel(adapter),
 			commands,
-		).run("task");
+		).run({ variables: { 任务: "task" } });
 		expect(result.status).toBe("completed");
 		expect(commands.requests.map((request) => request.command)).toEqual(
 			expect.arrayContaining(["test", "lint", "merge"]),
@@ -226,8 +232,8 @@ describe("FlowCoordinator", () => {
 		expect(merge).toBeDefined();
 		if (!merge) throw new Error("expected merge command");
 		expect(merge.stdin).toMatchObject({
-			test: { result: "已执行" },
-			lint: { result: "已执行" },
+			test: "test",
+			lint: "lint",
 		});
 		expect(
 			(await store.listNodeRuns(result.id)).map((record) => record.nodeRef),

@@ -65,7 +65,12 @@ class FakeCommandExecutor {
 		return {
 			status: "success",
 			exitCode: 0,
-			stdout: request.command,
+			stdout: JSON.stringify({
+				variables:
+					request.command === "merge"
+						? { 汇总结果: "merged" }
+						: { 摘要: request.command },
+			}),
 			stderr: "",
 		};
 	}
@@ -95,7 +100,13 @@ test("parses ordinary routing, a gate loop, and a command join", async () => {
 });
 
 test("discovers reusable Flow packages by directory identifier", async () => {
-	const directory = new FlowDirectory(join(import.meta.dirname, "fixtures"));
+	const root = await mkdtemp(join(tmpdir(), "flow-discovery-"));
+	for (const name of ["command-parallel", "gate-loop", "ordinary"]) {
+		await cp(join(import.meta.dirname, "fixtures", name), join(root, name), {
+			recursive: true,
+		});
+	}
+	const directory = new FlowDirectory(root);
 	assert.deepEqual(
 		(await directory.list()).map((flow) => flow.id),
 		["command-parallel", "gate-loop", "ordinary"],
@@ -136,12 +147,12 @@ test("runs the simplify flow through a self-gated loop", async () => {
 		store,
 		new AgentRunModel(
 			new FakeAdapter([
-				{ result: "已精简", content: "first pass found more" },
-				{ result: "已精简", content: "second pass found more" },
-				{ result: "无法精简", content: "no further simplification" },
+				{ result: "已精简" },
+				{ result: "已精简" },
+				{ result: "无法精简" },
 			]),
 		),
-	).run("review the project");
+	).run({ variables: { 任务: "review the project" } });
 	assert.equal(run.status, "completed");
 	assert.deepEqual(
 		(await store.listNodeRuns(run.id)).map((record) => record.nodeRef),
@@ -152,8 +163,8 @@ test("runs the simplify flow through a self-gated loop", async () => {
 test("coordinates parallel commands and persists every node visit", async () => {
 	const flow = await fixture("command-parallel");
 	const adapter = new FakeAdapter([
-		{ result: "执行检查", content: "check" },
-		{ result: "通过", content: "approved" },
+		{ result: "执行检查", variables: { 检查上下文: "check" } },
+		{ result: "通过" },
 	]);
 	const commands = new FakeCommandExecutor();
 	const store = new InMemoryRunStore();
@@ -162,7 +173,7 @@ test("coordinates parallel commands and persists every node visit", async () => 
 		store,
 		new AgentRunModel(adapter),
 		commands,
-	).run("task");
+	).run({ variables: { 任务: "task" } });
 	assert.equal(run.status, "completed");
 	assert.deepEqual(commands.requests.map((request) => request.command).sort(), [
 		"lint",
@@ -172,8 +183,8 @@ test("coordinates parallel commands and persists every node visit", async () => 
 	const merge = commands.requests.find(
 		(request) => request.command === "merge",
 	);
-	assert.equal(merge.stdin.test.result, "已执行");
-	assert.equal(merge.stdin.lint.result, "已执行");
+	assert.equal(merge.stdin.test, "test");
+	assert.equal(merge.stdin.lint, "lint");
 	assert.equal((await store.listNodeRuns(run.id)).length, 5);
 });
 
@@ -184,12 +195,9 @@ test("records repeated gate visits independently", async () => {
 		flow,
 		store,
 		new AgentRunModel(
-			new FakeAdapter([
-				{ result: "返工", content: "retry" },
-				{ result: "通过", content: "done" },
-			]),
+			new FakeAdapter([{ result: "返工" }, { result: "通过" }]),
 		),
-	).run("task");
+	).run({ variables: { 任务: "task" } });
 	assert.deepEqual(
 		(await store.listNodeRuns(run.id)).map((record) => record.nodeRef),
 		["review", "review"],
@@ -199,27 +207,27 @@ test("records repeated gate visits independently", async () => {
 test("resumes an interrupted new-agent node in its persisted Pi session", async () => {
 	const flow = await fixture("ordinary");
 	const adapter = new FakeAdapter([
-		{ result: "已分析", content: "analysis" },
-		{ result: "已完成", content: "done" },
+		{ result: "已分析", variables: { 分析结论: "analysis" } },
+		{ result: "已完成" },
 	]);
 	const store = new InMemoryRunStore();
 	await store.createRun({
 		id: "interrupted-run",
 		flowId: flow.id,
-		task: "task",
+		variables: { 任务: "task" },
 		status: "running",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		flowPath: "/flows/ordinary/FLOW.md",
 		cwd: "/work",
 		sessionReference: "saved-pi-session",
 		currentNodeRef: "analyze",
-		currentInput: "task",
+		currentInput: {},
 	});
 	await store.createNodeRun({
 		id: "interrupted-node",
 		runId: "interrupted-run",
 		nodeRef: "analyze",
-		input: "task",
+		input: {},
 		startedAt: "2026-01-01T00:01:00.000Z",
 	});
 
@@ -238,27 +246,27 @@ test("resumes an interrupted new-agent node in its persisted Pi session", async 
 
 test("routes a completed checkpoint without re-executing its node", async () => {
 	const flow = await fixture("ordinary");
-	const adapter = new FakeAdapter([{ result: "已完成", content: "done" }]);
+	const adapter = new FakeAdapter([{ result: "已完成" }]);
 	const store = new InMemoryRunStore();
 	await store.createRun({
 		id: "completed-checkpoint-run",
 		flowId: flow.id,
-		task: "task",
+		variables: { 任务: "task" },
 		status: "running",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		sessionReference: "saved-pi-session",
 		currentNodeRef: "analyze",
-		currentInput: "task",
+		currentInput: {},
 		currentNodeRunId: "completed-node",
 	});
 	await store.createNodeRun({
 		id: "completed-node",
 		runId: "completed-checkpoint-run",
 		nodeRef: "analyze",
-		input: "task",
+		input: {},
 		startedAt: "2026-01-01T00:01:00.000Z",
 		completedAt: "2026-01-01T00:02:00.000Z",
-		outcome: { result: "已分析", content: "analysis" },
+		outcome: { result: "已分析", variables: { 分析结论: "analysis" } },
 	});
 
 	const result = await new FlowCoordinator(
@@ -274,21 +282,21 @@ test("routes a completed checkpoint without re-executing its node", async () => 
 
 test("reuses completed parallel branches and restores their join inputs", async () => {
 	const flow = await fixture("command-parallel");
-	const adapter = new FakeAdapter([{ result: "通过", content: "approved" }]);
+	const adapter = new FakeAdapter([{ result: "通过" }]);
 	const commands = new FakeCommandExecutor();
 	const store = new InMemoryRunStore();
 	await store.createRun({
 		id: "parallel-run",
 		flowId: flow.id,
-		task: "task",
+		variables: { 任务: "task" },
 		status: "running",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		sessionReference: "saved-pi-session",
-		currentInput: "check task",
+		currentInput: { 检查上下文: "check task" },
 		currentParallelRound: {
 			id: "parallel-round",
 			parallelRef: "parallel",
-			input: "check task",
+			input: { 检查上下文: "check task" },
 			branchNodeRunIds: { test: "completed-test" },
 		},
 	});
@@ -296,10 +304,16 @@ test("reuses completed parallel branches and restores their join inputs", async 
 		id: "completed-test",
 		runId: "parallel-run",
 		nodeRef: "test",
-		input: "check task",
+		input: { 检查上下文: "check task" },
 		startedAt: "2026-01-01T00:01:00.000Z",
 		completedAt: "2026-01-01T00:02:00.000Z",
-		outcome: { result: "已执行", content: { status: "success" } },
+		outcome: { result: "已执行", variables: { 摘要: "saved test" } },
+		commandResult: {
+			status: "success",
+			exitCode: 0,
+			stdout: "saved evidence",
+			stderr: "",
+		},
 	});
 
 	const result = await new FlowCoordinator(
@@ -315,9 +329,9 @@ test("reuses completed parallel branches and restores their join inputs", async 
 		"merge",
 	]);
 	assert.equal(
-		commands.requests.find((request) => request.command === "merge")?.stdin.test
-			.result,
-		"已执行",
+		commands.requests.find((request) => request.command === "merge")?.stdin
+			.test,
+		"saved test",
 	);
 });
 
@@ -328,18 +342,18 @@ test("fails an interrupted custom command instead of replaying its side effect",
 	await store.createRun({
 		id: "interrupted-command-run",
 		flowId: flow.id,
-		task: "task",
+		variables: { 任务: "task" },
 		status: "running",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		currentNodeRef: "merge",
-		currentInput: "check task",
+		currentInput: { 检查上下文: "check task" },
 		currentNodeRunId: "interrupted-command",
 	});
 	await store.createNodeRun({
 		id: "interrupted-command",
 		runId: "interrupted-command-run",
 		nodeRef: "merge",
-		input: "check task",
+		input: { 检查上下文: "check task" },
 		startedAt: "2026-01-01T00:01:00.000Z",
 	});
 
@@ -368,13 +382,13 @@ test("does not start other parallel branches when one command was interrupted", 
 	await store.createRun({
 		id: "interrupted-parallel-run",
 		flowId: flow.id,
-		task: "task",
+		variables: { 任务: "task" },
 		status: "running",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		currentParallelRound: {
 			id: "interrupted-round",
 			parallelRef: "parallel",
-			input: "check task",
+			input: { 检查上下文: "check task" },
 			branchNodeRunIds: { test: "interrupted-test" },
 		},
 	});
@@ -382,7 +396,7 @@ test("does not start other parallel branches when one command was interrupted", 
 		id: "interrupted-test",
 		runId: "interrupted-parallel-run",
 		nodeRef: "test",
-		input: "check task",
+		input: { 检查上下文: "check task" },
 		startedAt: "2026-01-01T00:01:00.000Z",
 	});
 
@@ -412,7 +426,7 @@ test("rejects an adapter result outside the node's declared options", async () =
 			await request.submitOutcome({
 				nodeExecutionReference: request.nodeExecutionReference,
 				result: "invalid",
-				content: "x",
+				variables: { 证据: "x" },
 			});
 			return { id: "node" };
 		},
@@ -447,7 +461,7 @@ test("keeps an accepted adapter interaction reference queryable", async () => {
 			await request.submitOutcome({
 				nodeExecutionReference: request.nodeExecutionReference,
 				result: "ok",
-				content: "done",
+				variables: { 证据: "done" },
 				interactionReference: "entry",
 			});
 			return { id: "session", interactionReference: "entry" };
@@ -495,6 +509,7 @@ test("creates a new CLI session when a new-agent node loops", async () => {
 
 test("retries a CLI Agent node once when no outcome is submitted", async () => {
 	const prompts = [];
+	const submissions = [];
 	const bridge = {
 		sendNodePrompt(prompt) {
 			prompts.push(prompt);
@@ -517,14 +532,20 @@ test("retries a CLI Agent node once when no outcome is submitted", async () => {
 		nodeExecutionReference: "node",
 		prompt: "完成工作",
 		outcomes: [{ name: "完成", description: "已完成" }],
-		submitOutcome: async () => {},
+		submitOutcome: async (submission) => {
+			submissions.push(submission);
+		},
 	});
 	await adapter.finalizeCliTurn();
 	assert.equal(prompts.length, 2);
 	assert.match(prompts[1], /没有调用 submit_flow_outcome/);
-	await adapter.submitCliOutcome("完成", "已完成");
+	await adapter.submitCliOutcome("完成", { 结论: "已完成" });
 	await adapter.finalizeCliTurn();
 	await execution;
+	assert.equal(submissions.length, 1);
+	assert.equal(submissions[0].result, "完成");
+	assert.deepEqual(submissions[0].variables, { 结论: "已完成" });
+	assert.equal("content" in submissions[0], false);
 });
 
 test("fails a CLI Agent node after the single missing-outcome retry", async () => {

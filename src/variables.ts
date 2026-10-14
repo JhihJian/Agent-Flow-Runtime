@@ -1,4 +1,8 @@
-import type { FlowValue, FlowVariables } from "./types.ts";
+import type {
+	FlowValue,
+	FlowVariableDeclarations,
+	FlowVariables,
+} from "./types.ts";
 
 const VARIABLE_NAME = /^[\p{L}\p{N}_-]+$/u;
 const RESERVED_NAMES = new Set(["__proto__", "prototype", "constructor"]);
@@ -38,4 +42,26 @@ export function validateVariables(
 	if (!isRecord(value)) throw new Error("Flow variables 必须是 JSON 对象");
 	for (const name of Object.keys(value)) validateVariableName(name);
 	validateFlowValue(value);
+}
+
+/** 声明只包含用途描述和可选的 JSON 默认值。 */
+export function validateVariableDeclarations(
+	value: unknown,
+): asserts value is FlowVariableDeclarations {
+	if (!isRecord(value)) throw new Error("Flow variables 必须是变量声明对象");
+	for (const [name, declaration] of Object.entries(value)) {
+		validateVariableName(name);
+		if (
+			!isRecord(declaration) ||
+			typeof declaration.description !== "string" ||
+			!declaration.description.trim()
+		)
+			throw new Error(`变量 ${name} 必须声明非空 description`);
+		for (const key of Object.keys(declaration)) {
+			if (key !== "description" && key !== "default")
+				throw new Error(`变量 ${name} 不允许声明字段: ${key}`);
+		}
+		if (Object.hasOwn(declaration, "default"))
+			validateFlowValue(declaration.default);
+	}
 }

@@ -20,7 +20,7 @@ describe("AgentRunModel adapter contract", () => {
 				await request.submitOutcome({
 					nodeExecutionReference: request.nodeExecutionReference,
 					result: "非法结果",
-					content: "x",
+					variables: { 证据: "x" },
 				});
 				return { id: "node" };
 			},
@@ -56,7 +56,7 @@ describe("AgentRunModel adapter contract", () => {
 				await request.submitOutcome({
 					nodeExecutionReference: request.nodeExecutionReference,
 					result: "合法",
-					content: "done",
+					variables: { 证据: "done" },
 					interactionReference: "entry",
 				});
 				return { id: "session", interactionReference: "entry" };

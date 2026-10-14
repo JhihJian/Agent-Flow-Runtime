@@ -132,15 +132,19 @@ export default function flowExtension(pi: ExtensionAPI) {
 		description: "JSON 文件中的 Flow 变量",
 		type: "string",
 	});
+	pi.registerFlag("flow", {
+		description: "启动的 Flow 包目录或 FLOW.md",
+		type: "string",
+	});
 	pi.registerFlag("var", {
 		description: "Flow 变量，格式为 name=value，可重复",
 		type: "string",
 	});
 	pi.registerTool(
 		createFlowOutcomeTool({
-			submitCliOutcome: async (outcome, content) => {
+			submitCliOutcome: async (outcome, variables) => {
 				if (!state.adapter) throw new Error("Flow 尚未启动");
-				await state.adapter.submitCliOutcome(outcome, content);
+				await state.adapter.submitCliOutcome(outcome, variables);
 			},
 		}),
 	);
@@ -487,7 +491,12 @@ export default function flowExtension(pi: ExtensionAPI) {
 			}
 			free.push(token.replace(/^"|"$/g, ""));
 		}
-		if (free.length) variables.输入 = free.join(" ");
+		if (free.length) {
+			if (Object.hasOwn(variables, "任务")) {
+				throw new Error("不能同时通过 --var 任务和自由文本提供 Flow 任务");
+			}
+			variables.任务 = free.join(" ");
+		}
 		validateVariables(variables);
 		return variables;
 	}

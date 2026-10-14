@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { expect } from "vitest";
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
@@ -11,7 +12,7 @@ import {
 	toFlowEventEnvelope,
 } from "../src/observability.ts";
 import { parseFlow } from "../src/parser.ts";
-import { PiAgentIntegrationAdapter } from "../src/pi.ts";
+import { createFlowOutcomeTool, PiAgentIntegrationAdapter } from "../src/pi.ts";
 import {
 	AgentRunModel,
 	FlowCoordinator,
@@ -25,6 +26,8 @@ import type {
 	CommandRequest,
 	CommandResult,
 	FlowObservationEvent,
+	FlowVariables,
+	NodeOutcome,
 } from "../src/types.ts";
 
 const fixture = (name: string) =>
@@ -32,9 +35,9 @@ const fixture = (name: string) =>
 
 /** 最小 Agent 适配器，按预设顺序提交节点结果。 */
 class SequencedAdapter implements AgentIntegrationAdapter {
-	private readonly outcomes: Array<{ result: string; content: string }>;
+	private readonly outcomes: NodeOutcome[];
 
-	constructor(outcomes: Array<{ result: string; content: string }>) {
+	constructor(outcomes: NodeOutcome[]) {
 		this.outcomes = outcomes;
 	}
 
@@ -55,7 +58,7 @@ class SequencedAdapter implements AgentIntegrationAdapter {
 		submitOutcome: (submission: {
 			nodeExecutionReference: string;
 			result: string;
-			content: string;
+			variables?: FlowVariables;
 		}) => Promise<void>;
 	}) {
 		const next = this.outcomes.shift();
@@ -63,7 +66,7 @@ class SequencedAdapter implements AgentIntegrationAdapter {
 		await request.submitOutcome({
 			nodeExecutionReference: request.nodeExecutionReference,
 			result: next.result,
-			content: next.content,
+			variables: next.variables,
 		});
 		return { id: request.nodeExecutionReference };
 	}
@@ -81,7 +84,17 @@ class RecordingCommandExecutor implements CommandExecutor {
 
 	async execute(request: CommandRequest): Promise<CommandResult> {
 		this.requests.push(request);
-		return { status: "success", exitCode: 0, stdout: "", stderr: "" };
+		return {
+			status: "success",
+			exitCode: 0,
+			stdout: JSON.stringify({
+				variables:
+					request.command === "merge"
+						? { 汇总结果: "merged" }
+						: { 摘要: request.command },
+			}),
+			stderr: "",
+		};
 	}
 }
 
@@ -90,7 +103,7 @@ interface FakePending {
 	submitOutcome: (submission: {
 		nodeExecutionReference: string;
 		result: string;
-		content: string;
+		variables?: FlowVariables;
 	}) => Promise<void>;
 	outcomes: Array<{ name: string; description: string }>;
 	submitted: boolean;
@@ -102,7 +115,7 @@ interface AdapterInternals {
 	flowOutcomeTool(): {
 		execute(
 			toolCallId: string,
-			params: { outcome: string; content: string },
+			params: { outcome: string; variables?: FlowVariables },
 			signal?: undefined,
 			onUpdate?: undefined,
 			ctx?: { sessionManager: { getSessionFile(): string | undefined } },
@@ -110,20 +123,24 @@ interface AdapterInternals {
 	};
 	submitSdkOutcome(
 		outcome: string,
-		content: string,
+		variables?: FlowVariables,
 		sessionFile?: string,
 	): Promise<void>;
 }
 
 function makePending(nodeExecutionReference: string) {
-	const submittedTo: Array<{ nodeExecutionReference: string; result: string }> =
-		[];
+	const submittedTo: Array<{
+		nodeExecutionReference: string;
+		result: string;
+		variables?: FlowVariables;
+	}> = [];
 	const pending: FakePending = {
 		nodeExecutionReference,
 		submitOutcome: async (submission) => {
 			submittedTo.push({
 				nodeExecutionReference: submission.nodeExecutionReference,
 				result: submission.result,
+				variables: submission.variables,
 			});
 		},
 		outcomes: [{ name: "完成", description: "节点完成" }],
@@ -151,8 +168,8 @@ test("ProcessCommandExecutor 在请求指定的 cwd 下执行命令", async () =
 
 test("FlowCoordinator 将运行 cwd 传递给命令节点请求", async () => {
 	const adapter = new SequencedAdapter([
-		{ result: "执行检查", content: "check task" },
-		{ result: "通过", content: "approved" },
+		{ result: "执行检查", variables: { 检查上下文: "check task" } },
+		{ result: "通过" },
 	]);
 	const commands = new RecordingCommandExecutor();
 	const flow = parseFlow(await fixture("command-parallel"), "command-parallel");
@@ -161,7 +178,7 @@ test("FlowCoordinator 将运行 cwd 传递给命令节点请求", async () => {
 		new InMemoryRunStore(),
 		new AgentRunModel(adapter),
 		commands,
-	).run("task", { cwd: "/flow-workspace" });
+	).run({ variables: { 任务: "task" } }, { cwd: "/flow-workspace" });
 	assert.equal(result.status, "completed");
 	assert.ok(commands.requests.length > 0, "应当执行了命令节点");
 	for (const request of commands.requests) {
@@ -182,9 +199,22 @@ test("并发 Flow 会话的 submit_flow_outcome 路由到正确会话", async ()
 	internal.sessionHandles.set("/sessions/run-b.jsonl", handleB);
 
 	const tool = internal.flowOutcomeTool();
+	const toolDefinition = tool as typeof tool & {
+		parameters?: {
+			properties?: Record<string, unknown>;
+			additionalProperties?: boolean;
+		};
+	};
+	if (toolDefinition.parameters) {
+		expect(toolDefinition.parameters.properties).toEqual({
+			outcome: expect.anything(),
+			variables: expect.anything(),
+		});
+		expect(toolDefinition.parameters.additionalProperties).toBe(false);
+	}
 	await tool.execute(
 		"call-1",
-		{ outcome: "完成", content: "B 会话的结果" },
+		{ outcome: "完成", variables: { 结论: "B 会话的结果" } },
 		undefined,
 		undefined,
 		{
@@ -196,8 +226,24 @@ test("并发 Flow 会话的 submit_flow_outcome 路由到正确会话", async ()
 	assert.deepEqual(b.submittedTo[0], {
 		nodeExecutionReference: "node-run-b",
 		result: "完成",
+		variables: { 结论: "B 会话的结果" },
 	});
 	assert.equal(a.submittedTo.length, 0, "A 会话不应收到 B 的结果");
+});
+
+test("SDK 与 CLI 结果工具共享无递归引用的兼容 schema", () => {
+	const adapter = new PiAgentIntegrationAdapter();
+	const sdkTool = (adapter as unknown as AdapterInternals).flowOutcomeTool();
+	const cliTool = createFlowOutcomeTool({
+		submitCliOutcome: async () => {},
+	});
+	const sdkSchema = (sdkTool as unknown as { parameters: unknown }).parameters;
+	const cliSchema = (cliTool as unknown as { parameters: unknown }).parameters;
+	const serializedSchema = JSON.stringify(sdkSchema);
+
+	assert.deepEqual(cliSchema, sdkSchema);
+	assert.equal(serializedSchema.includes('"$defs"'), false);
+	assert.equal(serializedSchema.includes('"$ref"'), false);
 });
 
 test("会话没有等待节点时按会话路由报错而不是提交到其他会话", async () => {
@@ -211,7 +257,7 @@ test("会话没有等待节点时按会话路由报错而不是提交到其他�
 	await assert.rejects(
 		internal.submitSdkOutcome(
 			"完成",
-			"闲置会话的结果",
+			{ 结论: "闲置会话的结果" },
 			"/sessions/run-b.jsonl",
 		),
 		/当前会话没有等待结果的 Flow 节点/,
@@ -227,8 +273,14 @@ test("单会话无会话上下文时仍按唯一等待节点提交", async () =>
 	internal.handles.set("run-a:agent", handleA);
 	internal.sessionHandles.set("/sessions/run-a.jsonl", handleA);
 
-	await internal.submitSdkOutcome("完成", "唯一节点的结果");
-	assert.equal(a.submittedTo.length, 1);
+	await internal.submitSdkOutcome("完成", { 结论: "唯一节点的结果" });
+	assert.deepEqual(a.submittedTo, [
+		{
+			nodeExecutionReference: "node-run-a",
+			result: "完成",
+			variables: { 结论: "唯一节点的结果" },
+		},
+	]);
 });
 
 test("多会话并发且缺少会话上下文时拒绝猜测归属", async () => {
@@ -242,7 +294,7 @@ test("多会话并发且缺少会话上下文时拒绝猜测归属", async () =>
 	internal.handles.set("run-b:agent", handleB);
 
 	await assert.rejects(
-		internal.submitSdkOutcome("完成", "无法归属的结果"),
+		internal.submitSdkOutcome("完成", { 结论: "无法归属的结果" }),
 		/无法确定结果归属会话/,
 	);
 	assert.equal(a.submittedTo.length, 0);
@@ -257,11 +309,11 @@ test("运行事实保存 Flow 指纹、节点顺序和每次路由决定", async
 		store,
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "已分析", content: "analysis" },
-				{ result: "已完成", content: "done" },
+				{ result: "已分析", variables: { 分析结论: "analysis" } },
+				{ result: "已完成" },
 			]),
 		),
-	).run("task");
+	).run({ variables: { 任务: "task" } });
 
 	const records = await store.listNodeRuns(run.id);
 	const routes = await store.listRouteDecisions(run.id);
@@ -295,7 +347,12 @@ test("命令非零退出仍是已完成业务结果并继续路由", async () =>
 			return {
 				status: "failure",
 				exitCode: 2,
-				stdout: request.command,
+				stdout: JSON.stringify({
+					variables:
+						request.command === "merge"
+							? { 汇总结果: "merged" }
+							: { 摘要: request.command },
+				}),
 				stderr: "business failure",
 			};
 		},
@@ -306,18 +363,18 @@ test("命令非零退出仍是已完成业务结果并继续路由", async () =>
 		store,
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "执行检查", content: "check" },
-				{ result: "通过", content: "approved" },
+				{ result: "执行检查", variables: { 检查上下文: "check" } },
+				{ result: "通过" },
 			]),
 		),
 		commands,
-	).run("task");
+	).run({ variables: { 任务: "task" } });
 
 	assert.equal(run.status, "completed");
 	const records = await store.listNodeRuns(run.id);
 	const commandResults = records
 		.filter((record) => record.actionKind === "执行自定义命令")
-		.map((record) => record.outcome?.content);
+		.map((record) => record.commandResult);
 	assert.equal(commandResults.length, 3);
 	assert.ok(
 		commandResults.every(
@@ -370,7 +427,7 @@ test("Agent 执行异常同时终结 NodeRun 和 Run", async () => {
 				new AgentRunModel(adapter),
 				undefined,
 				publisher,
-			).run("task", { runId: "failed-event-run" }),
+			).run({ variables: { 任务: "task" } }, { runId: "failed-event-run" }),
 		/agent crashed/,
 	);
 	const [record] = await store.listNodeRuns(
@@ -391,7 +448,7 @@ test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async
 		id: "recoverable-run",
 		flowId: flow.id,
 		flowVersion: "legacy:unknown",
-		task: "task",
+		variables: { 任务: "task" },
 		status: "running",
 		phase: "executing_node",
 		sequence: 1,
@@ -399,7 +456,7 @@ test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async
 		startedAt: "2026-01-01T00:00:00.000Z",
 		sessionReference: "saved-session",
 		currentNodeRef: "analyze",
-		currentInput: "task",
+		currentInput: {},
 	});
 	await store.createNodeRun({
 		id: "old-agent-node",
@@ -407,7 +464,7 @@ test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async
 		sequence: 2,
 		nodeRef: "analyze",
 		actionKind: "新建Agent",
-		input: "task",
+		input: {},
 		status: "running",
 		startedAt: "2026-01-01T00:01:00.000Z",
 		enteredFrom: { kind: "start" },
@@ -418,8 +475,8 @@ test("恢复会终结旧 Agent NodeRun 并创建带 retryOf 的新访问", async
 		store,
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "已分析", content: "analysis" },
-				{ result: "已完成", content: "done" },
+				{ result: "已分析", variables: { 分析结论: "analysis" } },
+				{ result: "已完成" },
 			]),
 		),
 	).resume("recoverable-run");
@@ -443,11 +500,11 @@ test("JSON Store 持久化全部事实并将旧快照标记为 legacy", async ()
 		store,
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "已分析", content: "analysis" },
-				{ result: "已完成", content: "done" },
+				{ result: "已分析", variables: { 分析结论: "analysis" } },
+				{ result: "已完成" },
 			]),
 		),
-	).run("task");
+	).run({ variables: { 任务: "task" } });
 	const saved = JSON.parse(await readFile(file, "utf8")) as {
 		runs: unknown[];
 		nodeRuns: unknown[];
@@ -471,7 +528,7 @@ test("JSON Store 持久化全部事实并将旧快照标记为 legacy", async ()
 				{
 					id: "legacy",
 					flowId: flow.id,
-					task: "task",
+					variables: { 任务: "task" },
 					status: "completed",
 					startedAt: "2026-01-01T00:00:00.000Z",
 				},
@@ -495,18 +552,19 @@ test("Inspector 用同一份投影还原普通路径、路由和并行轮次", a
 		store,
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "执行检查", content: "check" },
-				{ result: "通过", content: "approved" },
+				{ result: "执行检查", variables: { 检查上下文: "check" } },
+				{ result: "通过" },
 			]),
 		),
 		new RecordingCommandExecutor(),
-	).run("task");
+	).run({ variables: { 任务: "task" } });
 
 	const history = await new FlowRunInspector(store).inspectRun(run.id);
 	assert.ok(history);
 	assert.equal(history.run.id, run.id);
 	assert.equal(history.run.flowId, flow.id);
-	assert.equal(history.run.task, "task");
+	assert.equal("task" in history.run, false);
+	assert.deepEqual((await store.getRun(run.id))?.variables, { 任务: "task" });
 	assert.deepEqual(
 		history.nodeRuns.map((record) => record.nodeRef),
 		["plan", "test", "lint", "merge", "judge"],
@@ -524,6 +582,20 @@ test("Inspector 用同一份投影还原普通路径、路由和并行轮次", a
 		history.nodeRuns[3]?.id,
 	);
 	assert.equal("outcome" in history.nodeRuns[1], false);
+	const commandNode = history.nodeRuns[1];
+	assert.equal(history.evidence[commandNode.id]?.commandOutputAvailable, true);
+	const commandRecord = (await store.listNodeRuns(run.id)).find(
+		(record) => record.id === commandNode.id,
+	);
+	const evidence = await new FlowRunInspector(store).inspectNodeEvidence(
+		run.id,
+		commandNode.id,
+	);
+	assert.deepEqual(evidence?.commandResult, commandRecord?.commandResult);
+	assert.deepEqual(evidence?.outcome, {
+		result: "已执行",
+		variables: { 摘要: "test" },
+	});
 	assert.deepEqual(history.current, { kind: "none" });
 	assert.equal(
 		await new FlowRunInspector(store).inspectRun("missing-run"),
@@ -539,11 +611,11 @@ test("Inspector 按 Run 校验 NodeRun，并按权限读取 Agent 证据", async
 		store,
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "已分析", content: "analysis" },
-				{ result: "已完成", content: "done" },
+				{ result: "已分析", variables: { 分析结论: "analysis" } },
+				{ result: "已完成" },
 			]),
 		),
-	).run("task");
+	).run({ variables: { 任务: "task" } });
 	const [node] = await store.listNodeRuns(run.id);
 	if (!node) throw new Error("expected an Agent NodeRun");
 	node.session = {
@@ -589,13 +661,13 @@ test("Coordinator 在事实保存成功后发布普通路径事件", async () =>
 		new InMemoryRunStore(),
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "已分析", content: "analysis" },
-				{ result: "已完成", content: "done" },
+				{ result: "已分析", variables: { 分析结论: "analysis" } },
+				{ result: "已完成" },
 			]),
 		),
 		new RecordingCommandExecutor(),
 		publisher,
-	).run("task", { runId: "event-run" });
+	).run({ variables: { 任务: "task" } }, { runId: "event-run" });
 
 	assert.equal(run.status, "completed");
 	assert.deepEqual(
@@ -635,7 +707,7 @@ test("观测历史优先展示持久化的节点名称，并兼容旧记录", as
 		id: "legacy-name-run",
 		flowId: "flow",
 		flowVersion: "legacy:unknown",
-		task: "task",
+		variables: { 任务: "task" },
 		status: "completed",
 		phase: "completed",
 		sequence: 1,
@@ -649,7 +721,7 @@ test("观测历史优先展示持久化的节点名称，并兼容旧记录", as
 		nodeRef: "corroborate",
 		nodeName: "交叉验证",
 		actionKind: "新建Agent",
-		input: "task",
+		input: {},
 		status: "completed",
 		startedAt: "2026-01-01T00:00:00.000Z",
 		enteredFrom: { kind: "start" },
@@ -660,7 +732,7 @@ test("观测历史优先展示持久化的节点名称，并兼容旧记录", as
 		sequence: 2,
 		nodeRef: "legacy-ref",
 		actionKind: "新建Agent",
-		input: "task",
+		input: {},
 		status: "completed",
 		startedAt: "2026-01-01T00:00:01.000Z",
 		enteredFrom: { kind: "start" },
@@ -689,13 +761,13 @@ test("并行事件带有独立轮次引用，订阅者异常不影响 Run", asyn
 		new InMemoryRunStore(),
 		new AgentRunModel(
 			new SequencedAdapter([
-				{ result: "执行检查", content: "check" },
-				{ result: "通过", content: "approved" },
+				{ result: "执行检查", variables: { 检查上下文: "check" } },
+				{ result: "通过" },
 			]),
 		),
 		new RecordingCommandExecutor(),
 		publisher,
-	).run("task", { runId: "parallel-events" });
+	).run({ variables: { 任务: "task" } }, { runId: "parallel-events" });
 
 	assert.equal(run.status, "completed");
 	assert.ok(events.some((event) => event.type === "parallel.started"));
@@ -730,12 +802,10 @@ test("RunStore 保存失败时不会发布未保存的节点成功事件", async
 			new FlowCoordinator(
 				flow,
 				store,
-				new AgentRunModel(
-					new SequencedAdapter([{ result: "已完成", content: "done" }]),
-				),
+				new AgentRunModel(new SequencedAdapter([{ result: "已完成" }])),
 				new RecordingCommandExecutor(),
 				publisher,
-			).run("task", { runId: "failed-save" }),
+			).run({ variables: { 任务: "task" } }, { runId: "failed-save" }),
 		/store unavailable/,
 	);
 	assert.deepEqual(
@@ -751,7 +821,7 @@ test("统一 Runtime 门面先建立订阅再应用快照，不丢失水位之�
 			id: "race-run",
 			flowId: "flow",
 			flowVersion: "sha256:test",
-			task: "task",
+			variables: { 任务: "task" },
 			status: "running" as const,
 			phase: "executing_node" as const,
 			sequence: 1,
@@ -811,7 +881,7 @@ test("Inspector 返回按开始时间倒序排列的近期运行摘要", async (
 	const base = {
 		flowId: "flow",
 		flowVersion: "sha256:test",
-		task: "task",
+		variables: { 任务: "task" },
 		status: "completed" as const,
 		phase: "completed" as const,
 		sequence: 1,

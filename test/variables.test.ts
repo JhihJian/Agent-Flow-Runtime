@@ -23,12 +23,16 @@ class RecordingCommands extends ProcessCommandExecutor {
 					status: "success",
 					exitCode: 0,
 					stdout: JSON.stringify({
-						content: "已定位",
 						variables: { 路径: "src/runtime.ts" },
 					}),
 					stderr: "",
 				}
-			: { status: "success", exitCode: 0, stdout: "完成", stderr: "" };
+			: {
+					status: "success",
+					exitCode: 0,
+					stdout: JSON.stringify({ variables: { 完成: true } }),
+					stderr: "",
+				};
 	}
 }
 
@@ -36,6 +40,9 @@ const flow = parseFlow(
 	`---
 name: 变量测试
 description: 测试运行变量和节点消息。
+variables:
+  任务:
+    description: 工作目标
 ---
 
 \`\`\`mermaid
@@ -57,7 +64,7 @@ flowchart TD
 ## 继续
 
 \`\`\`执行自定义命令
-{"command":"continue","stdin":{"message":"{outcome}","path":"{var.路径}"}}
+{"command":"continue","output":"variables","stdin":{"message":"{input.路径}","path":"{var.任务}"}}
 \`\`\`
 
 ### 已执行
@@ -65,8 +72,56 @@ flowchart TD
 `,
 	"variables-test",
 );
+const capture = flow.nodes.get("capture");
+const next = flow.nodes.get("next");
+if (!capture || !next) throw new Error("测试 Flow 缺少变量节点");
+capture.resultVariables = new Map([
+	["已执行", { 路径: { description: "文件路径" } }],
+]);
+next.resultVariables = new Map([
+	["已执行", { 完成: { description: "是否完成" } }],
+]);
 
 describe("Flow variables", () => {
+	it("拒绝未声明启动变量和非法启动值", async () => {
+		const coordinator = new FlowCoordinator(flow, new InMemoryRunStore(), {
+			start: async () => undefined,
+			end: async () => undefined,
+		} as never);
+		await expect(
+			coordinator.run({ variables: { 未声明: "x" } }),
+		).rejects.toThrow("未声明全局变量");
+		await expect(
+			coordinator.run({ variables: { 任务: Number.NaN } }),
+		).rejects.toThrow("JSON 值");
+	});
+
+	it("缺少必填变量时拒绝启动，默认值可以启动", async () => {
+		const coordinator = new FlowCoordinator(flow, new InMemoryRunStore(), {
+			start: async () => undefined,
+			end: async () => undefined,
+		} as never);
+		await expect(coordinator.run({ variables: {} })).rejects.toThrow(
+			"缺少必填全局变量",
+		);
+		const original = flow.variables;
+		flow.variables = { 任务: { description: "工作目标", default: "检查" } };
+		try {
+			const run = await new FlowCoordinator(
+				flow,
+				new InMemoryRunStore(),
+				{
+					start: async () => undefined,
+					end: async () => undefined,
+				} as never,
+				new RecordingCommands(),
+			).run({ variables: {} });
+			expect(run.variables).toEqual({ 任务: "检查" });
+		} finally {
+			flow.variables = original;
+		}
+	});
+
 	it("renders variables in text and structured values", () => {
 		expect(
 			renderTemplate("任务：{var.任务}", { variables: { 任务: "检查" } }),
@@ -93,14 +148,11 @@ describe("Flow variables", () => {
 			commands,
 		).run({ variables: { 任务: "检查模板" } });
 		expect(run.status).toBe("completed");
-		expect(run.variables).toMatchObject({
-			任务: "检查模板",
-			路径: "src/runtime.ts",
-		});
+		expect(run.variables).toEqual({ 任务: "检查模板" });
 		expect(commands.requests[0]?.stdin).toBe("检查模板");
 		expect(commands.requests[1]?.stdin).toEqual({
-			message: "已定位",
-			path: "src/runtime.ts",
+			message: "src/runtime.ts",
+			path: "检查模板",
 		});
 	});
 });

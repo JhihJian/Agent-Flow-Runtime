@@ -37,6 +37,8 @@ pi --flow <包目录或FLOW.md> <任务>
 3. 将 Task 和 FlowDefinition 交给协调器。
 4. 等待 Run 完成，并将终态通知 Pi 用户或输出通道。
 
+命令行或`/flow run`后的自由文本作为全局变量`任务`传入 Flow；需要传入多个结构化变量时使用`--variables`或重复使用`--var name=value`。Flow 仍必须在元信息中显式声明这些变量。
+
 ## 3. 模块职责
 
 ### Pi Flow Host

@@ -13,7 +13,6 @@ import type {
 	FlowRunLocation,
 	FlowRunRecord,
 	FlowRunSummary,
-	FlowValue,
 	NodeRunRecord,
 	RunStore,
 } from "./types.ts";
@@ -169,9 +168,7 @@ export class FlowRunInspector implements FlowRunInspectorApi {
 			);
 		}
 		const commandResult =
-			record.actionKind === "执行自定义命令"
-				? toCommandResult(record.outcome?.content)
-				: undefined;
+			record.actionKind === "执行自定义命令" ? record.commandResult : undefined;
 		if (commandResult) evidence.commandResult = commandResult;
 		return evidence;
 	}
@@ -252,7 +249,7 @@ export class FlowRuntime implements FlowRunInspectorApi {
 export function formatFlowRunHistory(history: FlowRunHistory): string {
 	const lines = [
 		`Run ${history.run.id} | Flow ${history.run.flowId} | ${history.run.status} / ${history.run.phase}`,
-		`Task: ${formatValue(history.run.task)}`,
+
 		`Flow version: ${history.run.flowVersion}`,
 		`History: ${history.run.historyCompleteness} | sequence ${history.run.sequence}`,
 		"Path:",
@@ -291,10 +288,6 @@ function formatDestination(
 	return `${destination.kind}:${destination.ref}`;
 }
 
-function formatValue(value: FlowValue | undefined): string {
-	return typeof value === "string" ? value : JSON.stringify(value);
-}
-
 function isEvidenceReader(
 	value: FlowRunInspectorOptions | FlowNodeEvidenceReader,
 ): value is FlowNodeEvidenceReader {
@@ -310,7 +303,7 @@ function toRunSummary(run: FlowRunRecord): FlowRunSummary {
 		id: run.id,
 		flowId: run.flowId,
 		flowVersion: run.flowVersion,
-		task: run.task,
+
 		status: run.status,
 		phase: run.phase,
 		sequence: run.sequence,
@@ -380,32 +373,6 @@ function evidenceSummary(record: NodeRunRecord): FlowNodeEvidenceSummary {
 		interactionReference: record.session?.interactionReference,
 		commandOutputAvailable:
 			record.actionKind === "执行自定义命令" &&
-			toCommandResult(record.outcome?.content) !== undefined,
+			record.commandResult !== undefined,
 	};
-}
-
-function toCommandResult(
-	value: FlowValue | undefined,
-): FlowNodeEvidence["commandResult"] {
-	if (!isRecord(value)) return undefined;
-	if (
-		(value.status !== "success" && value.status !== "failure") ||
-		(typeof value.exitCode !== "number" && value.exitCode !== null) ||
-		typeof value.stdout !== "string" ||
-		typeof value.stderr !== "string"
-	) {
-		return undefined;
-	}
-	return {
-		status: value.status,
-		exitCode: value.exitCode,
-		stdout: value.stdout,
-		stderr: value.stderr,
-	};
-}
-
-function isRecord(value: FlowValue | undefined): value is {
-	[key: string]: FlowValue;
-} {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

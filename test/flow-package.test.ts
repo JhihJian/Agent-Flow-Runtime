@@ -42,7 +42,6 @@ class PackageAdapter implements AgentIntegrationAdapter {
 		await request.submitOutcome({
 			nodeExecutionReference: request.nodeExecutionReference,
 			result: "继续",
-			content: "开始检查",
 		});
 		return { id: request.nodeExecutionReference };
 	}
@@ -77,6 +76,9 @@ test("目录包以父目录作为 Flow ID，并在业务 cwd 下运行包内脚�
 		`---
 name: 包检查
 description: 读取参考资料并运行检查脚本。
+variables:
+  任务:
+    description: 运行任务
 ---
 
 
@@ -98,7 +100,7 @@ flowchart TD
 
 \`\`\`新建Agent
 请阅读[检查清单](references/检查清单.md)。
-任务：{outcome}
+任务：{var.任务}
 \`\`\`
 
 ### 继续
@@ -144,7 +146,10 @@ flowchart TD
 		undefined,
 		undefined,
 		fromDirectory.resources,
-	).run("[动态内容](references/unknown.txt)", { cwd: businessCwd });
+	).run(
+		{ variables: { 任务: "[动态内容](references/unknown.txt)" } },
+		{ cwd: businessCwd },
+	);
 
 	assert.equal(run.status, "completed");
 	assert.match(adapter.prompt, new RegExp(join(references, "检查清单.md")));

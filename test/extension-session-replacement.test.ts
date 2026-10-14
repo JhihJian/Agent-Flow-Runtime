@@ -14,6 +14,7 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 	const commands = new Map<string, AsyncHandler>();
 	const events = new Map<string, AsyncHandler[]>();
 	const tools: Array<{ name: string; execute: AsyncHandler }> = [];
+	const flags: string[] = [];
 	const notifications: string[] = [];
 	const state = getCliFlowState() as unknown as Record<string, unknown>;
 	for (const key of Object.keys(state)) delete state[key];
@@ -23,7 +24,9 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		for (const handler of events.get(name) ?? []) await handler(...args);
 	};
 	const pi = {
-		registerFlag() {},
+		registerFlag(name: string) {
+			flags.push(name);
+		},
 		registerTool(tool: { name: string; execute: AsyncHandler }) {
 			tools.push(tool);
 		},
@@ -48,6 +51,7 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		},
 	};
 	flowExtension(pi as unknown as ExtensionAPI);
+	assert.deepEqual(flags, ["variables", "flow", "var"]);
 	const compactHandlers = events.get("session_before_compact") ?? [];
 	assert.equal(compactHandlers.length, 1, "Flow Runtime 应注册 compact 门禁");
 	assert.equal(
@@ -70,7 +74,10 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 	const newContext = context("new.jsonl", async (prompt) => {
 		nodePrompts.push(prompt);
 		const outcome = prompt.includes("分析任务") ? "已分析" : "已完成";
-		await outcomeTool().execute("tool-call", { outcome, content: outcome });
+		await outcomeTool().execute("tool-call", {
+			outcome,
+			variables: outcome === "已分析" ? { 分析结论: outcome } : undefined,
+		});
 		assert.deepEqual(
 			await compactHandlers[0]({ reason: "threshold" }, newContext.value),
 			{ cancel: true },

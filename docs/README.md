@@ -14,6 +14,7 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | [Agent Flow Runtime 架构设计](agent-flow-runtime-architecture.md) | 了解解释器、协调器、统一 Agent 运行模型和记录存储的职责边界。 |
 | [Flow 运行观测设计](flow-observability-design.md) | 了解运行事实如何产生，以及 CLI、JSON 和 RPC 如何读取和传递状态。 |
 | [Flow 引用执行设计](flow-reference-design.md) | 了解一个节点如何引用另一个 Flow 作为子 Run 执行，以及结果、绑定与恢复语义。 |
+| [发布级冒烟门禁设计](release-smoke-design.md) | 说明主链路、并行冲突、恢复流程的发布前离线门禁及其与真实 Pi/provider 集成测试的边界。 |
 
 ## SDK 接入
 
