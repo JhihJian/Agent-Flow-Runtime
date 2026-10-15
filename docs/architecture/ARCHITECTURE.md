@@ -4,7 +4,7 @@
 
 本文档描述 `@jhihjian/agent-flow-runtime` 当前源码形成的架构事实。它回答系统是什么、如何执行一次 Flow、模块如何分工、哪些规则必须保持成立，以及从哪里可以重新核对结论。
 
-本目录是源码候选架构基线，不是项目治理后端签发的 authoritative 基线。当前仓库未发现 `.agents` 架构治理后端，因此本次结论的状态是 `routeStatus: source-analysis`、`candidateStatus: draft`、`baselineStatus: unavailable`。
+本目录记录当前源码形成的架构知识，并保留可回链的源码和配置证据。当前内容来自静态源码审计，未执行构建、测试或集成验证；未知的业务和运维策略均标为待确认。
 
 ## 覆盖范围
 

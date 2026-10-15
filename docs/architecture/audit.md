@@ -42,8 +42,4 @@
 
 ## 审计状态
 
-- `routeStatus`: `source-analysis`
-- `candidateStatus`: `draft`
-- `baselineStatus`: `unavailable`
-- `auditStatus`: `static-audit-passed`
-- 正式治理后端：未发现
+本记录表示静态源码审计已完成。它不替代构建、测试、集成验证，也不替代业务和运维策略确认。
