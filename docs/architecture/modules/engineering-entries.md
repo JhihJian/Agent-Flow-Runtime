@@ -1,36 +1,13 @@
-# 工程入口模块
+# 工程入口
 
-## 包和公共出口
+## 包与出口
 
-`package.json`声明包名 `@jhihjian/agent-flow-runtime`、Node `>=22.19.0`、公共 SDK 入口 `dist/index.js`，并通过 `pi.extensions` 暴露 `src/extension.ts`，通过 `pi.skills`暴露 Flow planning Skill。`src/index.ts`重导出目录、装载、解析、Pi、Runtime、观测和类型能力。
+`package.json#exports` 声明 SDK 出口 `dist/index.js`/`dist/extension.js`；`package.json#pi.extensions` 声明 Pi extension source，`package.json#pi.skills` 声明 bundled skill；`src/index.ts` 导出 SDK-facing modules。
 
-## 源码阅读入口
+构建配置由 `tsconfig.build.json#compilerOptions` 和 `tsconfig.build.json#include` 定义，只包括 `src/**/*.ts` 并输出 `dist`；开发配置 `tsconfig.json#include` 还包括 test/tools。
 
-`tools/source-guide-targets.ts`登记关键控制流目标，`tools/generate-source-index.ts`使用 ts-morph 从 tsconfig 定位源码行并检查 `docs/source-index.md` 和源码阅读图。该工具是文档追溯入口，不是运行时组件。
+## 检查、测试与发布
 
-## 质量和发布入口
+脚本由 `package.json#scripts.build`、`package.json#scripts.check`、`package.json#scripts.test`、`package.json#scripts.test:vitest`、`package.json#scripts.test:smoke`、`package.json#scripts.test:release`、`package.json#scripts.test:integration` 和 `package.json#scripts.docs:source-index:check` 声明。Vitest 文件选择见 `vitest.config.ts#test.exclude`。Tag workflow 的 `npm ci`、`npm test` 和发布步骤见 `.github/workflows/publish.yml#jobs.publish.steps`。配置不等于本轮验证结果，本轮没有执行上述命令。
 
-当前脚本关系如下：
-
-- `npm run check`：Biome、TypeScript noEmit、源码索引检查。
-- `npm run build`：只编译 `src` 到 `dist`。
-- `npm test`：源码索引检查、构建和一组显式 Node test 文件。
-- `npm run test:vitest`：Vitest 默认集合。
-- `npm run test:smoke`：release Flow 的三组冒烟测试。
-- `npm run test:release`：check、build、smoke 和 npm test 的串联入口。
-- `npm run test:integration`：构建后执行 Pi SDK session smoke。
-
-GitHub tag 发布 workflow 当前执行 `npm ci`、`npm test` 后发布，没有调用 `check`、`test:smoke`、`test:release` 或 `test:integration`。这些是配置事实，不代表本次已执行验证。
-
-## 不实现范围
-
-工程入口不改变 Runtime 语义，不替代架构文档的来源映射，也不因测试文件存在就证明对应行为在本次运行中通过。
-
-## 主要证据
-
-- [package.json](../../package.json)
-- [index.ts](../../src/index.ts)
-- [source-guide-targets.ts](../../tools/source-guide-targets.ts)
-- [generate-source-index.ts](../../tools/generate-source-index.ts)
-- [publish.yml](../../.github/workflows/publish.yml)
-- [docs/README.md](../../README.md)
+`tools/generate-source-index.ts` 与 `tools/source-guide-targets.ts` 管理文档源码定位，不属于 Runtime 执行链。工程模块不改变业务语义，也不以测试文件存在推断测试通过。

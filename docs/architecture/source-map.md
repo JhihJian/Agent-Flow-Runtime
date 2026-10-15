@@ -1,60 +1,43 @@
-# 来源映射与验证入口
+# 来源映射
 
-## 证据口径
+## 口径
 
-- **实现事实**：当前 `src/`、配置或 workflow 直接表达的行为。
-- **测试断言**：测试源码中存在的断言。本次未执行测试，因此不表示本次通过。
-- **文档声明**：README 和 `docs/*.md` 表达的意图或使用约定，不能覆盖源码事实。
-- **风险推断**：从实现边界推得的可能后果，未包装成已证实缺陷。
-- **待确认策略**：源码无法决定的产品、安全或部署选择。
+- **事实**：源码或配置直接表达的行为。
+- **结构推断**：由调用方向和状态关系归纳。
+- **测试断言**：测试源码包含直接断言，但不表示本轮执行或通过。
+- **待确认**：依赖外部业务、安全、运行或发布决策。
 
-## 架构结论到证据
+源码版本 `26eb4e604e54472dd1938f92671c89d74d1554ab`，package `0.2.1`。本轮没有运行构建、测试、Vitest、集成或 docs 检查；配置入口见 `package.json#scripts`。
 
-| 结论 | 主要证据 | 证据类型 |
+## 架构结论定位
+
+| 结论 | 分类 | 主要源码/配置 | 直接测试断言定位 |
+| --- | --- | --- | --- |
+| Package 出口、Pi 扩展和工程入口 | 事实 | `package.json#exports`、`package.json#pi.extensions`、`package.json#pi.skills`、`tsconfig.build.json#include` | 配置项，无行为测试 |
+| Flow 解析、图装配和动作验证 | 事实 | `src/parser.ts#parseFlow`、`src/parser.ts#validateAndWireGraph`、`src/parser.ts#wireFlowReferenceNode` | `test/parser.test.ts:266-278`、`test/parser.test.ts:368-394` |
+| 全局/结果变量和模板作用域 | 事实 | `src/variables.ts#validateVariables`、`src/runtime.ts#initializeVariables`、`src/runtime.ts#validateOutcomeVariables`、`src/runtime.ts#extractNextInput`、`src/parser.ts#validateTemplates` | `test/parser.test.ts:210-215`、`test/parser.test.ts:254-259`、`test/parser.test.ts:282-294`、`test/variables.test.ts:91-96`、`test/variables.test.ts:104-119`、`test/variables.test.ts:126-136`、`test/variables.test.ts:149-153` |
+| 动作实际资源和 sibling Flow closure | 事实 | `src/flow-loader.ts#loadFlow`、`src/flow-loader.ts#loadFlowPackage`、`src/flow-loader.ts#validatePackageResources`、`src/flow-loader.ts#loadReferenceClosure` | `test/flow-reference.test.ts:958-1058`；动作资源范围无直接测试 |
+| Coordinator 记录访问和结果路由 | 事实 | `src/runtime.ts#FlowCoordinator.run`、`src/runtime.ts#continueRun`、`src/runtime.ts#FlowCoordinator.completeNode`、`src/runtime.ts#FlowCoordinator.selectRoute` | `test/runtime.test.ts:129-157` |
+| 并行分支、round、join 和全局 patch | 事实 | `src/parser.ts#validateParallel`、`src/runtime.ts#FlowCoordinator.enterParallel`、`src/runtime.ts#FlowCoordinator.executeParallel`、`src/runtime.ts#mergeParallelVariables` | `test/parser.test.ts:340-358`、`test/parser.test.ts:368-413`、`test/runtime.test.ts:225-242`、`test/correctness.test.ts:425-449` |
+| 子 Flow 独立 Run、显式输入和受限输出 | 事实 | `src/runtime.ts#FlowCoordinator.startChildRun`、`src/runtime.ts#FlowCoordinator.childOutcome`、`src/runtime.ts#FlowCoordinator.resumeFlowReferenceNode` | `test/flow-reference.test.ts:461-480`、`test/flow-reference.test.ts:496-515`、`test/flow-reference.test.ts:536-550`、`test/flow-reference.test.ts:571-585` |
+| Agent、命令和子 Flow 恢复差异 | 事实 | `src/runtime.ts#FlowCoordinator.resume`、`src/runtime.ts#FlowCoordinator.resumeRun`、`src/runtime.ts#FlowCoordinator.failInterruptedCommand`、`src/extension.ts#resumeFlow`、`src/runtime.ts#fingerprintFlow` | `test/correctness.test.ts:536-542`、`test/release-flow-recovery.test.ts:184-192`、`test/flow-reference.test.ts:710-725`、`test/flow-reference.test.ts:809-820`、`test/flow-reference.test.ts:1097-1102` |
+| 单进程 JSON snapshot 和提交后观测 | 事实 | `src/runtime.ts#JsonFileRunStore`、`src/runtime.ts#FlowCoordinator.commit` | `test/correctness.test.ts:566-573`、`test/correctness.test.ts:724-753`、`test/correctness.test.ts:863-866` |
+| Pi CLI outcome 按 session 定位并在 settle 后确认 | 事实 | `src/pi.ts#PiAgentIntegrationAdapter`、`src/pi.ts#createFlowOutcomeTool`、`src/extension.ts#flowExtension` | `test/correctness.test.ts:225-231`、`test/extension-session-replacement.test.ts:81-90`、`test/extension-session-replacement.test.ts:115-127` |
+| Inspector、Publisher 和订阅快照竞态 | 事实 | `src/observability.ts#FlowObservationPublisher`、`src/observability.ts#FlowRunInspector`、`src/observability.ts#FlowRuntime.openRunObservation` | `test/correctness.test.ts:724-753`、`test/correctness.test.ts:863-866`、`test/correctness.test.ts:919-927` |
+| `extension -> runtime -> store` 是宿主到执行内核到 facts 的主依赖方向 | 结构推断 | `src/extension.ts#startFlow`、`src/runtime.ts#FlowCoordinator`、`src/runtime.ts#FlowCoordinator.commit` | 无直接测试；由源码 import 和注入关系复核 |
+
+所有测试定位均指向已核对的直接断言连续范围；测试本轮未执行。
+
+## 运行时边界和待确认问题
+
+| 问题 | 已知现状 | 未决来源 |
 | --- | --- | --- |
-| Flow 是解析后的静态图，Parser 不执行动作 | `src/parser.ts:59` `parseFlow`；`src/types.ts:71` `FlowDefinition` | 实现事实 |
-| 包入口和引用闭包由 Loader 管理 | `src/flow-loader.ts:24` `loadFlow`、`loadFlowPackage`；`src/directory.ts:14` `FlowDirectory` | 实现事实 |
-| 变量具有全局、下一跳、分支作用域 | `src/parser.ts:840` 模板渲染；`src/runtime.ts` 的 `initializeVariables`、`extractNextInput`、`mergeParallelVariables` | 实现事实 |
-| Coordinator 是运行状态的主要写入者 | `src/runtime.ts:543` `FlowCoordinator`；`src/types.ts:360` `RunStore` | 实现事实 |
-| 每次节点访问形成独立 NodeRun | `src/runtime.ts` 的 `startNode`、`completeNode`、恢复路径；`src/types.ts:225` | 实现事实 |
-| 命令非零退出仍可作为业务节点完成 | `src/runtime.ts:918-1000` 命令执行和 `completeNode` | 实现事实 |
-| 并行只接受命令分支并在显式汇合点合并 | `src/parser.ts` 的 `validateParallel`；`src/runtime.ts:758` `executeParallel` | 实现事实 |
-| 子 Flow 是独立 Run，显式输入和受限输出 | `src/runtime.ts:1258` `executeFlowReference`、`startChildRun`、`childOutcome`；`src/types.ts:41` | 实现事实 |
-| Agent 恢复创建新的 NodeRun，命令中断不重放 | `src/runtime.ts:639` `resume`、`interruptNode`、`failInterruptedCommand` | 实现事实 |
-| Pi CLI 结果在 `agent_settled` 后确认 | `src/pi.ts:161` `PiAgentIntegrationAdapter`、`finalizeCliTurn`；`src/extension.ts:276` | 实现事实 |
-| 自动恢复只扫描 running 根 Run | `src/extension.ts:504` `resumeFlow` | 实现事实 |
-| JSON Store 是单进程实例内串行快照 | `src/runtime.ts:241` `JsonFileRunStore` 注释、`mutate`、`persist` | 实现事实 |
-| 观测是进程内 best-effort，不是事件日志 | `src/observability.ts:26` `FlowObservationPublisher`；`src/types.ts:485` | 实现事实 |
-| 观测快照使用订阅后取快照的水位保护 | `src/observability.ts:213` `openRunObservation` | 实现事实 |
-| evidence 默认授权放行 | `src/observability.ts:95` `FlowRunInspector` 构造函数 | 实现事实 |
-| 推荐检查、测试和发布入口范围不一致 | `package.json:45-55`；`.github/workflows/publish.yml:19-27` | 配置事实 |
-
-## 风险和未决项
-
-| 项目 | 已知事实 | 未决问题 |
-| --- | --- | --- |
-| JSON 并发 | Store 只在实例内排队，整体快照写回 | 是否需要同一工作目录的多进程并发写入 |
-| 命令资源 | 无超时、取消和 stdout/stderr 大小上限 | 运行环境是否需要资源预算 |
-| 中断恢复 | Coordinator 接受 interrupted，Pi 自动扫描只查 running | interrupted 是否应自动恢复 |
-| evidence | 历史和证据可包含输入、变量、消息和命令输出，默认 authorizer 放行 | 哪些宿主和用户可以读取，是否需要默认拒绝或脱敏 |
-| 发布门禁 | tag workflow 执行 npm test，推荐 release 入口更宽 | 发布是否应切换到统一完整门禁 |
-| 外部集成 | 有 Pi SDK session smoke 源码入口 | 是否需要真实 provider/model 的发布证据 |
-
-## 本次验证边界
-
-本次只读取源码、配置、文档、测试入口和 Git 状态，没有执行：
-
-- `npm run build`
-- `npm run check`
-- `npm test`
-- `npm run test:vitest`
-- `npm run test:smoke`
-- `npm run test:release`
-- `npm run test:integration`
-- `npm run docs:source-index:check`
-
-因此本目录不提供本次构建、测试、源码索引或发布验证通过证明。需要执行验证时，项目已有入口是 `package.json` 中的 scripts；架构文档链接完整性和结构检查入口尚未在项目中发现独立实现。正式架构治理入口 `node .agents/tools/architecture-governance.mjs check` 和 `node .agents/tools/docs-check.mjs` 因项目不存在 `.agents` 后端而不可用，本次未调用。
-
-## 维护规则
-
-源码模块职责、核心业务流、状态或边界发生变化时，必须同步检查 `ARCHITECTURE.md`、对应模块文档、术语表和本文件。任何从设计文档读取但无法由当前源码确认的内容，只能写入“文档声明”或“待确认策略”。
+| 启动输入失败是否留下事实 | `src/runtime.ts#FlowCoordinator.run` 先调用 `src/runtime.ts#initializeVariables`，再调用 Store 创建 Run；源码路径不创建 Run/NodeRun | `test/variables.test.ts:91-96` 只断言拒绝启动，未直接断言 Store 为空 |
+| NodeRun/ParallelRound 更新语义 | `src/runtime.ts#FlowCoordinator.completeNode`、`src/runtime.ts#FlowCoordinator.enterParallel`、`src/runtime.ts#JsonFileRunStore` 在同一记录 ID 上提交更新；每次新访问另建 ID | 直接测试只覆盖结果和历史投影，未单独断言更新语义 |
+| 普通结果边与 Flow 无结果直连 | `src/parser.ts#validateAndWireGraph`、`src/parser.ts#wireFlowReferenceNode` 分别校验普通结果边和固定成功映射 | `test/parser.test.ts:266-278` 覆盖命令固定结果；Flow 直连规则无本次核对的专门直接断言 |
+| 多进程写同一运行文件 | `src/runtime.ts#JsonFileRunStore` 每个实例内串行化并写完整快照，无跨实例协调 | 部署并发约束 |
+| 命令资源控制 | `src/runtime.ts#ProcessCommandExecutor` spawn 并累积 stdout/stderr，未见 timeout、cancel 或输出上限 | 安全和运行环境要求 |
+| interrupted 自动恢复 | `src/runtime.ts#FlowCoordinator.resume` 接受 running/interrupted；`src/extension.ts#resumeFlow` 自动扫描只取 running，并匹配 cwd、sessionReference、flowPath 后重新加载并校验 Flow ID | 产品恢复策略 |
+| evidence 权限/脱敏 | `src/observability.ts#FlowRunInspector` 缺省 authorizer 放行，证据可包含输入/输出 | 数据分类和访问政策 |
+| 发布门禁范围 | `package.json#scripts` 与 `.github/workflows/publish.yml#jobs.publish.steps` 声明入口；本轮未执行 | 维护者发布标准 |
+| 结果变量指纹专门测试 | `src/runtime.ts#fingerprintFlow` 序列化 `node.results` 描述但不单列 `resultVariables`；Parser 从结果描述表格提取变量 | 是否增加专门直接断言 |
