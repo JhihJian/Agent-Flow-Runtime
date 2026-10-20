@@ -1,72 +1,80 @@
-# Agent 能力组合
+# Agent 能力声明
 
 ## 定位
 
-Agent 能力是 Flow 的可选执行能力，不属于 Flow Runtime 的核心领域。Flow Runtime 负责“流程如何推进”，能力模块负责“执行 Agent 具备什么能力”，宿主适配器负责“如何在具体平台中装配这些能力”。
+Flow 负责声明本 Flow 中 Agent 可以使用的业务工具和 Skill。Runtime 只校验、保存和转发这份声明，并管理 Agent 会话和 Flow 状态。宿主适配器把逻辑名称转换为实际会话能力。
 
-能力模块可以完全不安装。没有能力模块时，Runtime 继续通过 `AgentIntegrationAdapter` 使用宿主提供的默认 Agent 行为。
+未声明 `capabilities` 时，工具和 Skill 都是空集合。Runtime 协议工具 `submit_flow_outcome` 由宿主始终注入，它负责提交当前节点结果，不属于 Flow 的业务能力。
 
-## 分层
+## 声明格式
+
+```yaml
+capabilities:
+  tools:
+    - read
+    - grep
+  skills:
+    - code-review
+```
+
+`tools` 和 `skills` 都是字符串数组，缺省时归一为空数组。每项必须是非空字符串，同一数组不能重复，`capabilities` 不能包含其他字段。首版能力声明属于整个 Flow，同一 Flow 的所有 Agent 节点使用同一份声明。
+
+能力名称是逻辑名称。Flow 不携带工具实现、Skill 正文、宿主对象或权限配置。
+
+## 分层职责
 
 ```mermaid
 flowchart LR
-    definition[Flow 定义层] --> runtime[Runtime 核心]
-    runtime --> port[Agent 执行抽象]
-    capability[可选能力组合模块] --> composition[组合装配层]
-    port --> composition
-    composition --> host[Agent 宿主适配层]
-    host --> resource[工具 Skill 模型和权限资源]
+    flow[Flow capabilities] --> runtime[Runtime 解析和转发]
+    runtime --> contract[AgentIntegrationAdapter]
+    contract --> host[宿主会话装配]
+    host --> session[工具 Skill 和协议工具]
 ```
 
-### Flow 定义层
+Runtime 负责：
 
-Flow 描述节点、结果、路由、变量和控制流。可选能力模块可以声明某个节点需要的逻辑能力，但不直接携带宿主对象、工具实现、Skill 正文或权限开关。
+- 解析和规范化 Flow 能力声明。
+- 将声明纳入 Flow fingerprint，防止旧能力配置被静默恢复。
+- 在新建或接管 Agent 时把声明传给适配器。
+- 保持 Flow 路由、变量、恢复和 Agent 生命周期语义独立。
 
-能力声明由所属模块解释。Runtime 核心不需要识别所有模块的扩展数据，也不因为能力模块不存在而改变普通 Flow 的语义。
+通用 Agent 契约负责：
 
-### Runtime 核心
+- 创建或接管会话时接收能力声明。
+- 执行节点任务并接收结构化结果。
+- 让 `新建Agent` 创建新的能力固定会话。
+- 让 `复用Agent` 沿用当前绑定的会话能力，不重新装配能力。
 
-Runtime 核心负责：
+宿主适配器负责：
 
-- Flow 节点执行和结果路由。
-- Run、NodeRun、ParallelRound 和恢复事实。
-- Agent 节点的通用执行协议。
-- Agent 结果的结构化校验。
-- 通过 `AgentIntegrationAdapter` 调用外部 Agent 宿主。
+- 验证宿主是否提供每个声明的工具和 Skill。
+- 在会话创建时启用声明的能力。
+- 禁止未声明的业务工具和 Skill 进入最小 Agent。
+- 对无法隔离或能力缺失直接报错，不通过提示词模拟权限。
 
-Runtime 核心不负责工具、Skill、模型、权限和 Profile。Agent 能力不能改变结果边、变量作用域或 Run 生命周期。
+## 生命周期规则
 
-### Agent 能力组合模块
+- 未声明能力的 Agent 只有空业务能力和 `submit_flow_outcome`。
+- `新建Agent` 会释放当前绑定并按 Flow 声明创建新会话。
+- `复用Agent` 只使用当前绑定，不增加或切换能力。
+- 能力切换必须再次执行 `新建Agent`。
+- 子 Flow 使用自己的 `capabilities`，不继承父 Flow 的 Agent 或能力。
+- Flow 能力变化会改变 fingerprint。完整历史恢复时，能力变化会导致版本不匹配。
+- 宿主无法提供声明能力时，创建或接管会话失败。
 
-能力模块负责解析逻辑能力，组合工具、Skill、模型和权限策略，并把解析结果交给宿主装配。它不创建 Flow 节点，不拥有路由状态，不创建子 Run，也不替代 Runtime 的恢复逻辑。
+## Pi 实现
 
-能力模块可以由多个独立能力提供者组成。组合发生在宿主装配阶段，不通过嵌套 Flow 表达。
+Pi SDK 适配器使用显式工具 allowlist，并通过隔离的 `DefaultResourceLoader` 只保留声明的 Skill，同时关闭扩展、上下文文件、提示模板和主题的默认发现。创建后还会检查实际启用的工具集合。
 
-### Agent 宿主适配层
+当前 Pi CLI 扩展使用宿主已经创建的会话。该路径无法在 Flow 运行时重新配置工具和 Skill，因此适配器会明确拒绝 CLI Agent 的创建和接管，避免继承当前会话能力。
 
-宿主适配层把能力模块的结果转换为具体平台的会话配置。Pi SDK、Pi CLI 或其他 Agent 平台可以有不同的能力支持范围。宿主适配层应明确报告不支持的能力，不应通过提示词伪装成权限隔离。
+## 代码映射
 
-## 组合规则
+- `src/types.ts#AgentCapabilityDeclaration`：能力声明和通用适配器契约。
+- `src/agent-capabilities.ts`：默认空能力、规范化和声明校验。
+- `src/parser.ts#parseMetadata`：解析 Flow 元信息。
+- `src/agent.ts#AgentRunModel`：维护 Run 级 Agent 绑定。
+- `src/runtime.ts#fingerprintFlow`：把能力声明纳入恢复版本。
+- `src/pi.ts#PiAgentIntegrationAdapter`：Pi SDK 能力装配和 CLI 隔离失败。
 
-- Runtime 可以在没有能力模块时独立运行。
-- 能力模块依赖 Runtime 的 Agent 抽象，Runtime 不依赖能力模块。
-- 宿主适配器不决定 Flow 路由，只负责执行节点并返回结构化结果。
-- Profile 或逻辑能力不是 Flow 节点，不产生结果边，不创建独立 Run。
-- `执行Flow` 只用于控制流拆分。子 Flow 的能力配置与父 Flow 的控制流保持独立。
-- `复用Agent` 继续当前 Agent 会话的能力上下文。能力切换必须由新的 Agent 会话承载。
-
-## 状态归属
-
-Runtime 持有 Run、NodeRun、路线和变量事实。能力模块持有能力解析结果、版本或摘要以及恢复所需的能力绑定信息。宿主持有具体会话和平台资源。
-
-工具实现、Skill 内容、凭据和宿主对象不写入 Runtime 的核心事实。能力发生变化时，能力模块负责在恢复前验证兼容性，并明确拒绝不兼容的恢复。
-
-## 当前代码映射
-
-- `src/runtime.ts#FlowCoordinator`：Runtime 核心。
-- `src/agent.ts#AgentRunModel`：通用 Agent 运行模型。
-- `src/types.ts#AgentIntegrationAdapter`：Runtime 与 Agent 宿主之间的组合端口。
-- `src/pi.ts#PiAgentIntegrationAdapter`：Pi 宿主适配器。
-- `src/extension.ts#flowExtension`：Pi CLI 装配入口。
-
-后续能力模块应在这些端口之外实现，不应把 Profile、工具和 Skill 语义加入 `FlowCoordinator` 或核心 Flow 类型。
+首版不建立 Profile、能力注册表、Provider 体系、通用插件总线或节点级能力映射。若未来需要节点使用不同能力，再单独扩展 Agent 节点契约。

@@ -101,13 +101,11 @@ flowchart LR
 
 负责接入具体 Agent 平台：创建或恢复会话、注入节点提示、接收结构化结果、读取节点交互和释放会话。
 
-适配器只能通过统一接口与协调器间接协作，不保存流程状态。Runtime 通过中性的执行上下文提供 Flow 和节点身份，但不向适配器暴露 Profile、工具或 Skill 语义。
+适配器只能通过统一接口与协调器间接协作，不保存流程状态。Runtime 通过 Flow 级 `AgentCapabilityDeclaration` 转发工具和 Skill 逻辑名称，未声明时传递空能力；不向适配器暴露 Profile、节点映射或宿主权限语义。
 
 ### Agent 能力组合模块
 
-Agent 的工具、Skill、模型和权限属于可选能力模块。能力模块在 `AgentIntegrationAdapter` 外部组合，由宿主将解析后的能力装配到具体 Agent 会话。它不创建 Flow 节点、不拥有路由状态、不创建子 Run，也不能改变结果和变量语义。
-
-能力模块可以缺省，也可以由多个能力提供者组合。`复用Agent` 保持当前会话的能力上下文；能力切换需要新的 Agent 会话。模块自己的能力版本和恢复校验不写入 Runtime 的核心 Flow 状态。
+Agent 能力由 Flow 顶层 `capabilities` 声明。Runtime 只保存声明并纳入 Flow fingerprint，宿主在创建会话时装配工具和 Skill。未声明能力时，业务工具和 Skill 为空；`submit_flow_outcome` 由宿主始终注入。`复用Agent` 保持当前会话能力；能力切换需要新的 Agent 会话。
 
 详细边界见[Agent 能力组合](architecture/agent-capability-composition.md)和[ADR-004](architecture/decisions/ADR-004-agent-capability-composition.md)。
 

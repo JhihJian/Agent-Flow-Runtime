@@ -21,7 +21,7 @@
 规则只有四条：
 
 1. `FLOW.md`是唯一入口，包目录名是 Flow 标识。例如`release-check/FLOW.md`的标识为`release-check`。
-2. `FLOW.md`使用 Flow 图、节点、`name`、`description`和可选的 `variables` 元信息，不增加目录格式专用字段。
+2. `FLOW.md`使用 Flow 图、节点、`name`、`description`和可选的 `variables`、`capabilities` 元信息，不增加目录格式专用字段。
 3. `references/`只放供 Agent 阅读的 Markdown。入口中用普通相对链接引用它，例如`[发布检查清单](references/release-checklist.md)`。
 4. `scripts/`只放命令节点调用的 Node.js ESM 脚本。命令参数从包根写相对路径，例如`"args": ["scripts/verify-version.mjs"]`。
 
@@ -49,7 +49,7 @@
 
 ## 1. 文件开头
 
-文件以元信息开头，包含流程名称、适用情况和可选的全局变量声明：
+文件以元信息开头，包含流程名称、适用情况和可选的全局变量、Agent 能力声明：
 
 ```markdown
 ---
@@ -63,10 +63,16 @@ variables:
   检查范围:
     description: 本次检查范围
     default: 全部
+capabilities:
+  tools:
+    - read
+    - grep
+  skills:
+    - code-review
 ---
 ```
 
-`name`和`description`均为非空内容。全局变量必须通过 `variables` 声明，每项必须有非空 `description`，可带 JSON 值 `default`。启动参数只能提供已声明变量，有默认值可省略，无默认值必须提供。节点可以覆盖全局变量，不能新增未声明变量。结果变量表不能与全局变量同名。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。Flow 标识始终取`FLOW.md`父目录名。
+`name`和`description`均为非空内容。全局变量必须通过 `variables` 声明，每项必须有非空 `description`，可带 JSON 值 `default`。启动参数只能提供已声明变量，有默认值可省略，无默认值必须提供。`capabilities` 可声明 `tools` 和 `skills` 两个字符串数组，缺省时两者均为空；每项必须是非空字符串且不能在同一数组重复。能力名称由宿主解释，Flow 不携带工具实现或 Skill 正文。`submit_flow_outcome` 是 Runtime 协议工具，始终由 Agent 宿主提供，不写入业务能力声明。节点可以覆盖全局变量，不能新增未声明变量。结果变量表不能与全局变量同名。`name`供人展示，`description`供 Flow 目录和 Agent 发现、选择与复用 Flow。Flow 标识始终取`FLOW.md`父目录名。
 
 ### 宿主启动输入
 
@@ -278,7 +284,7 @@ V1 支持单层并行。汇合后的 Agent 节点依据分支变量决定继续�
 
 解释器检查以下内容：
 
-- 元信息位于文件开头，包含非空的`name`和`description`，可选 `variables` 的每项有非空说明和可选默认值。
+- 元信息位于文件开头，包含非空的`name`和`description`，可选 `variables` 的每项有非空说明和可选默认值；可选 `capabilities` 只包含 `tools` 和 `skills` 两个字符串数组。
 - 图中恰有一个开始和一个结束；所有工作节点从开始可达，并存在一条到结束的路径。
 - 所有连线目标存在；每个工作节点有带结果文字的出边。
 - 每个工作节点有同名二级标题；二级标题与工作节点一一对应，不对应任何工作节点的二级标题是错误；节点引用名和节点名称全局唯一。

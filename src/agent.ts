@@ -1,6 +1,7 @@
+import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
 import type {
+	AgentCapabilityDeclaration,
 	AgentConnection,
-	AgentExecutionContext,
 	AgentIntegrationAdapter,
 	AgentOutcomeSubmission,
 	NodeOutcome,
@@ -11,11 +12,14 @@ import type {
 /**
  * Run-scoped Agent binding and node execution orchestration.
  *
- * This module deliberately knows nothing about Pi, tools, Skills, or Agent
- * profiles. Optional capability modules compose around the adapter boundary.
+ * This module deliberately knows nothing about Pi, tools, Skills, or host
+ * implementations. It only fixes the declared capabilities at session creation.
  */
 export class AgentRunModel {
-	private readonly bindings = new Map<string, AgentConnection>();
+	private readonly bindings = new Map<
+		string,
+		{ connection: AgentConnection; capabilities: AgentCapabilityDeclaration }
+	>();
 	private readonly adapter: AgentIntegrationAdapter;
 
 	constructor(adapter: AgentIntegrationAdapter) {
@@ -24,29 +28,28 @@ export class AgentRunModel {
 
 	async start(
 		runId: string,
+		capabilities: AgentCapabilityDeclaration,
 		existingAgentReference?: string,
 		cwd?: string,
-		context?: AgentExecutionContext,
 	): Promise<void> {
 		if (existingAgentReference) {
 			if (
 				[...this.bindings.values()].some(
-					(binding) => binding.platformReference === existingAgentReference,
+					(binding) =>
+						binding.connection.platformReference === existingAgentReference,
 				)
 			) {
 				throw new Error(
 					`Agent 已绑定到另一个 Flow 运行: ${existingAgentReference}`,
 				);
 			}
-			this.bindings.set(
+			const connection = await this.adapter.takeOverAgent({
 				runId,
-				await this.adapter.takeOverAgent({
-					runId,
-					agentReference: existingAgentReference,
-					cwd,
-					context,
-				}),
-			);
+				agentReference: existingAgentReference,
+				cwd,
+				capabilities,
+			});
+			this.bindings.set(runId, { connection, capabilities });
 		}
 	}
 
@@ -54,24 +57,27 @@ export class AgentRunModel {
 		runId: string;
 		action: "新建Agent" | "复用Agent";
 		nodeExecutionReference: string;
-		context?: AgentExecutionContext;
+		capabilities?: AgentCapabilityDeclaration;
 		prompt: string;
 		outcomes: OutcomeOption[];
 		cwd?: string;
 		onConnection?: (connection: AgentConnection) => Promise<void>;
 	}): Promise<{ outcome: NodeOutcome; session: NodeSession }> {
-		let connection = this.bindings.get(request.runId);
+		let binding = this.bindings.get(request.runId);
 		if (request.action === "新建Agent") {
-			if (connection) await this.adapter.releaseAgent(connection);
-			connection = await this.adapter.createAgent({
+			if (binding) await this.adapter.releaseAgent(binding.connection);
+			const capabilities = normalizeAgentCapabilities(request.capabilities);
+			const connection = await this.adapter.createAgent({
 				runId: request.runId,
 				cwd: request.cwd,
-				context: request.context,
+				capabilities,
 			});
-			this.bindings.set(request.runId, connection);
-		} else if (!connection) {
+			binding = { connection, capabilities };
+			this.bindings.set(request.runId, binding);
+		} else if (!binding) {
 			throw new Error("复用Agent前必须先新建或接管 Agent");
 		}
+		const connection = binding.connection;
 		await request.onConnection?.(connection);
 		let accepted: NodeOutcome | undefined;
 		let sessionReference: string | undefined;
@@ -79,7 +85,6 @@ export class AgentRunModel {
 		const session = await this.adapter.executeNode({
 			connection,
 			nodeExecutionReference: request.nodeExecutionReference,
-			context: request.context,
 			prompt: request.prompt,
 			outcomes: request.outcomes,
 			submitOutcome: async (submission: AgentOutcomeSubmission) => {
@@ -123,6 +128,6 @@ export class AgentRunModel {
 		const connection = this.bindings.get(runId);
 		if (!connection) return;
 		this.bindings.delete(runId);
-		await this.adapter.releaseAgent(connection);
+		await this.adapter.releaseAgent(connection.connection);
 	}
 }

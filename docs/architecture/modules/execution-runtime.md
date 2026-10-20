@@ -2,11 +2,11 @@
 
 ## 边界
 
-`FlowCoordinator` 是一次 Run 的应用内核，处理状态迁移、NodeRun、动作分派、结果验证、路由、并行、子 Flow、恢复和 Store facts。`AgentRunModel` 位于独立的 Agent 执行模块，负责 Run 级绑定和节点执行。两者通过 `AgentIntegrationAdapter`、`CommandExecutor`、`RunStore` 和 Publisher 接口接外部能力，不直接依赖 Pi SDK，也不理解 Agent Profile、工具或 Skill。入口：`src/runtime.ts#FlowCoordinator`、`src/agent.ts#AgentRunModel`、`src/types.ts#AgentIntegrationAdapter`、`src/types.ts#CommandExecutor`、`src/types.ts#RunStore`。
+`FlowCoordinator` 是一次 Run 的应用内核，处理状态迁移、NodeRun、动作分派、结果验证、路由、并行、子 Flow、恢复和 Store facts。`AgentRunModel` 位于独立的 Agent 执行模块，负责 Run 级绑定、创建时能力固定和节点执行。两者通过 `AgentIntegrationAdapter`、`CommandExecutor`、`RunStore` 和 Publisher 接口接外部能力，不直接依赖 Pi SDK，也不理解工具或 Skill 的具体实现。入口：`src/runtime.ts#FlowCoordinator`、`src/agent.ts#AgentRunModel`、`src/types.ts#AgentIntegrationAdapter`、`src/types.ts#CommandExecutor`、`src/types.ts#RunStore`。
 
 ## 组成与状态
 
-`src/runtime.ts#InMemoryRunStore` 持有内存 facts；`src/runtime.ts#JsonFileRunStore` 在每个实例内串行 mutation，并以临时文件加 rename 写完整快照，不提供跨实例或跨进程协调；`src/runtime.ts#ProcessCommandExecutor` 通过 spawn 执行外部命令；`src/agent.ts#AgentRunModel` 维持 Run 级 Agent binding。能力模块的配置和能力状态不属于核心 Store。
+`src/runtime.ts#InMemoryRunStore` 持有内存 facts；`src/runtime.ts#JsonFileRunStore` 在每个实例内串行 mutation，并以临时文件加 rename 写完整快照，不提供跨实例或跨进程协调；`src/runtime.ts#ProcessCommandExecutor` 通过 spawn 执行外部命令；`src/agent.ts#AgentRunModel` 维持 Run 级 Agent binding。宿主会话能力和具体实现不属于核心 Store。
 
 每次节点访问建立独立 NodeRun ID；NodeRun 和 ParallelRound 在同一生命周期内可更新。全局 patch 写 Run，当前结果变量形成下一跳 input。非零 exit code 保留为 CommandResult failure，但命令节点业务结果是“已执行”。并行以 ParallelRound 隔离分支；子 Flow 是带 parent IDs 的独立 Run。
 

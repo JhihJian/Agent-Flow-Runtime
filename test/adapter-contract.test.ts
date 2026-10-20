@@ -2,26 +2,23 @@ import { describe, expect, it } from "vitest";
 import { AgentRunModel } from "../src/runtime.ts";
 import type {
 	AgentConnection,
-	AgentExecutionContext,
 	AgentIntegrationAdapter,
 	NodeSession,
 	UnifiedMessage,
 } from "../src/types.ts";
 
 describe("AgentRunModel adapter contract", () => {
-	it("forwards neutral Flow and node context without interpreting it", async () => {
-		let createdContext: AgentExecutionContext | undefined;
-		let executedContext: AgentExecutionContext | undefined;
+	it("forwards the Flow capability declaration only when creating an Agent", async () => {
+		let createdCapabilities: unknown;
 		const adapter: AgentIntegrationAdapter = {
 			async createAgent(request) {
-				createdContext = request.context;
+				createdCapabilities = request.capabilities;
 				return { id: "agent", platformReference: "agent" };
 			},
 			async takeOverAgent() {
 				throw new Error("not used");
 			},
 			async executeNode(request) {
-				executedContext = request.context;
 				await request.submitOutcome({
 					nodeExecutionReference: request.nodeExecutionReference,
 					result: "合法",
@@ -34,19 +31,60 @@ describe("AgentRunModel adapter contract", () => {
 			async releaseAgent() {},
 		};
 		const model = new AgentRunModel(adapter);
-		const context = { flowId: "flow", nodeRef: "review" };
+		const capabilities = { tools: ["read"], skills: ["code-review"] };
 
 		await model.executeNode({
 			runId: "run",
 			action: "新建Agent",
 			nodeExecutionReference: "node",
-			context,
+			capabilities,
 			prompt: "work",
 			outcomes: [{ name: "合法", description: "ok" }],
 		});
 
-		expect(createdContext).toEqual(context);
-		expect(executedContext).toEqual(context);
+		expect(createdCapabilities).toEqual(capabilities);
+	});
+
+	it("does not change capabilities when reusing an Agent", async () => {
+		const created: unknown[] = [];
+		const adapter: AgentIntegrationAdapter = {
+			async createAgent(request) {
+				created.push(request.capabilities);
+				return { id: "agent", platformReference: "agent" };
+			},
+			async takeOverAgent() {
+				throw new Error("not used");
+			},
+			async executeNode(request) {
+				await request.submitOutcome({
+					nodeExecutionReference: request.nodeExecutionReference,
+					result: "合法",
+				});
+				return { id: "node" };
+			},
+			async getNodeSession() {
+				return [];
+			},
+			async releaseAgent() {},
+		};
+		const model = new AgentRunModel(adapter);
+		await model.executeNode({
+			runId: "run",
+			action: "新建Agent",
+			nodeExecutionReference: "first",
+			capabilities: { tools: ["read"], skills: [] },
+			prompt: "work",
+			outcomes: [{ name: "合法", description: "ok" }],
+		});
+		await model.executeNode({
+			runId: "run",
+			action: "复用Agent",
+			nodeExecutionReference: "second",
+			capabilities: { tools: ["bash"], skills: ["other"] },
+			prompt: "work",
+			outcomes: [{ name: "合法", description: "ok" }],
+		});
+		expect(created).toEqual([{ tools: ["read"], skills: [] }]);
 	});
 
 	it("rejects a result that is not declared by the current node", async () => {

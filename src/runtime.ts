@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { AgentRunModel } from "./agent.ts";
+import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
 import {
 	resolveCommandResources,
 	resolvePromptResources,
@@ -568,9 +569,9 @@ export class FlowCoordinator {
 			const resumeNodeRef = run.currentNodeRef ?? this.flow.startNodeRef;
 			await this.agentModel.start(
 				run.id,
+				normalizeAgentCapabilities(this.flow.capabilities),
 				resumedOptions.existingAgentReference,
 				resumedOptions.cwd,
-				{ flowId: this.flow.id, nodeRef: resumeNodeRef },
 			);
 			return this.continueRun(
 				run,
@@ -607,9 +608,9 @@ export class FlowCoordinator {
 			}
 			await this.agentModel.start(
 				run.id,
+				normalizeAgentCapabilities(this.flow.capabilities),
 				resumedOptions.existingAgentReference,
 				resumedOptions.cwd,
-				{ flowId: this.flow.id, nodeRef },
 			);
 			return this.continueRun(
 				run,
@@ -625,9 +626,9 @@ export class FlowCoordinator {
 
 		await this.agentModel.start(
 			run.id,
+			normalizeAgentCapabilities(this.flow.capabilities),
 			resumedOptions.existingAgentReference,
 			resumedOptions.cwd,
-			{ flowId: this.flow.id, nodeRef },
 		);
 		if (current?.status === "completed" && current.outcome) {
 			await this.recordRecovery(
@@ -663,9 +664,9 @@ export class FlowCoordinator {
 		if (!agentStarted) {
 			await this.agentModel.start(
 				run.id,
+				normalizeAgentCapabilities(this.flow.capabilities),
 				options.existingAgentReference,
 				options.cwd,
-				{ flowId: this.flow.id, nodeRef: initialNodeRef },
 			);
 		}
 		let nodeRef = initialNodeRef;
@@ -1091,7 +1092,7 @@ export class FlowCoordinator {
 					runId: run.id,
 					action: record.retryOf ? "复用Agent" : node.action.kind,
 					nodeExecutionReference: record.id,
-					context: { flowId: this.flow.id, nodeRef: node.ref },
+					capabilities: normalizeAgentCapabilities(this.flow.capabilities),
 					prompt: renderAgentPrompt(
 						node.action.prompt,
 						nodeInput,
@@ -1280,9 +1281,9 @@ export class FlowCoordinator {
 			await this.interruptNode(run, current);
 			await this.agentModel.start(
 				run.id,
+				normalizeAgentCapabilities(this.flow.capabilities),
 				options.existingAgentReference,
 				options.cwd,
-				{ flowId: this.flow.id, nodeRef: current.nodeRef },
 			);
 			return this.continueRun(
 				run,
@@ -1301,9 +1302,9 @@ export class FlowCoordinator {
 				await this.completeNode(run, current, outcome);
 			await this.agentModel.start(
 				run.id,
+				normalizeAgentCapabilities(this.flow.capabilities),
 				options.existingAgentReference,
 				options.cwd,
-				{ flowId: this.flow.id, nodeRef: current.nodeRef },
 			);
 			await this.recordRecovery(
 				run,
@@ -2007,6 +2008,7 @@ function fingerprintFlow(
 		})),
 		parallels: [...flow.parallels.values()],
 		variables: flow.variables,
+		capabilities: normalizeAgentCapabilities(flow.capabilities),
 	};
 	return `sha256:${createHash("sha256").update(JSON.stringify({ definition, children })).digest("hex")}`;
 }

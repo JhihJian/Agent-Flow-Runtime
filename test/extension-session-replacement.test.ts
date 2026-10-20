@@ -1,39 +1,32 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getCliFlowState } from "../src/cli-state.ts";
 import flowExtension from "../src/extension.ts";
 
-type AsyncHandler = (...args: unknown[]) => Promise<unknown>;
-
-test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () => {
-	const cwd = await mkdtemp(join(tmpdir(), "flow-extension-"));
-	const commands = new Map<string, AsyncHandler>();
-	const events = new Map<string, AsyncHandler[]>();
-	const tools: Array<{ name: string; execute: AsyncHandler }> = [];
-	const flags: string[] = [];
-	const notifications: string[] = [];
+test("CLI 无法隔离能力时拒绝启动 Flow Agent", async () => {
 	const state = getCliFlowState() as unknown as Record<string, unknown>;
 	for (const key of Object.keys(state)) delete state[key];
-	state.sessionReference = "pi-current-session";
-
-	const emit = async (name: string, ...args: unknown[]) => {
-		for (const handler of events.get(name) ?? []) await handler(...args);
-	};
+	const commands = new Map<
+		string,
+		(args: string, ctx: unknown) => Promise<unknown>
+	>();
+	const events = new Map<
+		string,
+		((...args: unknown[]) => Promise<unknown>)[]
+	>();
+	const notifications: string[] = [];
 	const pi = {
-		registerFlag(name: string) {
-			flags.push(name);
-		},
-		registerTool(tool: { name: string; execute: AsyncHandler }) {
-			tools.push(tool);
-		},
-		registerCommand(name: string, definition: { handler: AsyncHandler }) {
+		registerFlag() {},
+		registerTool() {},
+		registerCommand(
+			name: string,
+			definition: { handler: (args: string, ctx: unknown) => Promise<unknown> },
+		) {
 			commands.set(name, definition.handler);
 		},
-		on(name: string, handler: AsyncHandler) {
+		on(name: string, handler: (...args: unknown[]) => Promise<unknown>) {
 			const handlers = events.get(name) ?? [];
 			handlers.push(handler);
 			events.set(name, handlers);
@@ -41,165 +34,39 @@ test("新建会话后的 Flow 收尾不会访问旧扩展上下文", async () =>
 		getFlag() {
 			return undefined;
 		},
-		async setModel() {
-			return true;
-		},
 		sendMessage() {},
-		sendUserMessage(command: string) {
-			if (command !== "/flow-new-session") return;
-			void commands.get("flow-new-session")?.("", oldContext.value);
-		},
+		sendUserMessage() {},
 	};
 	flowExtension(pi as unknown as ExtensionAPI);
-	assert.deepEqual(flags, ["variables", "flow", "var"]);
-	const compactHandlers = events.get("session_before_compact") ?? [];
-	assert.equal(compactHandlers.length, 1, "Flow Runtime 应注册 compact 门禁");
-	assert.equal(
-		await compactHandlers[0]({ reason: "threshold" }, undefined),
-		undefined,
-		"没有待提交结果时应保留 Pi 原生 compact",
-	);
-
-	let oldContext: ReturnType<typeof context>;
-	const outcomeTool = () => {
-		const tool = tools.find(
-			(candidate) => candidate.name === "submit_flow_outcome",
-		);
-		assert.ok(tool, "扩展应注册 Flow 结果工具");
-		return tool;
+	const context = {
+		cwd: resolve(import.meta.dirname, "fixtures", "ordinary"),
+		mode: "tui",
+		hasUI: false,
+		sessionManager: {
+			getSessionFile: () => "session.jsonl",
+			getSessionId: () => "session",
+			getLeafId: () => undefined,
+			getEntries: () => [],
+		},
+		ui: {
+			notify(message: string) {
+				notifications.push(message);
+			},
+		},
+		async waitForIdle() {},
+		isIdle() {
+			return true;
+		},
 	};
-	const nodePrompts: string[] = [];
-	const lineageEntries: Array<{ customType: string; data: unknown }> = [];
-	let newSessionOptions: NewSessionOptions | undefined;
-	const newContext = context("new.jsonl", async (prompt) => {
-		nodePrompts.push(prompt);
-		const outcome = prompt.includes("分析任务") ? "已分析" : "已完成";
-		await outcomeTool().execute("tool-call", {
-			outcome,
-			variables: outcome === "已分析" ? { 分析结论: outcome } : undefined,
-		});
-		assert.deepEqual(
-			await compactHandlers[0]({ reason: "threshold" }, newContext.value),
-			{ cancel: true },
-			"已有 Flow 结果候选时不得触发 compact",
-		);
-		await emit("turn_end");
-		if (outcome === "已分析") {
-			assert.equal(nodePrompts.length, 1, "下游节点不能在 turn_end 内启动");
-		}
-		await emit("agent_settled");
-	});
-	oldContext = context("old.jsonl", undefined, async (options) => {
-		newSessionOptions = options;
-		await options.setup?.({
-			appendCustomEntry(customType, data) {
-				lineageEntries.push({ customType, data });
-				return "lineage-entry";
-			},
-		});
-		oldContext.invalidate();
-		await emit("session_shutdown");
-		await emit("session_start", { reason: "new" }, newContext.value);
-		await options.withSession?.(newContext.value);
-		return { cancelled: false };
-	});
-
-	await emit("session_start", { reason: "new" }, oldContext.value);
+	await events.get("session_start")?.[0]({ reason: "new" }, context);
 	const flowCommand = commands.get("flow");
-	assert.ok(flowCommand, "扩展应注册 /flow 命令");
-	await flowCommand(
-		`run ${resolve(import.meta.dirname, "fixtures", "ordinary", "FLOW.md")} 完成测试`,
-		oldContext.value,
+	assert.ok(flowCommand);
+	await assert.rejects(
+		flowCommand(
+			`run ${resolve(import.meta.dirname, "fixtures", "ordinary", "FLOW.md")} 完成测试`,
+			context,
+		),
+		/无法隔离 Flow Agent/,
 	);
-
-	assert.deepEqual(
-		notifications,
-		["Flow 已完成: 普通流转"],
-		"完成通知应发送到替换后的会话",
-	);
-
-	assert.equal(
-		newSessionOptions?.parentSession,
-		undefined,
-		"新会话不得分支父会话历史",
-	);
-	assert.deepEqual(
-		lineageEntries,
-		[
-			{
-				customType: "agent-flow-runtime/session-lineage",
-				data: {
-					parentSession: "old.jsonl",
-					parentSessionId: "old.jsonl",
-					parentLeafEntryId: undefined,
-				},
-			},
-		],
-		"新会话应持久化不参与模型上下文的 Flow 谱系",
-	);
-
-	function context(
-		sessionFile: string,
-		onPrompt?: (prompt: string) => Promise<void>,
-		onNewSession?: (options: NewSessionOptions) => Promise<unknown>,
-	) {
-		let valid = true;
-		const assertCurrent = () => {
-			if (!valid) throw new Error("stale extension context accessed");
-		};
-		return {
-			value: {
-				cwd,
-				mode: "tui",
-				hasUI: false,
-				sessionManager: {
-					getSessionFile: () => sessionFile,
-					getSessionId: () => sessionFile,
-					getLeafId: () => undefined,
-					getEntries: () => [],
-				},
-				ui: {
-					notify(message: string) {
-						assertCurrent();
-						notifications.push(message);
-					},
-					setStatus() {
-						assertCurrent();
-					},
-					setWidget() {
-						assertCurrent();
-					},
-				},
-				async waitForIdle() {
-					assertCurrent();
-				},
-				isIdle() {
-					assertCurrent();
-					return true;
-				},
-				async newSession(options: NewSessionOptions) {
-					assertCurrent();
-					return onNewSession?.(options);
-				},
-				async sendUserMessage(prompt: string) {
-					assertCurrent();
-					await onPrompt?.(prompt);
-				},
-				async sendMessage() {
-					assertCurrent();
-				},
-			},
-			invalidate: () => {
-				valid = false;
-			},
-		};
-	}
+	assert.match(notifications.at(-1) ?? "", /Flow 失败/);
 });
-
-interface NewSessionOptions {
-	parentSession?: string;
-	setup?: (sessionManager: {
-		appendCustomEntry: (customType: string, data?: unknown) => string;
-	}) => Promise<void>;
-	withSession?: AsyncHandler;
-}

@@ -2,7 +2,7 @@
 
 ## 一眼看懂
 
-这是一个 TypeScript/ESM Node.js 包，将目录化的 `FLOW.md` 解析为 `FlowDefinition`，由 `FlowCoordinator` 驱动 Agent、命令节点、结果路由、并行检查、子 Flow 和恢复。项目不是 Web 服务；宿主是 Pi CLI/SDK，并提供可嵌入 Node.js 程序的运行时 API。Agent 工具、Skill、模型和权限属于可选的外部能力模块，不属于 Flow Runtime 核心。
+这是一个 TypeScript/ESM Node.js 包，将目录化的 `FLOW.md` 解析为 `FlowDefinition`，由 `FlowCoordinator` 驱动 Agent、命令节点、结果路由、并行检查、子 Flow 和恢复。项目不是 Web 服务；宿主是 Pi CLI/SDK，并提供可嵌入 Node.js 程序的运行时 API。Agent 的业务工具和 Skill 由 Flow 顶层 `capabilities` 声明，未声明时为空，具体装配由宿主适配层完成。
 
 宿主入口是 [`src/extension.ts`](../src/extension.ts) 的 `flowExtension`，库入口是 [`src/index.ts`](../src/index.ts) 的公共导出。Flow 的实际入口是 `<包目录>/FLOW.md`，由 [`src/flow-loader.ts`](../src/flow-loader.ts) 的 `loadFlow` 加载。主线经过解析、运行记录、节点执行、结果路由、JSON 快照和观测事件；外部边界包括 Pi SDK/会话文件、Node 文件系统、命令子进程、YAML/TypeBox 依赖和 npm 发布工作流。
 
@@ -73,7 +73,7 @@
 | Flow 格式和图校验 | `src/parser.ts#parseFlow/parseAction/validateAndWireGraph` | `docs/flow-spec.md`、`test/parser.test.ts` |
 | 包资源和子 Flow | `src/flow-loader.ts#loadFlowPackage/loadReferenceClosure` | `src/runtime.ts#startChildRun/childOutcome`、`test/flow-reference.test.ts` |
 | 普通执行和路由 | `src/runtime.ts#continueRun/executeNode/executePreparedNode/completeNode/selectRoute` | `src/types.ts`、`test/runtime.test.ts` |
-| Agent 和结果提交 | `src/agent.ts#AgentRunModel`、`src/types.ts#AgentExecutionContext`、`src/pi.ts#PiAgentIntegrationAdapter` | `src/extension.ts#bridge/agent_settled`、适配器测试 |
+| Agent 和结果提交 | `src/agent.ts#AgentRunModel`、`src/types.ts#AgentCapabilityDeclaration`、`src/pi.ts#PiAgentIntegrationAdapter` | `src/extension.ts#bridge/agent_settled`、适配器测试 |
 | 命令、stdin、变量信封 | `src/runtime.ts#ProcessCommandExecutor/parseCommandVariables` | `src/parser.ts#parseCommandAction/renderCommandRequest`、并行 fixtures |
 | 变量和模板 | `src/variables.ts`、`src/parser.ts#validateTemplates/renderTemplate` | `src/runtime.ts#initializeVariables/extractNextInput`、`docs/flow-spec.md` |
 | 并行和汇合 | `src/parser.ts#validateParallel`、`src/runtime.ts#enterParallel/executeParallel` | `branch.*` 模板、命令 `output:variables` |

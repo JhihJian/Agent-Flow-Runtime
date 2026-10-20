@@ -444,3 +444,38 @@ describe("显式子 Flow 输入", () => {
 		);
 	});
 });
+
+describe("Flow Agent 能力声明", () => {
+	it("未声明时归一为空能力", () => {
+		expect(parseFlow(serial({ metadata: "" }), "empty").capabilities).toEqual({
+			tools: [],
+			skills: [],
+		});
+	});
+
+	it("解析并保留显式工具和 Skill", () => {
+		expect(
+			parseFlow(
+				serial({
+					metadata:
+						"capabilities:\n  tools: [read, grep]\n  skills: [code-review]",
+				}),
+				"declared",
+			).capabilities,
+		).toEqual({
+			tools: ["read", "grep"],
+			skills: ["code-review"],
+		});
+	});
+
+	it.each([
+		"capabilities: []",
+		"capabilities:\n  tools: read",
+		"capabilities:\n  tools: [read, read]",
+		"capabilities:\n  extra: [read]",
+	])("拒绝非法能力声明 %s", (metadata) => {
+		expect(() =>
+			parseFlow(serial({ metadata }), "invalid-capabilities"),
+		).toThrow(FlowSyntaxError);
+	});
+});

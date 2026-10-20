@@ -6,7 +6,7 @@
 
 ## 能力与实体
 
-`src/types.ts#FlowValue`、`src/types.ts#FlowDefinition`、`src/types.ts#FlowPackage`、`src/types.ts#AgentExecutionContext`、`src/types.ts#AgentIntegrationAdapter`、`src/types.ts#CommandExecutor`、`src/types.ts#RunStore` 定义 Flow、动作、宿主适配器、执行器、Store、Run facts、history、evidence 和 observation contracts。`AgentExecutionContext` 只提供 Flow 和节点身份，不包含 Profile、工具或 Skill 语义。
+`src/types.ts#FlowValue`、`src/types.ts#FlowDefinition`、`src/types.ts#AgentCapabilityDeclaration`、`src/types.ts#FlowPackage`、`src/types.ts#AgentIntegrationAdapter`、`src/types.ts#CommandExecutor`、`src/types.ts#RunStore` 定义 Flow、动作、Flow 能力声明、宿主适配器、执行器、Store、Run facts、history、evidence 和 observation contracts。能力声明只传递工具和 Skill 逻辑名称；未声明时为空。
 
 `src/variables.ts#validateVariableName`、`src/variables.ts#validateFlowValue`、`src/variables.ts#validateVariables`、`src/variables.ts#validateVariableDeclarations` 校验变量名、JSON value、变量对象及声明；拒绝原型敏感名称、非有限数字、循环引用及未知声明字段。
 

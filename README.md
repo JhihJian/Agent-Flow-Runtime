@@ -102,7 +102,7 @@ const run = await coordinator.run({ variables: { 任务: "修复登录超时问�
 console.log(run.status); // "completed"
 ```
 
-Flow data uses explicitly declared variables. Declare global variables in metadata and initialize them with `run({ variables: {...} })`. Agent prompts read `{var.任务}`; result tables declare next-hop outputs read through `{input.xxx}`. Parallel joins read `{branch.<ref>.<name>}`. Submit `outcome` in the Agent tool or `result` in SDK callbacks, together with optional flat `variables`. Command nodes opt in with `output: "variables"` and emit `{"variables": {...}}`; `commandResult` remains execution evidence.
+Flow data uses explicitly declared variables and capabilities. Declare global variables in metadata and initialize them with `run({ variables: {...} })`. Agent capability declarations use `capabilities.tools` and `capabilities.skills`; when omitted, the Agent has no business tools or Skills. Agent prompts read `{var.任务}`; result tables declare next-hop outputs read through `{input.xxx}`. Parallel joins read `{branch.<ref>.<name>}`. Submit `outcome` in the Agent tool or `result` in SDK callbacks, together with optional flat `variables`. Command nodes opt in with `output: "variables"` and emit `{"variables": {...}}`; `commandResult` remains execution evidence.
 
 The same Runtime facade provides read and observe access for SDK hosts:
 
@@ -127,7 +127,7 @@ subscription.unsubscribe();
 
 Pi Agent hosts also expose the read-only `inspect_flow_run` tool. CLI history output, JSON/RPC `flow_event` messages, and SDK results are thin views over this same Runtime facade. Events are best-effort and are not replayed after a disconnect; reconnecting clients should read `inspectRun` first.
 
-`PiAgentIntegrationAdapter` creates a real Pi SDK session for each `新建Agent` action and injects the `submit_flow_outcome` tool automatically. Model auth follows Pi conventions (`~/.pi/agent/auth.json`, environment variables, or the settings default model). Sessions persist under `~/.pi/agent/sessions/` by default; pass `sessionDir` to choose another location. Run records go wherever the `RunStore` points.
+`PiAgentIntegrationAdapter` creates a real Pi SDK session for each `新建Agent` action and injects the `submit_flow_outcome` tool automatically. The session uses the Flow's explicit tool allowlist and selected Skills; omitted capabilities result in empty business capabilities. Model auth follows Pi conventions (`~/.pi/agent/auth.json`, environment variables, or the settings default model). Sessions persist under `~/.pi/agent/sessions/` by default; pass `sessionDir` to choose another location. Run records go wherever the `RunStore` points. The current Pi CLI path is rejected when it cannot isolate Flow capabilities.
 
 For the offline minimal example (no model required), resume and takeover, session storage details, and the API overview, see [SDK 快速开始](docs/sdk-quick-start.md).
 
@@ -138,7 +138,7 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `src/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
 - `src/flow-loader.ts` loads package directories, resolves their resources, and builds the transitive reference closure for `执行Flow` nodes (sibling resolution, cycle detection); `src/directory.ts` recursively discovers package entries for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
-- `src/runtime.ts` contains the coordinator, command executor, in-memory store, and JSON-file store; `src/agent.ts` contains the host-neutral Agent binding model. The coordinator alone changes Flow state and records node visits; `执行Flow` nodes run a child Flow as an independent child Run through a sub-coordinator sharing the same store and adapters. Optional Agent capability modules compose outside the `AgentIntegrationAdapter` boundary and do not become Flow state.
+- `src/runtime.ts` contains the coordinator, command executor, in-memory store, and JSON-file store; `src/agent.ts` contains the host-neutral Agent binding model. The coordinator alone changes Flow state and records node visits; `执行Flow` nodes run a child Flow as an independent child Run through a sub-coordinator sharing the same store and adapters. Flow capabilities are parsed by `src/agent-capabilities.ts`, fixed at Agent creation, and remain outside Flow control semantics.
 - `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. It is exposed through the optional `@jhihjian/agent-flow-runtime/pi` entry point; the core runtime is exposed through `dist/index.js`. See [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI outcomes are only confirmed at Pi's `agent_settled` boundary; when a result candidate is pending, the extension cancels the current node's compaction and waits only for retries and queued work to settle.
 - [发布级冒烟门禁设计](docs/release-smoke-design.md) defines the offline release gate for the complete path, parallel conflicts, and recovery, plus the boundary with real Pi/provider integration.

@@ -66,6 +66,11 @@ description: SDK 快速开始的最小示例。
 variables:
   任务:
     description: 演示任务
+capabilities:
+  tools:
+    - read
+  skills:
+    - code-review
 ---
 
 \`\`\`mermaid
@@ -143,6 +148,8 @@ console.log(run.status); // completed
 ```
 
 假适配器总是提交当前节点的第一个结果，并仅提交该结果变量表中声明的字段，适合线性 Flow 的演示和测试。SDK 回调使用 `result`，Agent 的 `submit_flow_outcome` 工具使用 `outcome`，两者均可提供扁平的 `variables` 对象。
+
+解析结果中的 `flow.capabilities` 是整个 Flow 的 Agent 能力声明。省略时业务工具和 Skill 都为空，宿主仍需注入 `submit_flow_outcome` 协议工具。适配器在创建会话时固定能力，`复用Agent` 不会重新装配或扩大能力。
 
 ## 4. 用 Pi 会话执行 Agent 节点
 

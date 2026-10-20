@@ -2,9 +2,9 @@
 
 ## 边界与能力
 
-`src/pi.ts#PiAgentIntegrationAdapter` 适配 SDK session 创建、接管、释放、prompt、结构化结果工具和节点消息读取；CLI bridge 使用当前 Pi session。`src/extension.ts#flowExtension` 注册 flags、`/flow`、结果和 inspection tools、会话命令及 lifecycle handlers，再装配 Loader、Store、Coordinator、Inspector 与 Publisher。Pi 宿主是可替换的 Agent 执行适配层，不拥有 Flow 路由，也不负责定义可选能力模块。
+`src/pi.ts#PiAgentIntegrationAdapter` 适配 SDK session 创建、接管、释放、prompt、结构化结果工具和节点消息读取；CLI bridge 仍保留结果提交实现，但当前无法满足能力隔离契约，创建或接管 Flow Agent 时会明确失败。`src/extension.ts#flowExtension` 注册 flags、`/flow`、结果和 inspection tools、会话命令及 lifecycle handlers，再装配 Loader、Store、Coordinator、Inspector 与 Publisher。Pi 宿主是可替换的 Agent 执行适配层，不拥有 Flow 路由。
 
-Runtime 只依赖 `src/types.ts#AgentIntegrationAdapter` 和中性的 `src/types.ts#AgentExecutionContext`，不由 Pi adapter 解析 Flow 或选择路线。SDK/CLI 结果名和变量还由 Runtime 再次校验。可选 Agent 能力模块应在 Pi adapter 外部组合，不应把 Profile、工具和 Skill 配置写入 Runtime。CLI 结果在 `finalizeCliTurn` 后确认；有待确认结果时 Extension 阻止相应 compact。
+Runtime 只依赖 `src/types.ts#AgentIntegrationAdapter` 和 `AgentCapabilityDeclaration`。SDK 适配器使用 Flow 的工具 allowlist、只保留声明 Skill 的 ResourceLoader，并关闭扩展、上下文文件、提示模板和主题的默认发现。`submit_flow_outcome` 始终作为 Runtime 协议工具启用，不属于业务能力声明。SDK/CLI 结果名和变量还由 Runtime 再次校验。
 
 ## 状态、依赖与副作用
 
@@ -14,4 +14,4 @@ CLI 扩展状态通过 `src/cli-state.ts#getCliFlowState` 放在 `globalThis`，
 
 ## 不实现范围与测试定位
 
-不保证真实 provider/model 行为、鉴权质量、生产部署，也不将自然语言当成路由事实。会话路由和替换后的上下文断言见 `test/correctness.test.ts:225-231`、`test/extension-session-replacement.test.ts:81-90`、`test/extension-session-replacement.test.ts:115-127`；本轮未执行。
+当前 CLI 结果和会话替换测试仍覆盖宿主原生机制；Flow Agent 的 CLI 启动测试应断言能力隔离失败。

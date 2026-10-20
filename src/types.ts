@@ -15,6 +15,12 @@ export type FlowVariableDeclarations = Record<string, FlowVariableDeclaration>;
 
 export type FlowVariables = Record<string, FlowValue>;
 
+/** Logical business capabilities requested by every Agent in a Flow. */
+export interface AgentCapabilityDeclaration {
+	tools: string[];
+	skills: string[];
+}
+
 export type AgentActionKind = "新建Agent" | "复用Agent";
 
 export interface AgentAction {
@@ -77,6 +83,8 @@ export interface FlowDefinition {
 	parallels: Map<string, ParallelStart>;
 	/** Flow 全局变量声明及默认值。 */
 	variables?: FlowVariableDeclarations;
+	/** Agent 业务能力；未声明时由 Runtime 视为空集合。 */
+	capabilities?: AgentCapabilityDeclaration;
 }
 
 /** Files adjacent to a directory-based Flow entry. */
@@ -132,28 +140,21 @@ export interface AgentOutcomeSubmission extends NodeOutcome {
 	interactionReference?: string;
 }
 
-/** Context shared with Agent adapters without exposing host-specific policy. */
-export interface AgentExecutionContext {
-	flowId: string;
-	nodeRef: string;
-}
-
 export interface AgentIntegrationAdapter {
 	createAgent(request: {
 		runId: string;
 		cwd?: string;
-		context?: AgentExecutionContext;
+		capabilities: AgentCapabilityDeclaration;
 	}): Promise<AgentConnection>;
 	takeOverAgent(request: {
 		runId: string;
 		agentReference: string;
 		cwd?: string;
-		context?: AgentExecutionContext;
+		capabilities: AgentCapabilityDeclaration;
 	}): Promise<AgentConnection>;
 	executeNode(request: {
 		connection: AgentConnection;
 		nodeExecutionReference: string;
-		context?: AgentExecutionContext;
 		prompt: string;
 		outcomes: OutcomeOption[];
 		submitOutcome: (submission: AgentOutcomeSubmission) => Promise<void>;

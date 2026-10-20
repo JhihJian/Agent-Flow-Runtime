@@ -1,14 +1,18 @@
 import {
 	type AgentSession,
 	createAgentSession,
+	DefaultResourceLoader,
 	defineTool,
+	getAgentDir,
 	type SessionEntry,
 	SessionManager,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
 import type { FlowRuntime } from "./observability.ts";
 import type {
+	AgentCapabilityDeclaration,
 	AgentConnection,
 	AgentIntegrationAdapter,
 	AgentOutcomeSubmission,
@@ -31,6 +35,7 @@ interface SdkHandle {
 	connection: AgentConnection;
 	session: AgentSession;
 	manager: SessionManager;
+	capabilities: AgentCapabilityDeclaration;
 	pending?: PendingSdkNode;
 }
 
@@ -171,34 +176,50 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	async createAgent(request: {
 		runId: string;
 		cwd?: string;
+		capabilities: AgentCapabilityDeclaration;
 	}): Promise<AgentConnection> {
-		if (this.options.cliBridge) {
-			await this.options.cliBridge.createNewSession();
-			return this.createCliConnection(request.runId);
-		}
-		return this.createSdkConnection(request.runId, request.cwd);
+		if (this.options.cliBridge)
+			throw new Error(
+				"Pi CLI 当前无法隔离 Flow Agent 的工具和 Skill 能力，已拒绝启动",
+			);
+		return this.createSdkConnection(
+			request.runId,
+			request.cwd,
+			request.capabilities,
+		);
 	}
 
 	async takeOverAgent(request: {
 		runId: string;
 		agentReference: string;
 		cwd?: string;
+		capabilities: AgentCapabilityDeclaration;
 	}): Promise<AgentConnection> {
-		if (this.options.cliBridge) return this.createCliConnection(request.runId);
+		if (this.options.cliBridge)
+			throw new Error(
+				"Pi CLI 当前无法隔离 Flow Agent 的工具和 Skill 能力，已拒绝接管",
+			);
 		const active = this.sessionHandles.get(request.agentReference);
-		if (active) return active.connection;
+		const capabilities = normalizeAgentCapabilities(request.capabilities);
+		if (active) {
+			if (!sameCapabilities(active.capabilities, capabilities))
+				throw new Error(
+					`Pi Agent 会话能力与当前 Flow 不匹配: ${request.agentReference}`,
+				);
+			return active.connection;
+		}
 		const manager = SessionManager.open(request.agentReference);
-		const { session } = await createAgentSession({
+		const { session } = await this.createSdkSession({
 			cwd: request.cwd ?? manager.getCwd(),
 			sessionManager: manager,
-			customTools: [this.flowOutcomeTool()],
+			capabilities,
 		});
 		const connection = {
 			id: `${request.runId}:agent`,
 			platformReference: request.agentReference,
 			sessionReference: session.sessionFile,
 		};
-		const handle = { connection, session, manager };
+		const handle = { connection, session, manager, capabilities };
 		this.handles.set(connection.id, handle);
 		if (connection.sessionReference)
 			this.sessionHandles.set(connection.sessionReference, handle);
@@ -342,37 +363,83 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 	private async createSdkConnection(
 		runId: string,
 		cwd?: string,
+		capabilities: AgentCapabilityDeclaration = normalizeAgentCapabilities(),
 	): Promise<AgentConnection> {
 		const manager = SessionManager.create(
 			cwd ?? this.options.cwd ?? process.cwd(),
 			this.options.sessionDir,
 		);
-		const { session } = await createAgentSession({
+		const normalizedCapabilities = normalizeAgentCapabilities(capabilities);
+		const { session } = await this.createSdkSession({
 			cwd: cwd ?? this.options.cwd,
 			sessionManager: manager,
-			customTools: [this.flowOutcomeTool()],
+			capabilities: normalizedCapabilities,
 		});
 		const connection = {
 			id: `${runId}:agent`,
 			platformReference: session.sessionId,
 			sessionReference: session.sessionFile,
 		};
-		const handle = { connection, session, manager };
+		const handle = {
+			connection,
+			session,
+			manager,
+			capabilities: normalizedCapabilities,
+		};
 		this.handles.set(connection.id, handle);
 		if (connection.sessionReference)
 			this.sessionHandles.set(connection.sessionReference, handle);
 		return connection;
 	}
 
-	private createCliConnection(runId: string): AgentConnection {
-		const bridge = this.options.cliBridge;
-		if (!bridge) throw new Error("Pi CLI bridge 不可用");
-		const reference = bridge.getSessionReference();
-		return {
-			id: `${runId}:cli-agent:${reference}`,
-			platformReference: reference,
-			sessionReference: reference,
-		};
+	private async createSdkSession(request: {
+		cwd?: string;
+		sessionManager: SessionManager;
+		capabilities: AgentCapabilityDeclaration;
+	}): Promise<{ session: AgentSession }> {
+		const capabilities = normalizeAgentCapabilities(request.capabilities);
+		let discoveredSkills: string[] = [];
+		const resourceLoader = new DefaultResourceLoader({
+			cwd: request.cwd ?? this.options.cwd ?? process.cwd(),
+			agentDir: getAgentDir(),
+			noExtensions: true,
+			noContextFiles: true,
+			noPromptTemplates: true,
+			noThemes: true,
+			skillsOverride: (current) => {
+				discoveredSkills = current.skills.map((skill) => skill.name);
+				return {
+					...current,
+					skills: current.skills.filter((skill) =>
+						capabilities.skills.includes(skill.name),
+					),
+				};
+			},
+		});
+		await resourceLoader.reload();
+		const missingSkills = capabilities.skills.filter(
+			(name) => !discoveredSkills.includes(name),
+		);
+		if (missingSkills.length > 0)
+			throw new Error(`Pi 宿主未提供声明的 Skill: ${missingSkills.join(", ")}`);
+		const result = await createAgentSession({
+			cwd: request.cwd,
+			sessionManager: request.sessionManager,
+			resourceLoader,
+			tools: [...capabilities.tools, "submit_flow_outcome"],
+			customTools: [this.flowOutcomeTool()],
+		});
+		const availableTools = result.session.agent.state.tools.map(
+			(tool) => tool.name,
+		);
+		const missingTools = capabilities.tools.filter(
+			(name) => !availableTools.includes(name),
+		);
+		if (missingTools.length > 0) {
+			result.session.dispose();
+			throw new Error(`Pi 宿主未提供声明的工具: ${missingTools.join(", ")}`);
+		}
+		return result;
 	}
 
 	private async executeCliNode(request: {
@@ -590,6 +657,18 @@ function messagesFromEntries(
 			},
 		];
 	});
+}
+
+function sameCapabilities(
+	left: AgentCapabilityDeclaration,
+	right: AgentCapabilityDeclaration,
+): boolean {
+	return (
+		left.tools.length === right.tools.length &&
+		left.skills.length === right.skills.length &&
+		left.tools.every((name, index) => name === right.tools[index]) &&
+		left.skills.every((name, index) => name === right.skills[index])
+	);
 }
 
 function normalizeRole(role: unknown): UnifiedMessage["role"] | undefined {

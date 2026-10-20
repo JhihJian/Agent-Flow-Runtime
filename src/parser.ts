@@ -1,4 +1,5 @@
 import { parse as parseYaml } from "yaml";
+import { parseAgentCapabilities } from "./agent-capabilities.ts";
 import type {
 	CommandAction,
 	CommandRequest,
@@ -90,6 +91,7 @@ export function parseFlow(markdown: string, id: string): FlowDefinition {
 		parallels: new Map(),
 	};
 	if (metadata.variables) definition.variables = metadata.variables;
+	definition.capabilities = metadata.capabilities;
 	for (const node of nodes.values()) {
 		for (const declarations of node.resultVariables?.values() ?? []) {
 			for (const name of Object.keys(declarations)) {
@@ -127,6 +129,7 @@ function parseMetadata(markdown: string): {
 	name: string;
 	description: string;
 	variables?: FlowVariableDeclarations;
+	capabilities: ReturnType<typeof parseAgentCapabilities>;
 } {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
 	if (!match)
@@ -158,10 +161,22 @@ function parseMetadata(markdown: string): {
 		}
 		variables = parsed.variables;
 	}
+	let capabilities: ReturnType<typeof parseAgentCapabilities> = {
+		tools: [],
+		skills: [],
+	};
+	try {
+		capabilities = parseAgentCapabilities(parsed.capabilities);
+	} catch (error) {
+		throw new FlowSyntaxError(
+			error instanceof Error ? error.message : String(error),
+		);
+	}
 	return {
 		name: parsed.name.trim(),
 		description: parsed.description.trim(),
 		variables,
+		capabilities,
 	};
 }
 

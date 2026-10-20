@@ -2,7 +2,7 @@
 
 | 术语 | 源码命名与含义 |
 | --- | --- |
-| Flow | `FlowDefinition`：由 Markdown 解析出的静态图、动作、结果、变量声明。 |
+| Flow | `FlowDefinition`：由 Markdown 解析出的静态图、动作、结果、变量声明和 Flow 级 Agent 能力声明。 |
 | Flow package | `FlowPackage`：Flow 加入口和已校验资源。 |
 | Loaded Flow | `LoadedFlow`：根 package 加可传递到达的 Flow references。 |
 | Run | `FlowRunRecord`：一次 Flow 执行的当前状态快照和游标。 |
@@ -18,9 +18,9 @@
 | Evidence | `FlowNodeEvidence`：节点 input/outcome/error、session messages 或 command result 等读取视图。 |
 | Inspector | `FlowRunInspector`：只读组织 Store facts 和按权限读取 evidence。 |
 | Publisher | `FlowObservationPublisher`：当前进程内 best-effort 事件通知器。 |
-| Adapter | `AgentIntegrationAdapter`：Runtime 与 Pi/其他 Agent host 之间的接口。 |
-| Agent execution context | `AgentExecutionContext`：传给 Agent Adapter 的 Flow 和节点身份，不包含宿主能力配置。 |
-| Agent capability module | Runtime 外部的可选组合模块：解析并装配 Agent 的工具、Skill、模型和权限。 |
+| Adapter | `AgentIntegrationAdapter`：Runtime 与 Pi/其他 Agent host 之间的接口，接收创建会话时的能力声明。 |
+| Agent capability declaration | `AgentCapabilityDeclaration`：Flow 级 `tools` 和 `skills` 逻辑名称；未声明时为空。 |
+| Agent protocol tool | `submit_flow_outcome`：Runtime 始终提供的结果提交工具，不属于业务能力。 |
 | Command executor | `CommandExecutor`：Runtime 注入的外部命令执行边界。 |
 
 类型定位：`src/types.ts#FlowValue`、`src/types.ts#FlowRunRecord`、`src/types.ts#NodeRunRecord`、`src/types.ts#FlowNodeEvidence`；变量传递：`src/runtime.ts#initializeVariables`、`src/runtime.ts#extractNextInput`；观测实现：`src/observability.ts#FlowRunInspector`、`src/observability.ts#FlowRuntime.openRunObservation`。

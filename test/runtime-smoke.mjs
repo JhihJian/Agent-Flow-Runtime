@@ -482,73 +482,7 @@ test("keeps an accepted adapter interaction reference queryable", async () => {
 	assert.deepEqual(await adapter.getNodeSession(executed.session), messages);
 });
 
-test("creates a new CLI session when a new-agent node loops", async () => {
-	let sessionNumber = 0;
-	const bridge = {
-		sendNodePrompt() {},
-		async createNewSession() {
-			sessionNumber += 1;
-		},
-		getSessionReference() {
-			return `visible-session-${sessionNumber}`;
-		},
-		getLeafEntryId() {
-			return undefined;
-		},
-		getMessages() {
-			return [];
-		},
-	};
-	const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
-	const first = await adapter.createAgent({ runId: "run" });
-	const second = await adapter.createAgent({ runId: "run" });
-	assert.notEqual(second.id, first.id);
-	assert.notEqual(second.sessionReference, first.sessionReference);
-	assert.equal(second.sessionReference, "visible-session-2");
-});
-
-test("retries a CLI Agent node once when no outcome is submitted", async () => {
-	const prompts = [];
-	const submissions = [];
-	const bridge = {
-		sendNodePrompt(prompt) {
-			prompts.push(prompt);
-		},
-		async createNewSession() {},
-		getSessionReference() {
-			return "visible-session";
-		},
-		getLeafEntryId() {
-			return undefined;
-		},
-		getMessages() {
-			return [];
-		},
-	};
-	const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
-	const connection = await adapter.createAgent({ runId: "run" });
-	const execution = adapter.executeNode({
-		connection,
-		nodeExecutionReference: "node",
-		prompt: "完成工作",
-		outcomes: [{ name: "完成", description: "已完成" }],
-		submitOutcome: async (submission) => {
-			submissions.push(submission);
-		},
-	});
-	await adapter.finalizeCliTurn();
-	assert.equal(prompts.length, 2);
-	assert.match(prompts[1], /没有调用 submit_flow_outcome/);
-	await adapter.submitCliOutcome("完成", { 结论: "已完成" });
-	await adapter.finalizeCliTurn();
-	await execution;
-	assert.equal(submissions.length, 1);
-	assert.equal(submissions[0].result, "完成");
-	assert.deepEqual(submissions[0].variables, { 结论: "已完成" });
-	assert.equal("content" in submissions[0], false);
-});
-
-test("fails a CLI Agent node after the single missing-outcome retry", async () => {
+test("rejects CLI Agent creation when capability isolation is unavailable", async () => {
 	const bridge = {
 		sendNodePrompt() {},
 		async createNewSession() {},
@@ -563,15 +497,11 @@ test("fails a CLI Agent node after the single missing-outcome retry", async () =
 		},
 	};
 	const adapter = new PiAgentIntegrationAdapter({ cliBridge: bridge });
-	const connection = await adapter.createAgent({ runId: "run" });
-	const execution = adapter.executeNode({
-		connection,
-		nodeExecutionReference: "node",
-		prompt: "完成工作",
-		outcomes: [{ name: "完成", description: "已完成" }],
-		submitOutcome: async () => {},
-	});
-	await adapter.finalizeCliTurn();
-	await adapter.finalizeCliTurn();
-	await assert.rejects(execution, /重试后仍没有调用 submit_flow_outcome/);
+	await assert.rejects(
+		adapter.createAgent({
+			runId: "run",
+			capabilities: { tools: [], skills: [] },
+		}),
+		/无法隔离 Flow Agent/,
+	);
 });
