@@ -2,17 +2,17 @@
 
 ## 一眼看懂
 
-这是一个 TypeScript/ESM Node.js 包，将目录化的 `FLOW.md` 解析为 `FlowDefinition`，由 `FlowCoordinator` 驱动 Agent、命令节点、结果路由、并行检查、子 Flow 和恢复。项目不是 Web 服务；宿主是 Pi CLI/SDK，并提供可嵌入 Node.js 程序的运行时 API。
+这是一个 TypeScript/ESM Node.js 包，将目录化的 `FLOW.md` 解析为 `FlowDefinition`，由 `FlowCoordinator` 驱动 Agent、命令节点、结果路由、并行检查、子 Flow 和恢复。项目不是 Web 服务；宿主是 Pi CLI/SDK，并提供可嵌入 Node.js 程序的运行时 API。Agent 工具、Skill、模型和权限属于可选的外部能力模块，不属于 Flow Runtime 核心。
 
 宿主入口是 [`src/extension.ts`](../src/extension.ts) 的 `flowExtension`，库入口是 [`src/index.ts`](../src/index.ts) 的公共导出。Flow 的实际入口是 `<包目录>/FLOW.md`，由 [`src/flow-loader.ts`](../src/flow-loader.ts) 的 `loadFlow` 加载。主线经过解析、运行记录、节点执行、结果路由、JSON 快照和观测事件；外部边界包括 Pi SDK/会话文件、Node 文件系统、命令子进程、YAML/TypeBox 依赖和 npm 发布工作流。
 
-推荐阅读顺序：[`README.md`](../README.md) 的安装运行说明，[`docs/flow-spec.md`](flow-spec.md) 的 Flow 格式，随后阅读 `src/parser.ts`、`src/flow-loader.ts`、`src/runtime.ts`、`src/pi.ts` 和 `src/extension.ts`。示例入口在 `examples/*/FLOW.md`，索引工具在 `tools/`。
+推荐阅读顺序：[`README.md`](../README.md) 的安装运行说明，[`docs/flow-spec.md`](flow-spec.md) 的 Flow 格式，随后阅读 `src/parser.ts`、`src/flow-loader.ts`、`src/runtime.ts`、`src/agent.ts`、`src/pi.ts` 和 `src/extension.ts`。示例入口在 `examples/*/FLOW.md`，索引工具在 `tools/`。
 
 ## 系统入口
 
 | 入口 | 来源与真实位置 |
 | --- | --- |
-| Node.js 库 | `package.json#main`、`exports["."]` 指向构建产物；源码为 [`src/index.ts`](../src/index.ts)，导出 `loadFlow`、`FlowCoordinator`、`FlowRuntime`、Pi 适配器和类型。 |
+| Node.js 库 | `package.json#main`、`exports["."]` 指向 Core 构建产物；源码为 [`src/index.ts`](../src/index.ts)，导出 `loadFlow`、`FlowCoordinator`、`FlowRuntime`、Agent 抽象和类型。Pi 适配器通过 `exports["./pi"]` 提供。 |
 | Pi 扩展 | `package.json#pi.extensions` 和 `exports["./extension"]`；宿主加载 [`src/extension.ts`](../src/extension.ts) 的 `flowExtension(pi: ExtensionAPI)`。 |
 | Pi 启动 | `src/extension.ts` 的 `registerFlag("flow")`、`on("input")`、`startFlow`；命令形态为 `pi --flow <包目录或 FLOW.md> [任务]`。 |
 | Pi 命令 | `src/extension.ts` 的 `registerCommand("flow")`；支持 `/flow run`、`/flow list`、`/flow show`。 |
@@ -45,7 +45,7 @@
 | 变量边界 | [`src/variables.ts`](../src/variables.ts) 校验 JSON 变量；`src/runtime.ts` 的 `initializeVariables`、`validateOutcomeVariables`、`extractNextInput` 管理作用域。 |
 | 包加载 | [`src/flow-loader.ts`](../src/flow-loader.ts) 的 `loadFlow`、`loadFlowPackage`、`loadReferenceClosure` 加载 Flow、资源和兄弟包闭包，依赖 parser/types。 |
 | Flow 发现 | [`src/directory.ts`](../src/directory.ts) 的 `FlowDirectory` 递归列举包，不持有运行状态。 |
-| 执行内核 | [`src/runtime.ts`](../src/runtime.ts) 的 `FlowCoordinator` 推进节点、路由、并行、子 Run、失败和恢复；`AgentRunModel` 管理绑定。 |
+| 执行内核 | [`src/runtime.ts`](../src/runtime.ts) 的 `FlowCoordinator` 推进节点、路由、并行、子 Run、失败和恢复；[`src/agent.ts`](../src/agent.ts) 的 `AgentRunModel` 管理绑定。 |
 | 持久化与命令 | `runtime.ts` 的 `InMemoryRunStore`/`JsonFileRunStore` 保存事实，`ProcessCommandExecutor.execute` 通过子进程执行命令。 |
 | Pi 适配 | [`src/pi.ts`](../src/pi.ts) 的 `PiAgentIntegrationAdapter` 接入新建/接管会话、结果工具、消息证据和缺失结果重试。 |
 | Pi 宿主 | [`src/extension.ts`](../src/extension.ts) 绑定 Pi 生命周期、输入、命令、会话替换、恢复和 JSON/RPC 事件；[`src/cli-state.ts`](../src/cli-state.ts) 保存会话级状态。 |
@@ -73,7 +73,7 @@
 | Flow 格式和图校验 | `src/parser.ts#parseFlow/parseAction/validateAndWireGraph` | `docs/flow-spec.md`、`test/parser.test.ts` |
 | 包资源和子 Flow | `src/flow-loader.ts#loadFlowPackage/loadReferenceClosure` | `src/runtime.ts#startChildRun/childOutcome`、`test/flow-reference.test.ts` |
 | 普通执行和路由 | `src/runtime.ts#continueRun/executeNode/executePreparedNode/completeNode/selectRoute` | `src/types.ts`、`test/runtime.test.ts` |
-| Agent 和结果提交 | `src/runtime.ts#AgentRunModel`、`src/pi.ts#PiAgentIntegrationAdapter` | `src/extension.ts#bridge/agent_settled`、适配器测试 |
+| Agent 和结果提交 | `src/agent.ts#AgentRunModel`、`src/types.ts#AgentExecutionContext`、`src/pi.ts#PiAgentIntegrationAdapter` | `src/extension.ts#bridge/agent_settled`、适配器测试 |
 | 命令、stdin、变量信封 | `src/runtime.ts#ProcessCommandExecutor/parseCommandVariables` | `src/parser.ts#parseCommandAction/renderCommandRequest`、并行 fixtures |
 | 变量和模板 | `src/variables.ts`、`src/parser.ts#validateTemplates/renderTemplate` | `src/runtime.ts#initializeVariables/extractNextInput`、`docs/flow-spec.md` |
 | 并行和汇合 | `src/parser.ts#validateParallel`、`src/runtime.ts#enterParallel/executeParallel` | `branch.*` 模板、命令 `output:variables` |
@@ -110,7 +110,7 @@
 - [`src/extension.ts`](../src/extension.ts)、[`src/cli-state.ts`](../src/cli-state.ts)、[`src/index.ts`](../src/index.ts)：宿主状态、Pi 入口和公共导出。
 - [`src/types.ts`](../src/types.ts)、[`src/parser.ts`](../src/parser.ts)、[`src/variables.ts`](../src/variables.ts)：契约、解析和变量。
 - [`src/flow-loader.ts`](../src/flow-loader.ts)、[`src/directory.ts`](../src/directory.ts)：包和目录发现。
-- [`src/runtime.ts`](../src/runtime.ts)、[`src/pi.ts`](../src/pi.ts)、[`src/observability.ts`](../src/observability.ts)：执行、Pi 边界和观测。
+- [`src/runtime.ts`](../src/runtime.ts)、[`src/agent.ts`](../src/agent.ts)、[`src/pi.ts`](../src/pi.ts)、[`src/observability.ts`](../src/observability.ts)：执行、Agent 边界、Pi 边界和观测。
 - [`test/parser.test.ts`](../test/parser.test.ts)、[`test/runtime.test.ts`](../test/runtime.test.ts)、[`test/flow-reference.test.ts`](../test/flow-reference.test.ts)、[`test/release-flow-smoke.test.ts`](../test/release-flow-smoke.test.ts)：验证入口；未执行不等于通过。
 - [`tools/generate-source-index.ts`](../tools/generate-source-index.ts)、[`tools/source-guide-targets.ts`](../tools/source-guide-targets.ts)：源码索引维护入口。
 

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { AgentRunModel } from "./agent.ts";
 import {
 	resolveCommandResources,
 	resolvePromptResources,
@@ -13,8 +14,6 @@ import {
 	renderTemplate,
 } from "./parser.ts";
 import type {
-	AgentConnection,
-	AgentIntegrationAdapter,
 	CommandExecutor,
 	CommandRequest,
 	CommandResult,
@@ -36,8 +35,6 @@ import type {
 	NodeOutcome,
 	NodeRunRecord,
 	NodeRunSource,
-	NodeSession,
-	OutcomeOption,
 	ParallelRoundRecord,
 	RouteDecisionRecord,
 	RunFactCommit,
@@ -45,6 +42,8 @@ import type {
 	RunStore,
 } from "./types.ts";
 import { validateVariableName, validateVariables } from "./variables.ts";
+
+export { AgentRunModel } from "./agent.ts";
 
 type FactChanges = Omit<RunFactCommit, "run" | "expectedSequence">;
 
@@ -432,114 +431,6 @@ export class ProcessCommandExecutor implements CommandExecutor {
 	}
 }
 
-export class AgentRunModel {
-	private readonly bindings = new Map<string, AgentConnection>();
-	private readonly adapter: AgentIntegrationAdapter;
-
-	constructor(adapter: AgentIntegrationAdapter) {
-		this.adapter = adapter;
-	}
-
-	async start(
-		runId: string,
-		existingAgentReference?: string,
-		cwd?: string,
-	): Promise<void> {
-		if (existingAgentReference) {
-			if (
-				[...this.bindings.values()].some(
-					(binding) => binding.platformReference === existingAgentReference,
-				)
-			) {
-				throw new Error(
-					`Agent 已绑定到另一个 Flow 运行: ${existingAgentReference}`,
-				);
-			}
-			this.bindings.set(
-				runId,
-				await this.adapter.takeOverAgent({
-					runId,
-					agentReference: existingAgentReference,
-					cwd,
-				}),
-			);
-		}
-	}
-
-	async executeNode(request: {
-		runId: string;
-		action: "新建Agent" | "复用Agent";
-		nodeExecutionReference: string;
-		prompt: string;
-		outcomes: OutcomeOption[];
-		cwd?: string;
-		onConnection?: (connection: AgentConnection) => Promise<void>;
-	}): Promise<{ outcome: NodeOutcome; session: NodeSession }> {
-		let connection = this.bindings.get(request.runId);
-		if (request.action === "新建Agent") {
-			if (connection) await this.adapter.releaseAgent(connection);
-			connection = await this.adapter.createAgent({
-				runId: request.runId,
-				cwd: request.cwd,
-			});
-			this.bindings.set(request.runId, connection);
-		} else if (!connection) {
-			throw new Error("复用Agent前必须先新建或接管 Agent");
-		}
-		await request.onConnection?.(connection);
-		let accepted: NodeOutcome | undefined;
-		let sessionReference: string | undefined;
-		let interactionReference: string | undefined;
-		const session = await this.adapter.executeNode({
-			connection,
-			nodeExecutionReference: request.nodeExecutionReference,
-			prompt: request.prompt,
-			outcomes: request.outcomes,
-			submitOutcome: async (submission) => {
-				if (accepted) throw new Error("一个 Agent 节点只能提交一次结果");
-				if (
-					submission.nodeExecutionReference !== request.nodeExecutionReference
-				)
-					throw new Error("节点执行引用不匹配");
-				if (
-					!request.outcomes.some(
-						(outcome) => outcome.name === submission.result,
-					)
-				)
-					throw new Error(`节点不允许结果: ${submission.result}`);
-				accepted = {
-					result: submission.result,
-					variables: submission.variables,
-				};
-				sessionReference = submission.sessionReference;
-				interactionReference = submission.interactionReference;
-			},
-		});
-		if (!accepted)
-			throw new Error("Agent 节点结束前必须通过结果提交工具提交结果");
-		return {
-			outcome: accepted,
-			session: {
-				...session,
-				sessionReference: sessionReference ?? session.sessionReference,
-				interactionReference:
-					interactionReference ?? session.interactionReference,
-			},
-		};
-	}
-
-	async getNodeSession(session: NodeSession) {
-		return this.adapter.getNodeSession(session);
-	}
-
-	async end(runId: string): Promise<void> {
-		const connection = this.bindings.get(runId);
-		if (!connection) return;
-		this.bindings.delete(runId);
-		await this.adapter.releaseAgent(connection);
-	}
-}
-
 export class FlowCoordinator {
 	private readonly flow: FlowDefinition;
 	private readonly store: RunStore;
@@ -674,14 +565,16 @@ export class FlowCoordinator {
 			cwd: options.cwd ?? run.cwd,
 		};
 		if (run.currentParallelRoundId) {
+			const resumeNodeRef = run.currentNodeRef ?? this.flow.startNodeRef;
 			await this.agentModel.start(
 				run.id,
 				resumedOptions.existingAgentReference,
 				resumedOptions.cwd,
+				{ flowId: this.flow.id, nodeRef: resumeNodeRef },
 			);
 			return this.continueRun(
 				run,
-				run.currentNodeRef ?? this.flow.startNodeRef,
+				resumeNodeRef,
 				run.currentInput ?? {},
 				resumedOptions,
 				{ kind: "start" },
@@ -716,6 +609,7 @@ export class FlowCoordinator {
 				run.id,
 				resumedOptions.existingAgentReference,
 				resumedOptions.cwd,
+				{ flowId: this.flow.id, nodeRef },
 			);
 			return this.continueRun(
 				run,
@@ -733,6 +627,7 @@ export class FlowCoordinator {
 			run.id,
 			resumedOptions.existingAgentReference,
 			resumedOptions.cwd,
+			{ flowId: this.flow.id, nodeRef },
 		);
 		if (current?.status === "completed" && current.outcome) {
 			await this.recordRecovery(
@@ -770,6 +665,7 @@ export class FlowCoordinator {
 				run.id,
 				options.existingAgentReference,
 				options.cwd,
+				{ flowId: this.flow.id, nodeRef: initialNodeRef },
 			);
 		}
 		let nodeRef = initialNodeRef;
@@ -1195,6 +1091,7 @@ export class FlowCoordinator {
 					runId: run.id,
 					action: record.retryOf ? "复用Agent" : node.action.kind,
 					nodeExecutionReference: record.id,
+					context: { flowId: this.flow.id, nodeRef: node.ref },
 					prompt: renderAgentPrompt(
 						node.action.prompt,
 						nodeInput,
@@ -1385,6 +1282,7 @@ export class FlowCoordinator {
 				run.id,
 				options.existingAgentReference,
 				options.cwd,
+				{ flowId: this.flow.id, nodeRef: current.nodeRef },
 			);
 			return this.continueRun(
 				run,
@@ -1405,6 +1303,7 @@ export class FlowCoordinator {
 				run.id,
 				options.existingAgentReference,
 				options.cwd,
+				{ flowId: this.flow.id, nodeRef: current.nodeRef },
 			);
 			await this.recordRecovery(
 				run,

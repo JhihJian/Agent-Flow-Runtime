@@ -8,7 +8,7 @@
 
 `FlowDefinition` 是静态图；`FlowPackage` 加入入口和已校验资源；`LoadedFlow` 再包含可传递到达的 Flow 引用闭包。`FlowRunRecord` 保存一次运行的当前状态，`NodeRunRecord` 保存一次节点访问；同一记录在生命周期内可更新，每次新访问都有独立 ID。路由、并行轮次和恢复分别保存为 RouteDecision、ParallelRound、RunRecovery facts。父子 Run 通过 parent IDs 关联。类型来源：`src/types.ts#FlowDefinition`、`src/types.ts#FlowPackage`、`src/types.ts#LoadedFlow`、`src/types.ts#FlowRunRecord`、`src/types.ts#NodeRunRecord`。
 
-全局变量属于 Run；结果变量必须符合当前结果声明，并且只有其中的下一跳变量进入后继节点 input。并行分支输出按 round 和 branch 隔离。运行时校验由 `src/runtime.ts#initializeVariables`、`src/runtime.ts#validateOutcomeVariables`、`src/runtime.ts#extractNextInput` 和 `src/variables.ts#validateVariables` 负责。
+全局变量属于 Run；结果变量必须符合当前结果声明，并且只有其中的下一跳变量进入后继节点 input。并行分支输出按 round 和 branch 隔离。运行时校验由 `src/runtime.ts#initializeVariables`、`src/runtime.ts#validateOutcomeVariables`、`src/runtime.ts#extractNextInput` 和 `src/variables.ts#validateVariables` 负责。Agent 的工具、Skill、模型和权限属于可选能力模块，由宿主在 `AgentIntegrationAdapter` 外部组合装配，详见[Agent 能力组合](agent-capability-composition.md)。
 
 ## 主要流程
 
@@ -28,6 +28,7 @@
 | [契约与值校验](modules/contracts.md) | 类型协议、状态事实、变量值校验 |
 | [定义与装载](modules/definition-loading.md) | Flow 解析、模板、资源和引用闭包 |
 | [执行与事实](modules/execution-runtime.md) | Run 协调、动作、存储、路由、恢复 |
+| [Agent 能力组合](agent-capability-composition.md) | 在 Runtime 与宿主之间组合可选的 Agent 工具、Skill 和策略 |
 | [Pi 宿主](modules/pi-host.md) | Pi session、结果工具、Extension 装配 |
 | [观测读侧](modules/observability.md) | 历史/evidence 与进程内通知 |
 | [工程入口](modules/engineering-entries.md) | 包出口、构建、测试、发布配置 |
@@ -43,6 +44,9 @@
 - 恢复始终校验 Flow ID；只有 `historyCompleteness` 为 `complete` 时比较组合 Flow fingerprint，legacy 历史跳过该比较。
 - Store 成功提交后才发布事件；Publisher 不是事实存储。
 - JsonFileRunStore 只在每个实例内串行化写入，不提供跨实例或跨进程协调。
+- Runtime 核心不持有 Agent Profile、工具、Skill 或宿主权限状态。
+- Agent 能力通过 `AgentIntegrationAdapter` 外部组合，不能改变 Flow 路由、结果和变量语义。
+- 没有安装可选能力模块时，普通 Flow 的执行语义保持不变。
 
 ## 待确认边界
 

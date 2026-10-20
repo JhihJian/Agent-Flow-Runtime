@@ -7,6 +7,7 @@
 - **显式结果和变量作用域**：结构化结果名选择路线；变量按全局、当前结果和 branch scope 传递。复核：`src/parser.ts#parseResultVariables`、`src/parser.ts#validateTemplates`、`src/runtime.ts#initializeVariables`、`src/runtime.ts#validateOutcomeVariables`、`src/runtime.ts#extractNextInput`、`src/pi.ts#createFlowOutcomeTool`。
 - **单进程 JSON Store**：默认 JSON 快照由单个 Store 实例串行 mutation、临时文件和 rename 写入；未提供跨实例或跨进程协调。复核：`src/runtime.ts#JsonFileRunStore`。
 - **尽力而为的运行观测**：Store 提交成功后发布当前进程事件；Publisher 不持久化、不补发。复核：`src/runtime.ts#FlowCoordinator.commit`、`src/observability.ts#FlowObservationPublisher`、`src/observability.ts#FlowRuntime.openRunObservation`。
+- **Agent 能力作为可选组合模块**：Runtime 只提供通用 Agent 执行端口，工具、Skill、模型和权限由外部能力模块与宿主组合。复核：`src/agent.ts#AgentRunModel`、`src/types.ts#AgentExecutionContext`、`src/types.ts#AgentIntegrationAdapter`、`src/pi.ts#PiAgentIntegrationAdapter`。
 
 这些摘要只说明当前实现可复核的边界，不扩张其批准范围。
 

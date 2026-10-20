@@ -37,7 +37,7 @@ After publishing the package, install a versioned package through Pi:
 pi install npm:@jhihjian/agent-flow-runtime@0.2.1
 ```
 
-Pi discovers `src/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Core Pi packages and `typebox` are peers, while `yaml` is installed as the runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
+Pi discovers `src/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Pi and `typebox` are optional peer dependencies for the Pi host entry point, while `yaml` is installed as the Runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
 
 To embed the runtime in your own Node.js program instead of the Pi CLI:
 
@@ -45,7 +45,7 @@ To embed the runtime in your own Node.js program instead of the Pi CLI:
 npm install @jhihjian/agent-flow-runtime
 ```
 
-The package requires Node.js >= 22.19 and two peer dependencies, `@earendil-works/pi-coding-agent` and `typebox`. npm 7+ installs peers automatically; pnpm users need `auto-install-peers=true` or explicit installation.
+The package requires Node.js >= 22.19. The core entry point does not require Pi. Install `@earendil-works/pi-coding-agent` and `typebox` when using the Pi SDK or extension entry points. pnpm users can install those optional host dependencies explicitly.
 
 ## Run
 
@@ -82,8 +82,8 @@ import {
   FlowCoordinator,
   JsonFileRunStore,
   loadFlow,
-  PiAgentIntegrationAdapter,
 } from "@jhihjian/agent-flow-runtime";
+import { PiAgentIntegrationAdapter } from "@jhihjian/agent-flow-runtime/pi";
 
 const loaded = await loadFlow("./.flows/code-change");
 
@@ -138,8 +138,8 @@ For a compact source-level reading guide, see [源码逻辑阅读图](docs/sourc
 - `src/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
 - `src/flow-loader.ts` loads package directories, resolves their resources, and builds the transitive reference closure for `执行Flow` nodes (sibling resolution, cycle detection); `src/directory.ts` recursively discovers package entries for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
-- `src/runtime.ts` contains the coordinator, Agent binding model, command executor, in-memory store, and JSON-file store. The coordinator alone changes Flow state and records node visits; `执行Flow` nodes run a child Flow as an independent child Run through a sub-coordinator sharing the same store and adapters.
-- `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. SDK hosts embed the runtime through `dist/index.js`; see [SDK 快速开始](docs/sdk-quick-start.md).
+- `src/runtime.ts` contains the coordinator, command executor, in-memory store, and JSON-file store; `src/agent.ts` contains the host-neutral Agent binding model. The coordinator alone changes Flow state and records node visits; `执行Flow` nodes run a child Flow as an independent child Run through a sub-coordinator sharing the same store and adapters. Optional Agent capability modules compose outside the `AgentIntegrationAdapter` boundary and do not become Flow state.
+- `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. It is exposed through the optional `@jhihjian/agent-flow-runtime/pi` entry point; the core runtime is exposed through `dist/index.js`. See [SDK 快速开始](docs/sdk-quick-start.md).
 - `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI outcomes are only confirmed at Pi's `agent_settled` boundary; when a result candidate is pending, the extension cancels the current node's compaction and waits only for retries and queued work to settle.
 - [发布级冒烟门禁设计](docs/release-smoke-design.md) defines the offline release gate for the complete path, parallel conflicts, and recovery, plus the boundary with real Pi/provider integration.
 

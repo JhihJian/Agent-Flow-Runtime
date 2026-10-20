@@ -31,7 +31,7 @@
 
 - **契约和值校验**：`types.ts` 定义 Flow 图、动作、结果、运行记录、事实提交、Store、宿主适配器及观测读模型；`variables.ts` 校验变量名、FlowValue 和声明默认值。类型定义本身不证明运行时校验完整，实际检查分别落在 parser/runtime/host。
 - **Flow 解释和装载**：`parser.ts` 将 Markdown/YAML 元信息、Mermaid 图和动作块解析为定义，并验证可达性、模板和声明；`flow-loader.ts` 定位入口、验证引用资源路径和引用闭包；`directory.ts` 发现 Flow 包并按 id 加载。这些模块处理定义和文件，不负责节点调度。
-- **执行与持久事实**：`runtime.ts` 包含 `InMemoryRunStore`、`JsonFileRunStore`、`ProcessCommandExecutor`、`AgentRunModel` 和 `FlowCoordinator`。Coordinator 驱动状态迁移、分派动作、路由、恢复和事实提交；Flow 指纹将节点结果说明纳入定义序列化，结果变量契约由 parser 从该说明解析，见第 7 节。
+- **执行与持久事实**：`runtime.ts` 包含 `InMemoryRunStore`、`JsonFileRunStore`、`ProcessCommandExecutor` 和 `FlowCoordinator`，`agent.ts` 包含 `AgentRunModel`。Coordinator 驱动状态迁移、分派动作、路由、恢复和事实提交；Flow 指纹将节点结果说明纳入定义序列化，结果变量契约由 parser 从该说明解析，见第 7 节。
 - **读模型和通知**：`observability.ts` 从 Store 投影运行历史、按策略读取节点 evidence，并提供进程内订阅/快照接口；不决定 Flow 路由，也不持久化事件。
 - **Pi 宿主接入**：`pi.ts` 适配 Pi SDK/CLI Agent session、结果提交工具和运行查询工具；`extension.ts` 注册宿主命令、flag、事件和工具并装配 Flow 运行组件；`cli-state.ts` 以 `globalThis` 保存扩展进程内状态。
 - **出口和开发工具**：`index.ts` 汇总 SDK 公共导出；`tools/*` 维护受控源码定位表并校验 `docs/source-index.md`。

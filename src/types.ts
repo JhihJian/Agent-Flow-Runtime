@@ -132,19 +132,28 @@ export interface AgentOutcomeSubmission extends NodeOutcome {
 	interactionReference?: string;
 }
 
+/** Context shared with Agent adapters without exposing host-specific policy. */
+export interface AgentExecutionContext {
+	flowId: string;
+	nodeRef: string;
+}
+
 export interface AgentIntegrationAdapter {
 	createAgent(request: {
 		runId: string;
 		cwd?: string;
+		context?: AgentExecutionContext;
 	}): Promise<AgentConnection>;
 	takeOverAgent(request: {
 		runId: string;
 		agentReference: string;
 		cwd?: string;
+		context?: AgentExecutionContext;
 	}): Promise<AgentConnection>;
 	executeNode(request: {
 		connection: AgentConnection;
 		nodeExecutionReference: string;
+		context?: AgentExecutionContext;
 		prompt: string;
 		outcomes: OutcomeOption[];
 		submitOutcome: (submission: AgentOutcomeSubmission) => Promise<void>;

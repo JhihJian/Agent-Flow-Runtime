@@ -2,12 +2,53 @@ import { describe, expect, it } from "vitest";
 import { AgentRunModel } from "../src/runtime.ts";
 import type {
 	AgentConnection,
+	AgentExecutionContext,
 	AgentIntegrationAdapter,
 	NodeSession,
 	UnifiedMessage,
 } from "../src/types.ts";
 
 describe("AgentRunModel adapter contract", () => {
+	it("forwards neutral Flow and node context without interpreting it", async () => {
+		let createdContext: AgentExecutionContext | undefined;
+		let executedContext: AgentExecutionContext | undefined;
+		const adapter: AgentIntegrationAdapter = {
+			async createAgent(request) {
+				createdContext = request.context;
+				return { id: "agent", platformReference: "agent" };
+			},
+			async takeOverAgent() {
+				throw new Error("not used");
+			},
+			async executeNode(request) {
+				executedContext = request.context;
+				await request.submitOutcome({
+					nodeExecutionReference: request.nodeExecutionReference,
+					result: "合法",
+				});
+				return { id: "node" };
+			},
+			async getNodeSession() {
+				return [];
+			},
+			async releaseAgent() {},
+		};
+		const model = new AgentRunModel(adapter);
+		const context = { flowId: "flow", nodeRef: "review" };
+
+		await model.executeNode({
+			runId: "run",
+			action: "新建Agent",
+			nodeExecutionReference: "node",
+			context,
+			prompt: "work",
+			outcomes: [{ name: "合法", description: "ok" }],
+		});
+
+		expect(createdContext).toEqual(context);
+		expect(executedContext).toEqual(context);
+	});
+
 	it("rejects a result that is not declared by the current node", async () => {
 		const adapter: AgentIntegrationAdapter = {
 			async createAgent() {

@@ -8,12 +8,12 @@
 npm install @jhihjian/agent-flow-runtime
 ```
 
-要求 Node.js 不低于 22.19。运行时有两个 peer 依赖：
+要求 Node.js 不低于 22.19。核心 Runtime 不依赖 Pi。只有使用 Pi 会话执行 Agent 节点时才需要安装两个可选宿主依赖：
 
 - `@earendil-works/pi-coding-agent`：Pi SDK，Agent 节点的执行载体。
 - `typebox`：结果提交工具的参数 Schema。
 
-npm 7 及以上会自动安装 peer 依赖。使用 pnpm 时需开启 `auto-install-peers=true` 或显式安装这两个包。
+使用 Pi SDK 或 Pi 扩展时，使用 pnpm 的项目需要显式安装这两个包。
 
 ## 2. 四个组装件
 
@@ -155,8 +155,8 @@ import {
 	FlowCoordinator,
 	JsonFileRunStore,
 	parseFlow,
-	PiAgentIntegrationAdapter,
 } from "@jhihjian/agent-flow-runtime";
+import { PiAgentIntegrationAdapter } from "@jhihjian/agent-flow-runtime/pi";
 
 const flow = parseFlow(
 	await readFile("./.flows/code-change/FLOW.md", "utf8"),

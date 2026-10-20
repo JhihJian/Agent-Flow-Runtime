@@ -6,6 +6,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { AgentRunModel } from "./agent.ts";
 import {
 	getCliFlowState,
 	rejectPendingSessionReplacement,
@@ -24,7 +25,7 @@ import {
 	PiAgentIntegrationAdapter,
 	type PiCliBridge,
 } from "./pi.ts";
-import { AgentRunModel, FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
+import { FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
 import type {
 	FlowObservationEvent,
 	FlowRunSummary,

@@ -9,7 +9,7 @@
 ## 审计范围
 
 - `src/types.ts`、`variables.ts`、`parser.ts`、`flow-loader.ts`、`directory.ts`
-- `src/runtime.ts` 的 Store、命令执行、AgentRunModel、FlowCoordinator
+- `src/runtime.ts` 的 Store、命令执行、FlowCoordinator，以及 `src/agent.ts` 的 AgentRunModel
 - `src/observability.ts`、`src/pi.ts`、`src/extension.ts`、`src/cli-state.ts`
 - `package.json`、TypeScript 配置、源码索引工具、发布 workflow
 - 既有 `docs/*.md`、测试文件和 Flow fixture，仅作为交叉证据，不作为已执行结果

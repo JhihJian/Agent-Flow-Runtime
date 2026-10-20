@@ -58,7 +58,7 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "agent-execute-node",
 		title: "管理 Agent 节点",
-		file: "src/runtime.ts",
+		file: "src/agent.ts",
 		kind: "method",
 		className: "AgentRunModel",
 		name: "executeNode",

@@ -19,6 +19,8 @@
 | Inspector | `FlowRunInspector`：只读组织 Store facts 和按权限读取 evidence。 |
 | Publisher | `FlowObservationPublisher`：当前进程内 best-effort 事件通知器。 |
 | Adapter | `AgentIntegrationAdapter`：Runtime 与 Pi/其他 Agent host 之间的接口。 |
+| Agent execution context | `AgentExecutionContext`：传给 Agent Adapter 的 Flow 和节点身份，不包含宿主能力配置。 |
+| Agent capability module | Runtime 外部的可选组合模块：解析并装配 Agent 的工具、Skill、模型和权限。 |
 | Command executor | `CommandExecutor`：Runtime 注入的外部命令执行边界。 |
 
 类型定位：`src/types.ts#FlowValue`、`src/types.ts#FlowRunRecord`、`src/types.ts#NodeRunRecord`、`src/types.ts#FlowNodeEvidence`；变量传递：`src/runtime.ts#initializeVariables`、`src/runtime.ts#extractNextInput`；观测实现：`src/observability.ts#FlowRunInspector`、`src/observability.ts#FlowRuntime.openRunObservation`。

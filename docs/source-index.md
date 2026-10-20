@@ -2,6 +2,18 @@
 
 本文件由 `npm run docs:source-index` 使用 `ts-morph` 生成，请勿手动编辑。它列出顶层函数、类、类方法、接口和类型别名的静态位置，不替代运行时行为说明。函数级控制流、伪代码及其链接见[源码逻辑阅读图](source-pseudocode-guide.md)。
 
+## [src/agent.ts](../src/agent.ts)
+
+依赖：`./types.ts`
+
+| 符号 | 类别 | 外部可见 | 位置 |
+| --- | --- | --- | --- |
+| `AgentRunModel` | 类 | 是 | [src/agent.ts:17-128](../src/agent.ts#L17) |
+| `AgentRunModel.start` | 方法 | 是 | [src/agent.ts:25-51](../src/agent.ts#L25) |
+| `AgentRunModel.executeNode` | 方法 | 是 | [src/agent.ts:53-116](../src/agent.ts#L53) |
+| `AgentRunModel.getNodeSession` | 方法 | 是 | [src/agent.ts:118-120](../src/agent.ts#L118) |
+| `AgentRunModel.end` | 方法 | 是 | [src/agent.ts:122-127](../src/agent.ts#L122) |
+
 ## [src/cli-state.ts](../src/cli-state.ts)
 
 依赖：`@earendil-works/pi-coding-agent`、`./observability.ts`、`./pi.ts`、`./types.ts`
@@ -27,15 +39,15 @@
 
 ## [src/extension.ts](../src/extension.ts)
 
-依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`./cli-state.ts`、`./flow-loader.ts`、`./observability.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`、`./variables.ts`
+依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`./agent.ts`、`./cli-state.ts`、`./flow-loader.ts`、`./observability.ts`、`./pi.ts`、`./runtime.ts`、`./types.ts`、`./variables.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/extension.ts:37-590](../src/extension.ts#L37) |
-| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:592-598](../src/extension.ts#L592) |
-| `flowEventMessage` | 函数 | 否 | [src/extension.ts:600-607](../src/extension.ts#L600) |
-| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:609-611](../src/extension.ts#L609) |
-| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:613-618](../src/extension.ts#L613) |
+| `flowExtension` | 函数 | 是 | [src/extension.ts:38-591](../src/extension.ts#L38) |
+| `createRuntimeForContext` | 函数 | 否 | [src/extension.ts:593-599](../src/extension.ts#L593) |
+| `flowEventMessage` | 函数 | 否 | [src/extension.ts:601-608](../src/extension.ts#L601) |
+| `formatRunSummaryOption` | 函数 | 否 | [src/extension.ts:610-612](../src/extension.ts#L610) |
+| `formatRecentRuns` | 函数 | 否 | [src/extension.ts:614-619](../src/extension.ts#L614) |
 
 ## [src/flow-loader.ts](../src/flow-loader.ts)
 
@@ -176,110 +188,105 @@
 
 ## [src/runtime.ts](../src/runtime.ts)
 
-依赖：`node:child_process`、`node:crypto`、`node:fs/promises`、`node:path`、`./flow-loader.ts`、`./parser.ts`、`./types.ts`、`./variables.ts`
+依赖：`node:child_process`、`node:crypto`、`node:fs/promises`、`node:path`、`./agent.ts`、`./flow-loader.ts`、`./parser.ts`、`./types.ts`、`./variables.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `FactChanges` | 类型 | 否 | [src/runtime.ts:49-49](../src/runtime.ts#L49) |
-| `ObservationSpec` | 类型 | 否 | [src/runtime.ts:51-62](../src/runtime.ts#L51) |
-| `InMemoryRunStore` | 类 | 是 | [src/runtime.ts:64-230](../src/runtime.ts#L64) |
-| `InMemoryRunStore.createRun` | 方法 | 是 | [src/runtime.ts:71-85](../src/runtime.ts#L71) |
-| `InMemoryRunStore.commit` | 方法 | 是 | [src/runtime.ts:87-115](../src/runtime.ts#L87) |
-| `InMemoryRunStore.validateFactRecords` | 方法 | 否 | [src/runtime.ts:117-134](../src/runtime.ts#L117) |
-| `InMemoryRunStore.updateRun` | 方法 | 是 | [src/runtime.ts:136-139](../src/runtime.ts#L136) |
-| `InMemoryRunStore.getRun` | 方法 | 是 | [src/runtime.ts:141-144](../src/runtime.ts#L141) |
-| `InMemoryRunStore.getRunSnapshot` | 方法 | 是 | [src/runtime.ts:146-156](../src/runtime.ts#L146) |
-| `InMemoryRunStore.recordsFor` | 方法 | 否 | [src/runtime.ts:158-166](../src/runtime.ts#L158) |
-| `InMemoryRunStore.listRuns` | 方法 | 是 | [src/runtime.ts:168-172](../src/runtime.ts#L168) |
-| `InMemoryRunStore.listAllRuns` | 方法 | 是 | [src/runtime.ts:174-176](../src/runtime.ts#L174) |
-| `InMemoryRunStore.listRunningRuns` | 方法 | 是 | [src/runtime.ts:178-182](../src/runtime.ts#L178) |
-| `InMemoryRunStore.createNodeRun` | 方法 | 是 | [src/runtime.ts:184-188](../src/runtime.ts#L184) |
-| `InMemoryRunStore.updateNodeRun` | 方法 | 是 | [src/runtime.ts:190-194](../src/runtime.ts#L190) |
-| `InMemoryRunStore.listNodeRuns` | 方法 | 是 | [src/runtime.ts:196-201](../src/runtime.ts#L196) |
-| `InMemoryRunStore.listRouteDecisions` | 方法 | 是 | [src/runtime.ts:203-208](../src/runtime.ts#L203) |
-| `InMemoryRunStore.listParallelRounds` | 方法 | 是 | [src/runtime.ts:210-215](../src/runtime.ts#L210) |
-| `InMemoryRunStore.listRunRecoveries` | 方法 | 是 | [src/runtime.ts:217-222](../src/runtime.ts#L217) |
-| `InMemoryRunStore.listChildRuns` | 方法 | 是 | [src/runtime.ts:224-229](../src/runtime.ts#L224) |
-| `PersistedRuns` | 接口 | 否 | [src/runtime.ts:232-238](../src/runtime.ts#L232) |
-| `JsonFileRunStore` | 类 | 是 | [src/runtime.ts:241-400](../src/runtime.ts#L241) |
-| `JsonFileRunStore.load` | 方法 | 否 | [src/runtime.ts:252-266](../src/runtime.ts#L252) |
-| `JsonFileRunStore.loadPersisted` | 方法 | 否 | [src/runtime.ts:268-288](../src/runtime.ts#L268) |
-| `JsonFileRunStore.persist` | 方法 | 否 | [src/runtime.ts:290-302](../src/runtime.ts#L290) |
-| `JsonFileRunStore.mutate` | 方法 | 否 | [src/runtime.ts:304-316](../src/runtime.ts#L304) |
-| `JsonFileRunStore.ready` | 方法 | 否 | [src/runtime.ts:318-321](../src/runtime.ts#L318) |
-| `JsonFileRunStore.createRun` | 方法 | 是 | [src/runtime.ts:323-325](../src/runtime.ts#L323) |
-| `JsonFileRunStore.commit` | 方法 | 是 | [src/runtime.ts:327-329](../src/runtime.ts#L327) |
-| `JsonFileRunStore.updateRun` | 方法 | 是 | [src/runtime.ts:331-333](../src/runtime.ts#L331) |
-| `JsonFileRunStore.getRun` | 方法 | 是 | [src/runtime.ts:335-338](../src/runtime.ts#L335) |
-| `JsonFileRunStore.getRunSnapshot` | 方法 | 是 | [src/runtime.ts:340-345](../src/runtime.ts#L340) |
-| `JsonFileRunStore.listRuns` | 方法 | 是 | [src/runtime.ts:347-350](../src/runtime.ts#L347) |
-| `JsonFileRunStore.listAllRuns` | 方法 | 是 | [src/runtime.ts:352-355](../src/runtime.ts#L352) |
-| `JsonFileRunStore.listRunningRuns` | 方法 | 是 | [src/runtime.ts:357-360](../src/runtime.ts#L357) |
-| `JsonFileRunStore.createNodeRun` | 方法 | 是 | [src/runtime.ts:362-364](../src/runtime.ts#L362) |
-| `JsonFileRunStore.updateNodeRun` | 方法 | 是 | [src/runtime.ts:366-368](../src/runtime.ts#L366) |
-| `JsonFileRunStore.listNodeRuns` | 方法 | 是 | [src/runtime.ts:370-373](../src/runtime.ts#L370) |
-| `JsonFileRunStore.listRouteDecisions` | 方法 | 是 | [src/runtime.ts:375-380](../src/runtime.ts#L375) |
-| `JsonFileRunStore.listParallelRounds` | 方法 | 是 | [src/runtime.ts:382-387](../src/runtime.ts#L382) |
-| `JsonFileRunStore.listRunRecoveries` | 方法 | 是 | [src/runtime.ts:389-394](../src/runtime.ts#L389) |
-| `JsonFileRunStore.listChildRuns` | 方法 | 是 | [src/runtime.ts:396-399](../src/runtime.ts#L396) |
-| `ProcessCommandExecutor` | 类 | 是 | [src/runtime.ts:402-433](../src/runtime.ts#L402) |
-| `ProcessCommandExecutor.execute` | 方法 | 是 | [src/runtime.ts:403-432](../src/runtime.ts#L403) |
-| `AgentRunModel` | 类 | 是 | [src/runtime.ts:435-541](../src/runtime.ts#L435) |
-| `AgentRunModel.start` | 方法 | 是 | [src/runtime.ts:443-467](../src/runtime.ts#L443) |
-| `AgentRunModel.executeNode` | 方法 | 是 | [src/runtime.ts:469-529](../src/runtime.ts#L469) |
-| `AgentRunModel.getNodeSession` | 方法 | 是 | [src/runtime.ts:531-533](../src/runtime.ts#L531) |
-| `AgentRunModel.end` | 方法 | 是 | [src/runtime.ts:535-540](../src/runtime.ts#L535) |
-| `FlowCoordinator` | 类 | 是 | [src/runtime.ts:543-1966](../src/runtime.ts#L543) |
-| `FlowCoordinator.run` | 方法 | 是 | [src/runtime.ts:581-636](../src/runtime.ts#L581) |
-| `FlowCoordinator.resume` | 方法 | 是 | [src/runtime.ts:639-650](../src/runtime.ts#L639) |
-| `FlowCoordinator.resumeRun` | 方法 | 否 | [src/runtime.ts:653-755](../src/runtime.ts#L653) |
-| `FlowCoordinator.continueRun` | 方法 | 否 | [src/runtime.ts:757-885](../src/runtime.ts#L757) |
-| `FlowCoordinator.executeParallel` | 方法 | 否 | [src/runtime.ts:887-997](../src/runtime.ts#L887) |
-| `FlowCoordinator.executeNode` | 方法 | 否 | [src/runtime.ts:999-1030](../src/runtime.ts#L999) |
-| `FlowCoordinator.startNode` | 方法 | 否 | [src/runtime.ts:1032-1132](../src/runtime.ts#L1032) |
-| `FlowCoordinator.executePreparedNode` | 方法 | 否 | [src/runtime.ts:1134-1242](../src/runtime.ts#L1134) |
-| `FlowCoordinator.executeFlowReference` | 方法 | 否 | [src/runtime.ts:1245-1265](../src/runtime.ts#L1245) |
-| `FlowCoordinator.startChildRun` | 方法 | 否 | [src/runtime.ts:1267-1300](../src/runtime.ts#L1267) |
-| `FlowCoordinator.childOutcome` | 方法 | 否 | [src/runtime.ts:1303-1323](../src/runtime.ts#L1303) |
-| `FlowCoordinator.childResultVariables` | 方法 | 否 | [src/runtime.ts:1325-1341](../src/runtime.ts#L1325) |
-| `FlowCoordinator.coordinatorFor` | 方法 | 否 | [src/runtime.ts:1343-1354](../src/runtime.ts#L1343) |
-| `FlowCoordinator.resumeFlowReferenceNode` | 方法 | 否 | [src/runtime.ts:1357-1429](../src/runtime.ts#L1357) |
-| `FlowCoordinator.completeNode` | 方法 | 否 | [src/runtime.ts:1431-1486](../src/runtime.ts#L1431) |
-| `FlowCoordinator.selectRoute` | 方法 | 否 | [src/runtime.ts:1488-1526](../src/runtime.ts#L1488) |
-| `FlowCoordinator.enterParallel` | 方法 | 否 | [src/runtime.ts:1528-1576](../src/runtime.ts#L1528) |
-| `FlowCoordinator.completeRun` | 方法 | 否 | [src/runtime.ts:1578-1598](../src/runtime.ts#L1578) |
-| `FlowCoordinator.interruptNode` | 方法 | 否 | [src/runtime.ts:1600-1646](../src/runtime.ts#L1600) |
-| `FlowCoordinator.interruptActiveChildRuns` | 方法 | 否 | [src/runtime.ts:1649-1685](../src/runtime.ts#L1649) |
-| `FlowCoordinator.failInterruptedCommand` | 方法 | 否 | [src/runtime.ts:1687-1733](../src/runtime.ts#L1687) |
-| `FlowCoordinator.failNode` | 方法 | 否 | [src/runtime.ts:1735-1760](../src/runtime.ts#L1735) |
-| `FlowCoordinator.failRun` | 方法 | 否 | [src/runtime.ts:1762-1770](../src/runtime.ts#L1762) |
-| `FlowCoordinator.recordRecovery` | 方法 | 否 | [src/runtime.ts:1772-1794](../src/runtime.ts#L1772) |
-| `FlowCoordinator.requireParallelRound` | 方法 | 否 | [src/runtime.ts:1796-1812](../src/runtime.ts#L1796) |
-| `FlowCoordinator.destination` | 方法 | 否 | [src/runtime.ts:1814-1823](../src/runtime.ts#L1814) |
-| `FlowCoordinator.publishObservationChanges` | 方法 | 否 | [src/runtime.ts:1825-1907](../src/runtime.ts#L1825) |
-| `FlowCoordinator.publishObservation` | 方法 | 否 | [src/runtime.ts:1909-1938](../src/runtime.ts#L1909) |
-| `FlowCoordinator.commit` | 方法 | 否 | [src/runtime.ts:1940-1965](../src/runtime.ts#L1940) |
-| `FlowRuntimeError` | 类 | 否 | [src/runtime.ts:1968-1975](../src/runtime.ts#L1968) |
-| `now` | 函数 | 否 | [src/runtime.ts:1977-1979](../src/runtime.ts#L1977) |
-| `initializeVariables` | 函数 | 否 | [src/runtime.ts:1981-2007](../src/runtime.ts#L1981) |
-| `declaredResultVariables` | 函数 | 否 | [src/runtime.ts:2009-2014](../src/runtime.ts#L2009) |
-| `validateOutcomeVariables` | 函数 | 否 | [src/runtime.ts:2016-2041](../src/runtime.ts#L2016) |
-| `pickDeclaredGlobalVariables` | 函数 | 否 | [src/runtime.ts:2043-2052](../src/runtime.ts#L2043) |
-| `extractNextInput` | 函数 | 否 | [src/runtime.ts:2054-2064](../src/runtime.ts#L2054) |
-| `toFlowError` | 函数 | 否 | [src/runtime.ts:2066-2078](../src/runtime.ts#L2066) |
-| `fingerprintFlow` | 函数 | 否 | [src/runtime.ts:2080-2113](../src/runtime.ts#L2080) |
-| `normalizeRun` | 函数 | 否 | [src/runtime.ts:2115-2142](../src/runtime.ts#L2115) |
-| `normalizeNodeRun` | 函数 | 否 | [src/runtime.ts:2144-2155](../src/runtime.ts#L2144) |
-| `displayNodeName` | 函数 | 否 | [src/runtime.ts:2157-2161](../src/runtime.ts#L2157) |
-| `normalizeParallelRound` | 函数 | 否 | [src/runtime.ts:2163-2182](../src/runtime.ts#L2163) |
-| `renderAgentPrompt` | 函数 | 否 | [src/runtime.ts:2184-2196](../src/runtime.ts#L2184) |
-| `renderTemplateForAgent` | 函数 | 否 | [src/runtime.ts:2198-2209](../src/runtime.ts#L2198) |
-| `parseCommandVariables` | 函数 | 否 | [src/runtime.ts:2211-2241](../src/runtime.ts#L2211) |
-| `isFlowValue` | 函数 | 否 | [src/runtime.ts:2243-2253](../src/runtime.ts#L2243) |
-| `isFlowValueRecord` | 函数 | 否 | [src/runtime.ts:2255-2262](../src/runtime.ts#L2255) |
-| `mergeParallelVariables` | 函数 | 否 | [src/runtime.ts:2264-2283](../src/runtime.ts#L2264) |
-| `replaceObject` | 函数 | 否 | [src/runtime.ts:2285-2290](../src/runtime.ts#L2285) |
-| `clone` | 函数 | 否 | [src/runtime.ts:2292-2294](../src/runtime.ts#L2292) |
+| `FactChanges` | 类型 | 否 | [src/runtime.ts:48-48](../src/runtime.ts#L48) |
+| `ObservationSpec` | 类型 | 否 | [src/runtime.ts:50-61](../src/runtime.ts#L50) |
+| `InMemoryRunStore` | 类 | 是 | [src/runtime.ts:63-229](../src/runtime.ts#L63) |
+| `InMemoryRunStore.createRun` | 方法 | 是 | [src/runtime.ts:70-84](../src/runtime.ts#L70) |
+| `InMemoryRunStore.commit` | 方法 | 是 | [src/runtime.ts:86-114](../src/runtime.ts#L86) |
+| `InMemoryRunStore.validateFactRecords` | 方法 | 否 | [src/runtime.ts:116-133](../src/runtime.ts#L116) |
+| `InMemoryRunStore.updateRun` | 方法 | 是 | [src/runtime.ts:135-138](../src/runtime.ts#L135) |
+| `InMemoryRunStore.getRun` | 方法 | 是 | [src/runtime.ts:140-143](../src/runtime.ts#L140) |
+| `InMemoryRunStore.getRunSnapshot` | 方法 | 是 | [src/runtime.ts:145-155](../src/runtime.ts#L145) |
+| `InMemoryRunStore.recordsFor` | 方法 | 否 | [src/runtime.ts:157-165](../src/runtime.ts#L157) |
+| `InMemoryRunStore.listRuns` | 方法 | 是 | [src/runtime.ts:167-171](../src/runtime.ts#L167) |
+| `InMemoryRunStore.listAllRuns` | 方法 | 是 | [src/runtime.ts:173-175](../src/runtime.ts#L173) |
+| `InMemoryRunStore.listRunningRuns` | 方法 | 是 | [src/runtime.ts:177-181](../src/runtime.ts#L177) |
+| `InMemoryRunStore.createNodeRun` | 方法 | 是 | [src/runtime.ts:183-187](../src/runtime.ts#L183) |
+| `InMemoryRunStore.updateNodeRun` | 方法 | 是 | [src/runtime.ts:189-193](../src/runtime.ts#L189) |
+| `InMemoryRunStore.listNodeRuns` | 方法 | 是 | [src/runtime.ts:195-200](../src/runtime.ts#L195) |
+| `InMemoryRunStore.listRouteDecisions` | 方法 | 是 | [src/runtime.ts:202-207](../src/runtime.ts#L202) |
+| `InMemoryRunStore.listParallelRounds` | 方法 | 是 | [src/runtime.ts:209-214](../src/runtime.ts#L209) |
+| `InMemoryRunStore.listRunRecoveries` | 方法 | 是 | [src/runtime.ts:216-221](../src/runtime.ts#L216) |
+| `InMemoryRunStore.listChildRuns` | 方法 | 是 | [src/runtime.ts:223-228](../src/runtime.ts#L223) |
+| `PersistedRuns` | 接口 | 否 | [src/runtime.ts:231-237](../src/runtime.ts#L231) |
+| `JsonFileRunStore` | 类 | 是 | [src/runtime.ts:240-399](../src/runtime.ts#L240) |
+| `JsonFileRunStore.load` | 方法 | 否 | [src/runtime.ts:251-265](../src/runtime.ts#L251) |
+| `JsonFileRunStore.loadPersisted` | 方法 | 否 | [src/runtime.ts:267-287](../src/runtime.ts#L267) |
+| `JsonFileRunStore.persist` | 方法 | 否 | [src/runtime.ts:289-301](../src/runtime.ts#L289) |
+| `JsonFileRunStore.mutate` | 方法 | 否 | [src/runtime.ts:303-315](../src/runtime.ts#L303) |
+| `JsonFileRunStore.ready` | 方法 | 否 | [src/runtime.ts:317-320](../src/runtime.ts#L317) |
+| `JsonFileRunStore.createRun` | 方法 | 是 | [src/runtime.ts:322-324](../src/runtime.ts#L322) |
+| `JsonFileRunStore.commit` | 方法 | 是 | [src/runtime.ts:326-328](../src/runtime.ts#L326) |
+| `JsonFileRunStore.updateRun` | 方法 | 是 | [src/runtime.ts:330-332](../src/runtime.ts#L330) |
+| `JsonFileRunStore.getRun` | 方法 | 是 | [src/runtime.ts:334-337](../src/runtime.ts#L334) |
+| `JsonFileRunStore.getRunSnapshot` | 方法 | 是 | [src/runtime.ts:339-344](../src/runtime.ts#L339) |
+| `JsonFileRunStore.listRuns` | 方法 | 是 | [src/runtime.ts:346-349](../src/runtime.ts#L346) |
+| `JsonFileRunStore.listAllRuns` | 方法 | 是 | [src/runtime.ts:351-354](../src/runtime.ts#L351) |
+| `JsonFileRunStore.listRunningRuns` | 方法 | 是 | [src/runtime.ts:356-359](../src/runtime.ts#L356) |
+| `JsonFileRunStore.createNodeRun` | 方法 | 是 | [src/runtime.ts:361-363](../src/runtime.ts#L361) |
+| `JsonFileRunStore.updateNodeRun` | 方法 | 是 | [src/runtime.ts:365-367](../src/runtime.ts#L365) |
+| `JsonFileRunStore.listNodeRuns` | 方法 | 是 | [src/runtime.ts:369-372](../src/runtime.ts#L369) |
+| `JsonFileRunStore.listRouteDecisions` | 方法 | 是 | [src/runtime.ts:374-379](../src/runtime.ts#L374) |
+| `JsonFileRunStore.listParallelRounds` | 方法 | 是 | [src/runtime.ts:381-386](../src/runtime.ts#L381) |
+| `JsonFileRunStore.listRunRecoveries` | 方法 | 是 | [src/runtime.ts:388-393](../src/runtime.ts#L388) |
+| `JsonFileRunStore.listChildRuns` | 方法 | 是 | [src/runtime.ts:395-398](../src/runtime.ts#L395) |
+| `ProcessCommandExecutor` | 类 | 是 | [src/runtime.ts:401-432](../src/runtime.ts#L401) |
+| `ProcessCommandExecutor.execute` | 方法 | 是 | [src/runtime.ts:402-431](../src/runtime.ts#L402) |
+| `FlowCoordinator` | 类 | 是 | [src/runtime.ts:434-1865](../src/runtime.ts#L434) |
+| `FlowCoordinator.run` | 方法 | 是 | [src/runtime.ts:472-527](../src/runtime.ts#L472) |
+| `FlowCoordinator.resume` | 方法 | 是 | [src/runtime.ts:530-541](../src/runtime.ts#L530) |
+| `FlowCoordinator.resumeRun` | 方法 | 否 | [src/runtime.ts:544-650](../src/runtime.ts#L544) |
+| `FlowCoordinator.continueRun` | 方法 | 否 | [src/runtime.ts:652-781](../src/runtime.ts#L652) |
+| `FlowCoordinator.executeParallel` | 方法 | 否 | [src/runtime.ts:783-893](../src/runtime.ts#L783) |
+| `FlowCoordinator.executeNode` | 方法 | 否 | [src/runtime.ts:895-926](../src/runtime.ts#L895) |
+| `FlowCoordinator.startNode` | 方法 | 否 | [src/runtime.ts:928-1028](../src/runtime.ts#L928) |
+| `FlowCoordinator.executePreparedNode` | 方法 | 否 | [src/runtime.ts:1030-1139](../src/runtime.ts#L1030) |
+| `FlowCoordinator.executeFlowReference` | 方法 | 否 | [src/runtime.ts:1142-1162](../src/runtime.ts#L1142) |
+| `FlowCoordinator.startChildRun` | 方法 | 否 | [src/runtime.ts:1164-1197](../src/runtime.ts#L1164) |
+| `FlowCoordinator.childOutcome` | 方法 | 否 | [src/runtime.ts:1200-1220](../src/runtime.ts#L1200) |
+| `FlowCoordinator.childResultVariables` | 方法 | 否 | [src/runtime.ts:1222-1238](../src/runtime.ts#L1222) |
+| `FlowCoordinator.coordinatorFor` | 方法 | 否 | [src/runtime.ts:1240-1251](../src/runtime.ts#L1240) |
+| `FlowCoordinator.resumeFlowReferenceNode` | 方法 | 否 | [src/runtime.ts:1254-1328](../src/runtime.ts#L1254) |
+| `FlowCoordinator.completeNode` | 方法 | 否 | [src/runtime.ts:1330-1385](../src/runtime.ts#L1330) |
+| `FlowCoordinator.selectRoute` | 方法 | 否 | [src/runtime.ts:1387-1425](../src/runtime.ts#L1387) |
+| `FlowCoordinator.enterParallel` | 方法 | 否 | [src/runtime.ts:1427-1475](../src/runtime.ts#L1427) |
+| `FlowCoordinator.completeRun` | 方法 | 否 | [src/runtime.ts:1477-1497](../src/runtime.ts#L1477) |
+| `FlowCoordinator.interruptNode` | 方法 | 否 | [src/runtime.ts:1499-1545](../src/runtime.ts#L1499) |
+| `FlowCoordinator.interruptActiveChildRuns` | 方法 | 否 | [src/runtime.ts:1548-1584](../src/runtime.ts#L1548) |
+| `FlowCoordinator.failInterruptedCommand` | 方法 | 否 | [src/runtime.ts:1586-1632](../src/runtime.ts#L1586) |
+| `FlowCoordinator.failNode` | 方法 | 否 | [src/runtime.ts:1634-1659](../src/runtime.ts#L1634) |
+| `FlowCoordinator.failRun` | 方法 | 否 | [src/runtime.ts:1661-1669](../src/runtime.ts#L1661) |
+| `FlowCoordinator.recordRecovery` | 方法 | 否 | [src/runtime.ts:1671-1693](../src/runtime.ts#L1671) |
+| `FlowCoordinator.requireParallelRound` | 方法 | 否 | [src/runtime.ts:1695-1711](../src/runtime.ts#L1695) |
+| `FlowCoordinator.destination` | 方法 | 否 | [src/runtime.ts:1713-1722](../src/runtime.ts#L1713) |
+| `FlowCoordinator.publishObservationChanges` | 方法 | 否 | [src/runtime.ts:1724-1806](../src/runtime.ts#L1724) |
+| `FlowCoordinator.publishObservation` | 方法 | 否 | [src/runtime.ts:1808-1837](../src/runtime.ts#L1808) |
+| `FlowCoordinator.commit` | 方法 | 否 | [src/runtime.ts:1839-1864](../src/runtime.ts#L1839) |
+| `FlowRuntimeError` | 类 | 否 | [src/runtime.ts:1867-1874](../src/runtime.ts#L1867) |
+| `now` | 函数 | 否 | [src/runtime.ts:1876-1878](../src/runtime.ts#L1876) |
+| `initializeVariables` | 函数 | 否 | [src/runtime.ts:1880-1906](../src/runtime.ts#L1880) |
+| `declaredResultVariables` | 函数 | 否 | [src/runtime.ts:1908-1913](../src/runtime.ts#L1908) |
+| `validateOutcomeVariables` | 函数 | 否 | [src/runtime.ts:1915-1940](../src/runtime.ts#L1915) |
+| `pickDeclaredGlobalVariables` | 函数 | 否 | [src/runtime.ts:1942-1951](../src/runtime.ts#L1942) |
+| `extractNextInput` | 函数 | 否 | [src/runtime.ts:1953-1963](../src/runtime.ts#L1953) |
+| `toFlowError` | 函数 | 否 | [src/runtime.ts:1965-1977](../src/runtime.ts#L1965) |
+| `fingerprintFlow` | 函数 | 否 | [src/runtime.ts:1979-2012](../src/runtime.ts#L1979) |
+| `normalizeRun` | 函数 | 否 | [src/runtime.ts:2014-2041](../src/runtime.ts#L2014) |
+| `normalizeNodeRun` | 函数 | 否 | [src/runtime.ts:2043-2054](../src/runtime.ts#L2043) |
+| `displayNodeName` | 函数 | 否 | [src/runtime.ts:2056-2060](../src/runtime.ts#L2056) |
+| `normalizeParallelRound` | 函数 | 否 | [src/runtime.ts:2062-2081](../src/runtime.ts#L2062) |
+| `renderAgentPrompt` | 函数 | 否 | [src/runtime.ts:2083-2095](../src/runtime.ts#L2083) |
+| `renderTemplateForAgent` | 函数 | 否 | [src/runtime.ts:2097-2108](../src/runtime.ts#L2097) |
+| `parseCommandVariables` | 函数 | 否 | [src/runtime.ts:2110-2140](../src/runtime.ts#L2110) |
+| `isFlowValue` | 函数 | 否 | [src/runtime.ts:2142-2152](../src/runtime.ts#L2142) |
+| `isFlowValueRecord` | 函数 | 否 | [src/runtime.ts:2154-2161](../src/runtime.ts#L2154) |
+| `mergeParallelVariables` | 函数 | 否 | [src/runtime.ts:2163-2182](../src/runtime.ts#L2163) |
+| `replaceObject` | 函数 | 否 | [src/runtime.ts:2184-2189](../src/runtime.ts#L2184) |
+| `clone` | 函数 | 否 | [src/runtime.ts:2191-2193](../src/runtime.ts#L2191) |
 
 ## [src/types.ts](../src/types.ts)
 
@@ -310,41 +317,42 @@
 | `NodeSession` | 接口 | 是 | [src/types.ts:117-121](../src/types.ts#L117) |
 | `UnifiedMessage` | 接口 | 是 | [src/types.ts:123-127](../src/types.ts#L123) |
 | `AgentOutcomeSubmission` | 接口 | 是 | [src/types.ts:129-133](../src/types.ts#L129) |
-| `AgentIntegrationAdapter` | 接口 | 是 | [src/types.ts:135-154](../src/types.ts#L135) |
-| `CommandResult` | 接口 | 是 | [src/types.ts:156-161](../src/types.ts#L156) |
-| `CommandExecutor` | 接口 | 是 | [src/types.ts:163-165](../src/types.ts#L163) |
-| `RunStatus` | 类型 | 是 | [src/types.ts:167-167](../src/types.ts#L167) |
-| `RunPhase` | 类型 | 是 | [src/types.ts:169-176](../src/types.ts#L169) |
-| `NodeRunStatus` | 类型 | 是 | [src/types.ts:178-178](../src/types.ts#L178) |
-| `ParallelRoundStatus` | 类型 | 是 | [src/types.ts:180-185](../src/types.ts#L180) |
-| `FlowErrorCategory` | 类型 | 是 | [src/types.ts:187-203](../src/types.ts#L187) |
-| `FlowError` | 接口 | 是 | [src/types.ts:205-208](../src/types.ts#L205) |
-| `NodeRunSource` | 类型 | 是 | [src/types.ts:210-222](../src/types.ts#L210) |
-| `NodeRunRecord` | 接口 | 是 | [src/types.ts:225-250](../src/types.ts#L225) |
-| `RouteDecisionRecord` | 接口 | 是 | [src/types.ts:253-263](../src/types.ts#L253) |
-| `ParallelRoundRecord` | 接口 | 是 | [src/types.ts:266-284](../src/types.ts#L266) |
-| `RunRecoveryRecord` | 接口 | 是 | [src/types.ts:286-294](../src/types.ts#L286) |
-| `FlowRunInput` | 接口 | 是 | [src/types.ts:296-298](../src/types.ts#L296) |
-| `FlowRunRecord` | 接口 | 是 | [src/types.ts:304-333](../src/types.ts#L304) |
-| `RunFactCommit` | 接口 | 是 | [src/types.ts:336-343](../src/types.ts#L336) |
-| `FlowRunSnapshot` | 接口 | 是 | [src/types.ts:346-352](../src/types.ts#L346) |
-| `TemplateContext` | 接口 | 是 | [src/types.ts:354-358](../src/types.ts#L354) |
-| `RunStore` | 接口 | 是 | [src/types.ts:360-378](../src/types.ts#L360) |
-| `FlowRunSummary` | 接口 | 是 | [src/types.ts:380-391](../src/types.ts#L380) |
-| `FlowRunLocation` | 类型 | 是 | [src/types.ts:393-405](../src/types.ts#L393) |
-| `FlowNodeEvidenceSummary` | 接口 | 是 | [src/types.ts:407-411](../src/types.ts#L407) |
-| `FlowNodeRunView` | 接口 | 是 | [src/types.ts:413-431](../src/types.ts#L413) |
-| `FlowRunHistory` | 接口 | 是 | [src/types.ts:434-442](../src/types.ts#L434) |
-| `FlowNodeEvidence` | 接口 | 是 | [src/types.ts:444-461](../src/types.ts#L444) |
-| `FlowNodeEvidenceReader` | 接口 | 是 | [src/types.ts:463-465](../src/types.ts#L463) |
-| `FlowNodeEvidenceAccessRequest` | 接口 | 是 | [src/types.ts:467-470](../src/types.ts#L467) |
-| `FlowNodeEvidenceAuthorizer` | 类型 | 是 | [src/types.ts:472-474](../src/types.ts#L472) |
-| `FlowRunInspectorApi` | 接口 | 是 | [src/types.ts:476-483](../src/types.ts#L476) |
-| `FlowObservationEventType` | 类型 | 是 | [src/types.ts:485-497](../src/types.ts#L485) |
-| `FlowObservationEvent` | 接口 | 是 | [src/types.ts:499-518](../src/types.ts#L499) |
-| `FlowObservationSubscription` | 接口 | 是 | [src/types.ts:520-522](../src/types.ts#L520) |
-| `FlowObservationPublisherApi` | 接口 | 是 | [src/types.ts:524-530](../src/types.ts#L524) |
-| `FlowObservationPublisherOptions` | 接口 | 是 | [src/types.ts:532-534](../src/types.ts#L532) |
+| `AgentExecutionContext` | 接口 | 是 | [src/types.ts:136-139](../src/types.ts#L136) |
+| `AgentIntegrationAdapter` | 接口 | 是 | [src/types.ts:141-163](../src/types.ts#L141) |
+| `CommandResult` | 接口 | 是 | [src/types.ts:165-170](../src/types.ts#L165) |
+| `CommandExecutor` | 接口 | 是 | [src/types.ts:172-174](../src/types.ts#L172) |
+| `RunStatus` | 类型 | 是 | [src/types.ts:176-176](../src/types.ts#L176) |
+| `RunPhase` | 类型 | 是 | [src/types.ts:178-185](../src/types.ts#L178) |
+| `NodeRunStatus` | 类型 | 是 | [src/types.ts:187-187](../src/types.ts#L187) |
+| `ParallelRoundStatus` | 类型 | 是 | [src/types.ts:189-194](../src/types.ts#L189) |
+| `FlowErrorCategory` | 类型 | 是 | [src/types.ts:196-212](../src/types.ts#L196) |
+| `FlowError` | 接口 | 是 | [src/types.ts:214-217](../src/types.ts#L214) |
+| `NodeRunSource` | 类型 | 是 | [src/types.ts:219-231](../src/types.ts#L219) |
+| `NodeRunRecord` | 接口 | 是 | [src/types.ts:234-259](../src/types.ts#L234) |
+| `RouteDecisionRecord` | 接口 | 是 | [src/types.ts:262-272](../src/types.ts#L262) |
+| `ParallelRoundRecord` | 接口 | 是 | [src/types.ts:275-293](../src/types.ts#L275) |
+| `RunRecoveryRecord` | 接口 | 是 | [src/types.ts:295-303](../src/types.ts#L295) |
+| `FlowRunInput` | 接口 | 是 | [src/types.ts:305-307](../src/types.ts#L305) |
+| `FlowRunRecord` | 接口 | 是 | [src/types.ts:313-342](../src/types.ts#L313) |
+| `RunFactCommit` | 接口 | 是 | [src/types.ts:345-352](../src/types.ts#L345) |
+| `FlowRunSnapshot` | 接口 | 是 | [src/types.ts:355-361](../src/types.ts#L355) |
+| `TemplateContext` | 接口 | 是 | [src/types.ts:363-367](../src/types.ts#L363) |
+| `RunStore` | 接口 | 是 | [src/types.ts:369-387](../src/types.ts#L369) |
+| `FlowRunSummary` | 接口 | 是 | [src/types.ts:389-400](../src/types.ts#L389) |
+| `FlowRunLocation` | 类型 | 是 | [src/types.ts:402-414](../src/types.ts#L402) |
+| `FlowNodeEvidenceSummary` | 接口 | 是 | [src/types.ts:416-420](../src/types.ts#L416) |
+| `FlowNodeRunView` | 接口 | 是 | [src/types.ts:422-440](../src/types.ts#L422) |
+| `FlowRunHistory` | 接口 | 是 | [src/types.ts:443-451](../src/types.ts#L443) |
+| `FlowNodeEvidence` | 接口 | 是 | [src/types.ts:453-470](../src/types.ts#L453) |
+| `FlowNodeEvidenceReader` | 接口 | 是 | [src/types.ts:472-474](../src/types.ts#L472) |
+| `FlowNodeEvidenceAccessRequest` | 接口 | 是 | [src/types.ts:476-479](../src/types.ts#L476) |
+| `FlowNodeEvidenceAuthorizer` | 类型 | 是 | [src/types.ts:481-483](../src/types.ts#L481) |
+| `FlowRunInspectorApi` | 接口 | 是 | [src/types.ts:485-492](../src/types.ts#L485) |
+| `FlowObservationEventType` | 类型 | 是 | [src/types.ts:494-506](../src/types.ts#L494) |
+| `FlowObservationEvent` | 接口 | 是 | [src/types.ts:508-527](../src/types.ts#L508) |
+| `FlowObservationSubscription` | 接口 | 是 | [src/types.ts:529-531](../src/types.ts#L529) |
+| `FlowObservationPublisherApi` | 接口 | 是 | [src/types.ts:533-539](../src/types.ts#L533) |
+| `FlowObservationPublisherOptions` | 接口 | 是 | [src/types.ts:541-543](../src/types.ts#L541) |
 
 ## [src/variables.ts](../src/variables.ts)
 

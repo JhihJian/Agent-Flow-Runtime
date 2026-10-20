@@ -2,9 +2,9 @@
 
 ## 边界与能力
 
-`src/pi.ts#PiAgentIntegrationAdapter` 适配 SDK session 创建、接管、释放、prompt、结构化结果工具和节点消息读取；CLI bridge 使用当前 Pi session。`src/extension.ts#flowExtension` 注册 flags、`/flow`、结果和 inspection tools、会话命令及 lifecycle handlers，再装配 Loader、Store、Coordinator、Inspector 与 Publisher。
+`src/pi.ts#PiAgentIntegrationAdapter` 适配 SDK session 创建、接管、释放、prompt、结构化结果工具和节点消息读取；CLI bridge 使用当前 Pi session。`src/extension.ts#flowExtension` 注册 flags、`/flow`、结果和 inspection tools、会话命令及 lifecycle handlers，再装配 Loader、Store、Coordinator、Inspector 与 Publisher。Pi 宿主是可替换的 Agent 执行适配层，不拥有 Flow 路由，也不负责定义可选能力模块。
 
-Runtime 只依赖 `src/types.ts#AgentIntegrationAdapter`，不由 Pi adapter 解析 Flow 或选择路线。SDK/CLI 结果名和变量还由 Runtime 再次校验。CLI 结果在 `finalizeCliTurn` 后确认；有待确认结果时 Extension 阻止相应 compact。
+Runtime 只依赖 `src/types.ts#AgentIntegrationAdapter` 和中性的 `src/types.ts#AgentExecutionContext`，不由 Pi adapter 解析 Flow 或选择路线。SDK/CLI 结果名和变量还由 Runtime 再次校验。可选 Agent 能力模块应在 Pi adapter 外部组合，不应把 Profile、工具和 Skill 配置写入 Runtime。CLI 结果在 `finalizeCliTurn` 后确认；有待确认结果时 Extension 阻止相应 compact。
 
 ## 状态、依赖与副作用
 

@@ -2,7 +2,7 @@
 
 ## 包与出口
 
-`package.json#exports` 声明 SDK 出口 `dist/index.js`/`dist/extension.js`；`package.json#pi.extensions` 声明 Pi extension source，`package.json#pi.skills` 声明 bundled skill；`src/index.ts` 导出 SDK-facing modules。
+`package.json#exports` 声明 Core SDK 出口 `dist/index.js`、Pi 适配器出口 `dist/pi.js` 和 Extension 出口 `dist/extension.js`；`package.json#pi.extensions` 声明 Pi extension source，`package.json#pi.skills` 声明 bundled skill；`src/index.ts` 只导出 Core SDK-facing modules。
 
 构建配置由 `tsconfig.build.json#compilerOptions` 和 `tsconfig.build.json#include` 定义，只包括 `src/**/*.ts` 并输出 `dist`；开发配置 `tsconfig.json#include` 还包括 test/tools。
 
