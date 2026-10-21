@@ -10,5 +10,5 @@
 - **失败/恢复**：分支中断调用命令中断失败路径而不重放；变量写入冲突、join/模板/路由或存储失败可终结 round/run。
 - **后置结果**：round 保存分支 NodeRun IDs、分支状态、变量 patches、join NodeRun 和 join outcome。
 - **副作用**：并行 spawn 外部命令、写 Store facts、发布 round 事件。
-- **证据**：`src/parser.ts#validateParallel`、`src/runtime.ts#FlowCoordinator.enterParallel`、`src/runtime.ts#FlowCoordinator.executeParallel`、`src/runtime.ts#FlowCoordinator.completeNode`、`src/runtime.ts#FlowCoordinator.selectRoute`、`src/runtime.ts#mergeParallelVariables`。
-- **测试预言机**：分支隔离和非法 join 的直接断言见 `test/parser.test.ts:340-358`、`test/parser.test.ts:368-413`；join stdin 和本轮分支 NodeRun 的直接断言见 `test/runtime.test.ts:225-242`；命令非零仍完成 round 的直接断言见 `test/correctness.test.ts:425-449`。本轮未执行。
+- **证据**：`src/definition/parser.ts#validateParallel`、`src/execution/runtime.ts#FlowCoordinator.enterParallel`、`src/execution/runtime.ts#FlowCoordinator.executeParallel`、`src/execution/runtime.ts#FlowCoordinator.completeNode`、`src/execution/runtime.ts#FlowCoordinator.selectRoute`、`src/execution/runtime.ts#mergeParallelVariables`。
+- **测试预言机**：分支隔离和非法 join 的直接断言见 `test/parser.test.ts:340-358`、`test/parser.test.ts:368-413`；join stdin 和本轮分支 NodeRun 的直接断言见 `test/runtime.test.ts:225-242`；命令非零仍完成 round 的直接断言见 `test/correctness.test.ts:425-449`。

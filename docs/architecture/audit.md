@@ -1,45 +1,18 @@
-# 独立审计记录
+# 架构基线审计摘要
 
-## 审计结论
+架构基线以当前源码、配置和测试定位为依据，区分实现事实、结构归纳与待确认事项。顶层架构提供系统边界和不变量；业务流、模块、术语、决策及来源映射提供分层细节。
 
-**通过，范围为静态源码架构审计。**
+## 复核范围
 
-本次先从源码和配置建立架构模型，再以独立的第二遍逐条复核模块边界、业务流、状态、持久化和宿主装配。审计未执行构建、测试、集成或生成式校验命令，因此“通过”不包含可执行验证通过含义。
+- `src/contracts/types.ts`、`src/contracts/variables.ts`、`src/definition/parser.ts`、`src/definition/flow-loader.ts`、`src/definition/directory.ts`
+- `src/execution/runtime.ts`、`src/execution/agent.ts`、`src/observability/index.ts`、`src/pi/adapter.ts`、`src/pi/extension.ts`、`src/pi/cli-state.ts`
+- `package.json`、TypeScript 配置、源码索引工具及发布 workflow
 
-## 审计范围
+架构结论及其源码、配置和测试定位见[来源映射](source-map.md)。测试文件中的断言定位不代表测试已经执行或通过。
 
-- `src/types.ts`、`variables.ts`、`parser.ts`、`flow-loader.ts`、`directory.ts`
-- `src/runtime.ts` 的 Store、命令执行、FlowCoordinator，以及 `src/agent.ts` 的 AgentRunModel
-- `src/observability.ts`、`src/pi.ts`、`src/extension.ts`、`src/cli-state.ts`
-- `package.json`、TypeScript 配置、源码索引工具、发布 workflow
-- 既有 `docs/*.md`、测试文件和 Flow fixture，仅作为交叉证据，不作为已执行结果
+## 待确认边界
 
-## 独立复核项目
-
-| 项目 | 结果 |
-| --- | --- |
-| 顶层系统定位和模块边界 | 通过，结论能回链到类型和调用关系 |
-| Flow 解析、资源和引用闭包 | 通过，未把目录命名或设计文档当作唯一事实 |
-| 普通节点、结果和变量作用域 | 通过，区分全局变量、下一跳变量和分支变量 |
-| 并行分支和汇合 | 通过，确认当前只允许命令分支且以轮次记录隔离 |
-| 子 Flow 输入、输出、父子 Run 和恢复 | 通过，确认输出由父节点声明约束 |
-| Agent、命令和 Pi 会话边界 | 通过，确认协调器不直接依赖 Pi SDK |
-| 中断和恢复 | 通过，区分 Agent 重试、命令不重放和 Pi 自动恢复筛选 |
-| Store、sequence、快照和事件顺序 | 通过，保留单进程 JSON 和 best-effort 观测边界 |
-| 证据授权和敏感数据风险 | 通过，已显式记录默认放行和宿主责任 |
-| 架构文档抽象层级 | 通过，顶层未展开接口字段、算法全集或测试细节 |
-
-## 审计保留项
-
-以下不是本次审计阻断项，但不能被文档误读为已解决：
-
-1. JsonFileRunStore 没有跨进程协调，是否需要由部署约束或后续 Store 实现决定。
-2. 命令执行没有超时、取消和输出预算，需由运行环境和安全策略确认。
-3. Pi 自动恢复入口只筛选 running，interrupted 的产品策略仍待确认。
-4. evidence 默认授权器放行，宿主必须根据数据敏感度注入授权。
-5. 发布 workflow 与推荐 release 入口范围不一致，属于工程门禁风险。
-6. 本次未运行任何构建、测试、集成或源码索引校验命令。
-
-## 审计状态
-
-本记录表示静态源码审计已完成。它不替代构建、测试、集成验证，也不替代业务和运维策略确认。
+- `JsonFileRunStore` 没有跨进程协调，多进程并发要求由部署策略决定。
+- 命令执行没有超时、取消或输出预算，资源限制由运行环境和安全策略决定。
+- evidence 默认授权器放行，访问授权与脱敏策略由宿主决定。
+- 自动恢复只扫描 `running` Run，`interrupted` 的自动恢复策略由产品行为决定。

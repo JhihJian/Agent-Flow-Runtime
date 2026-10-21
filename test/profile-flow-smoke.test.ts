@@ -1,10 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { parseFlow } from "../src/parser.ts";
-import {
-	AgentRunModel,
-	FlowCoordinator,
-	InMemoryRunStore,
-} from "../src/runtime.ts";
 import type {
 	AgentCapabilityDeclaration,
 	AgentConnection,
@@ -14,7 +8,13 @@ import type {
 	NodeSession,
 	OutcomeOption,
 	UnifiedMessage,
-} from "../src/types.ts";
+} from "../src/contracts/types.ts";
+import { parseFlow } from "../src/definition/parser.ts";
+import {
+	AgentRunModel,
+	FlowCoordinator,
+	InMemoryRunStore,
+} from "../src/execution/runtime.ts";
 
 const smokeFlow = `---
 name: Profile 冒烟流程

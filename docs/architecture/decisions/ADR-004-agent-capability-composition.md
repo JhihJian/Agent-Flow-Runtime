@@ -38,8 +38,8 @@ Runtime 需要让 Flow 明确控制 Agent 可用的业务工具和 Skill，同�
 
 ## 证据
 
-- `src/types.ts#AgentCapabilityDeclaration` 定义 Flow 与宿主之间的最小声明。
-- `src/agent-capabilities.ts` 负责声明校验和默认空能力。
-- `src/agent.ts#AgentRunModel` 保存 Run 级会话绑定。
-- `src/runtime.ts#fingerprintFlow` 把能力变化纳入恢复校验。
-- `src/pi.ts#PiAgentIntegrationAdapter` 实现 Pi SDK 装配并拒绝无法隔离的 CLI 路径。
+- `src/contracts/types.ts#AgentCapabilityDeclaration` 定义 Flow 与宿主之间的最小声明。
+- `src/contracts/agent-capabilities.ts` 负责声明校验和默认空能力。
+- `src/execution/agent.ts#AgentRunModel` 保存 Run 级会话绑定。
+- `src/execution/runtime.ts#fingerprintFlow` 把能力变化纳入恢复校验。
+- `src/pi/adapter.ts#PiAgentIntegrationAdapter` 实现 Pi SDK 装配并拒绝无法隔离的 CLI 路径。

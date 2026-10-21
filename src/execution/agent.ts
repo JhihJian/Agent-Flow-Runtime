@@ -1,4 +1,4 @@
-import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
+import { normalizeAgentCapabilities } from "../contracts/agent-capabilities.ts";
 import type {
 	AgentAssemblyIdentity,
 	AgentCapabilityDeclaration,
@@ -9,7 +9,7 @@ import type {
 	NodeOutcome,
 	NodeSession,
 	OutcomeOption,
-} from "./types.ts";
+} from "../contracts/types.ts";
 
 /**
  * Run-scoped Agent binding and node execution orchestration.

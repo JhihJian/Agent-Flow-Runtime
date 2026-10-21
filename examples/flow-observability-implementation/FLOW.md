@@ -44,11 +44,11 @@ flowchart TD
 每次提交开发结果时，在 variables.实现记录 中更新结论、修改范围、验证证据或返工原因。
 
 请先阅读：
-- docs/flow-observability-design.md
-- docs/agent-flow-runtime-architecture.md
-- src/types.ts
-- src/runtime.ts
-- src/extension.ts
+- docs/architecture/ARCHITECTURE.md
+- docs/architecture/modules/observability.md
+- src/contracts/types.ts
+- src/execution/runtime.ts
+- src/pi/extension.ts
 
 明确以下内容：
 - 一次 Run 的完整历史应包含哪些信息。

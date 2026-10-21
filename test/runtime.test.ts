@@ -1,12 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseFlow } from "../src/parser.ts";
-import {
-	AgentRunModel,
-	FlowCoordinator,
-	InMemoryRunStore,
-} from "../src/runtime.ts";
 import type {
 	AgentConnection,
 	AgentIntegrationAdapter,
@@ -18,7 +12,13 @@ import type {
 	NodeSession,
 	OutcomeOption,
 	UnifiedMessage,
-} from "../src/types.ts";
+} from "../src/contracts/types.ts";
+import { parseFlow } from "../src/definition/parser.ts";
+import {
+	AgentRunModel,
+	FlowCoordinator,
+	InMemoryRunStore,
+} from "../src/execution/runtime.ts";
 
 const fixture = (name: string) =>
 	readFile(join(import.meta.dirname, "fixtures", name, "FLOW.md"), "utf8");

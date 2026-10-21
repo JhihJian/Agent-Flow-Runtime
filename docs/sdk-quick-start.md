@@ -266,4 +266,4 @@ const resumed = await coordinator.resume(runId, {
 
 - 编写 Flow 文件：[Flow 规范](flow-spec.md)
 - 理解运行模型：[Flow 概览](flow-overview.md)
-- Pi 适配器实现细节：[Pi Agent 集成适配器实现设计](pi-agent-integration-adapter-design.md)
+- 了解系统边界：[架构基线](architecture/ARCHITECTURE.md)

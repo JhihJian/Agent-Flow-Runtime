@@ -22,9 +22,9 @@ test("为每个关键函数生成唯一的位置链接", async () => {
 	assert.equal(locations.length, 9);
 	assert.equal(rendered, guide);
 	assert.equal(renderSourceIndex(root), index);
-	assert.match(rendered, /src\/runtime\.ts:/);
-	assert.match(rendered, /src\/extension\.ts:/);
-	assert.match(rendered, /\.\.\/src\/pi\.ts#L/);
+	assert.match(rendered, /src\/execution\/runtime\.ts:/);
+	assert.match(rendered, /src\/pi\/extension\.ts:/);
+	assert.match(rendered, /\.\.\/src\/pi\/adapter\.ts#L/);
 });
 
 test("拒绝缺少受控位置标记的阅读区块", async () => {
@@ -81,11 +81,11 @@ test("拒绝未登记的阅读图区块", async () => {
 test("索引覆盖全部源码模块和关键运行时符号", () => {
 	const index = renderSourceIndex(root);
 
-	assert.match(index, /## \[src\/runtime\.ts\]/);
+	assert.match(index, /## \[src\/execution\/runtime\.ts\]/);
 	assert.match(index, /`FlowCoordinator\.run`/);
 	assert.match(
 		index,
 		/`PiAgentIntegrationAdapter\.createSdkConnection` \| 方法 \| 否 \|/,
 	);
-	assert.match(index, /## \[src\/parser\.ts\]/);
+	assert.match(index, /## \[src\/definition\/parser\.ts\]/);
 });

@@ -2,18 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { AgentRunModel } from "./agent.ts";
-import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
-import {
-	resolveCommandResources,
-	resolvePromptResources,
-} from "./flow-loader.ts";
-import {
-	FLOW_REFERENCE_FAILURE_RESULT,
-	FLOW_REFERENCE_SUCCESS_RESULT,
-	renderCommandRequest,
-	renderTemplate,
-} from "./parser.ts";
+import { normalizeAgentCapabilities } from "../contracts/agent-capabilities.ts";
 import type {
 	AgentProfileReference,
 	CommandExecutor,
@@ -42,8 +31,22 @@ import type {
 	RunFactCommit,
 	RunRecoveryRecord,
 	RunStore,
-} from "./types.ts";
-import { validateVariableName, validateVariables } from "./variables.ts";
+} from "../contracts/types.ts";
+import {
+	validateVariableName,
+	validateVariables,
+} from "../contracts/variables.ts";
+import {
+	resolveCommandResources,
+	resolvePromptResources,
+} from "../definition/flow-loader.ts";
+import {
+	FLOW_REFERENCE_FAILURE_RESULT,
+	FLOW_REFERENCE_SUCCESS_RESULT,
+	renderCommandRequest,
+	renderTemplate,
+} from "../definition/parser.ts";
+import type { AgentRunModel } from "./agent.ts";
 
 export { AgentRunModel } from "./agent.ts";
 
@@ -2194,7 +2197,7 @@ function parseCommandVariables(
 	}
 }
 
-function isFlowValue(value: unknown): value is import("./types.ts").FlowValue {
+function isFlowValue(value: unknown): value is FlowValue {
 	if (
 		value === null ||
 		typeof value === "string" ||

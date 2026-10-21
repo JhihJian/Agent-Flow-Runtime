@@ -10,5 +10,5 @@
 - **失败/恢复**：快照读取失败则撤销订阅并抛错；Publisher 不存储、补发或跨进程广播断线事件，客户端重连应重新读取 snapshot。
 - **后置结果**：只读 history/evidence 和实时通知，不修改 Flow/Run，不选择路由。
 - **副作用**：listener、可选 evidence reader 和宿主消息发送；默认 authorizer 当前为放行策略，权限策略仍属待确认事项。
-- **证据**：`src/observability.ts#FlowObservationPublisher`、`src/observability.ts#FlowRunInspector`、`src/observability.ts#FlowRuntime.openRunObservation`、`src/extension.ts#flowEventMessage`。
-- **测试预言机**：成功提交后的事件顺序和取消订阅见 `test/correctness.test.ts:724-753`；Store 提交失败不发布未保存成功事件见 `test/correctness.test.ts:863-866`；订阅竞态只转发水位之后事件见 `test/correctness.test.ts:919-927`。本轮未执行。
+- **证据**：`src/observability/index.ts#FlowObservationPublisher`、`src/observability/index.ts#FlowRunInspector`、`src/observability/index.ts#FlowRuntime.openRunObservation`、`src/pi/extension.ts#flowEventMessage`。
+- **测试预言机**：成功提交后的事件顺序和取消订阅见 `test/correctness.test.ts:724-753`；Store 提交失败不发布未保存成功事件见 `test/correctness.test.ts:863-866`；订阅竞态只转发水位之后事件见 `test/correctness.test.ts:919-927`。

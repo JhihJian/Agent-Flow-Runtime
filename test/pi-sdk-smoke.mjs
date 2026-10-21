@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PiAgentIntegrationAdapter } from "../dist/pi.js";
+import { PiAgentIntegrationAdapter } from "../dist/pi/adapter.js";
 
 const root = await mkdtemp(join(tmpdir(), "flow-sdk-"));
 try {

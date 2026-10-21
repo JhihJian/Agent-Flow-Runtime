@@ -2,24 +2,24 @@
 
 ## 系统边界
 
-本文描述源码版本 `26eb4e604e54472dd1938f92671c89d74d1554ab`（package `0.2.1`）可证的当前架构。本文区分事实、结构推断和待确认事项。本轮未执行构建、测试、检查或 source-index 命令；产品目的、生产部署和外部 provider 行为不由源码确定。
+本文描述当前源码可复核的系统边界、模块职责和关键不变量，并区分实现事实、结构推断和待确认事项。构建、测试和发布入口以 `package.json` 为准；产品目的、生产部署和外部 provider 行为不由源码确定。
 
 ## 核心对象
 
-`FlowDefinition` 是静态图；`FlowPackage` 加入入口和已校验资源；`LoadedFlow` 再包含可传递到达的 Flow 引用闭包。`FlowRunRecord` 保存一次运行的当前状态，`NodeRunRecord` 保存一次节点访问；同一记录在生命周期内可更新，每次新访问都有独立 ID。路由、并行轮次和恢复分别保存为 RouteDecision、ParallelRound、RunRecovery facts。父子 Run 通过 parent IDs 关联。类型来源：`src/types.ts#FlowDefinition`、`src/types.ts#FlowPackage`、`src/types.ts#LoadedFlow`、`src/types.ts#FlowRunRecord`、`src/types.ts#NodeRunRecord`。
+`FlowDefinition` 是静态图；`FlowPackage` 加入入口和已校验资源；`LoadedFlow` 再包含可传递到达的 Flow 引用闭包。`FlowRunRecord` 保存一次运行的当前状态，`NodeRunRecord` 保存一次节点访问；同一记录在生命周期内可更新，每次新访问都有独立 ID。路由、并行轮次和恢复分别保存为 RouteDecision、ParallelRound、RunRecovery facts。父子 Run 通过 parent IDs 关联。类型来源：`src/contracts/types.ts#FlowDefinition`、`src/contracts/types.ts#FlowPackage`、`src/contracts/types.ts#LoadedFlow`、`src/contracts/types.ts#FlowRunRecord`、`src/contracts/types.ts#NodeRunRecord`。
 
 FlowDefinition 还保存 Flow 级 `AgentCapabilityDeclaration`。未声明时工具和 Skill 为空。Runtime 只转发逻辑名称，具体能力由宿主会话装配；`submit_flow_outcome` 是始终注入的 Runtime 协议工具，不属于业务能力。详见[Agent 能力声明](agent-capability-composition.md)。
 
-全局变量属于 Run；结果变量必须符合当前结果声明，并且只有其中的下一跳变量进入后继节点 input。并行分支输出按 round 和 branch 隔离。运行时校验由 `src/runtime.ts#initializeVariables`、`src/runtime.ts#validateOutcomeVariables`、`src/runtime.ts#extractNextInput` 和 `src/variables.ts#validateVariables` 负责。
+全局变量属于 Run；结果变量必须符合当前结果声明，并且只有其中的下一跳变量进入后继节点 input。并行分支输出按 round 和 branch 隔离。运行时校验由 `src/execution/runtime.ts#initializeVariables`、`src/execution/runtime.ts#validateOutcomeVariables`、`src/execution/runtime.ts#extractNextInput` 和 `src/contracts/variables.ts#validateVariables` 负责。
 
 ## 主要流程
 
-1. Extension 或 SDK 提供路径和启动变量；Loader 读取并校验定义、动作实际引用的资源，然后加载引用闭包。入口：`src/flow-loader.ts#loadFlow`、`src/flow-loader.ts#loadFlowPackage`。
-2. Coordinator 先校验启动变量，再创建 Run；输入错误在创建 Run 前结束，不留下 Run 或 NodeRun。运行入口：`src/runtime.ts#FlowCoordinator.run`、`src/runtime.ts#initializeVariables`。
-3. 节点动作由 Agent、命令或子 Flow 适配器执行；结果校验后提交 NodeRun 和路由事实。命令非零退出仍保留 CommandResult failure，命令业务结果固定为“已执行”。执行入口：`src/runtime.ts#FlowCoordinator.executePreparedNode`。
-4. 并行入口创建 ParallelRound，分支命令并行执行；join 完成后仍由普通的 `completeNode` 和 `selectRoute` 继续路由。入口：`src/runtime.ts#FlowCoordinator.executeParallel`、`src/runtime.ts#FlowCoordinator.completeNode`、`src/runtime.ts#FlowCoordinator.selectRoute`。
-5. 恢复按动作分类：Agent 生成带 retryOf 的新访问，命令中断不重放，子 Run 随父 Run 恢复。恢复入口：`src/runtime.ts#FlowCoordinator.resume`、`src/runtime.ts#FlowCoordinator.resumeRun`。
-6. Store 提交成功后才发布进程内通知；Inspector 提供只读历史和 evidence。入口：`src/runtime.ts#FlowCoordinator.commit`、`src/observability.ts#FlowRunInspector`、`src/observability.ts#FlowRuntime.openRunObservation`。
+1. Extension 或 SDK 提供路径和启动变量；Loader 读取并校验定义、动作实际引用的资源，然后加载引用闭包。入口：`src/definition/flow-loader.ts#loadFlow`、`src/definition/flow-loader.ts#loadFlowPackage`。
+2. Coordinator 先校验启动变量，再创建 Run；输入错误在创建 Run 前结束，不留下 Run 或 NodeRun。运行入口：`src/execution/runtime.ts#FlowCoordinator.run`、`src/execution/runtime.ts#initializeVariables`。
+3. 节点动作由 Agent、命令或子 Flow 适配器执行；结果校验后提交 NodeRun 和路由事实。命令非零退出仍保留 CommandResult failure，命令业务结果固定为“已执行”。执行入口：`src/execution/runtime.ts#FlowCoordinator.executePreparedNode`。
+4. 并行入口创建 ParallelRound，分支命令并行执行；join 完成后仍由普通的 `completeNode` 和 `selectRoute` 继续路由。入口：`src/execution/runtime.ts#FlowCoordinator.executeParallel`、`src/execution/runtime.ts#FlowCoordinator.completeNode`、`src/execution/runtime.ts#FlowCoordinator.selectRoute`。
+5. 恢复按动作分类：Agent 生成带 retryOf 的新访问，命令中断不重放，子 Run 随父 Run 恢复。恢复入口：`src/execution/runtime.ts#FlowCoordinator.resume`、`src/execution/runtime.ts#FlowCoordinator.resumeRun`。
+6. Store 提交成功后才发布进程内通知；Inspector 提供只读历史和 evidence。入口：`src/execution/runtime.ts#FlowCoordinator.commit`、`src/observability/index.ts#FlowRunInspector`、`src/observability/index.ts#FlowRuntime.openRunObservation`。
 
 详情见[业务流](business-flows/README.md)。
 

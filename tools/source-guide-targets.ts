@@ -12,21 +12,21 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "start-flow",
 		title: "启动 Flow",
-		file: "src/extension.ts",
+		file: "src/pi/extension.ts",
 		kind: "function",
 		name: "startFlow",
 	},
 	{
 		id: "parse-flow",
 		title: "解析 Flow",
-		file: "src/parser.ts",
+		file: "src/definition/parser.ts",
 		kind: "function",
 		name: "parseFlow",
 	},
 	{
 		id: "coordinator-run",
 		title: "驱动一次运行",
-		file: "src/runtime.ts",
+		file: "src/execution/runtime.ts",
 		kind: "method",
 		className: "FlowCoordinator",
 		name: "run",
@@ -34,7 +34,7 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "execute-node",
 		title: "执行单个节点",
-		file: "src/runtime.ts",
+		file: "src/execution/runtime.ts",
 		kind: "method",
 		className: "FlowCoordinator",
 		name: "executeNode",
@@ -42,7 +42,7 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "execute-parallel",
 		title: "执行并行分支",
-		file: "src/runtime.ts",
+		file: "src/execution/runtime.ts",
 		kind: "method",
 		className: "FlowCoordinator",
 		name: "executeParallel",
@@ -50,7 +50,7 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "execute-flow-reference",
 		title: "执行 Flow 引用节点",
-		file: "src/runtime.ts",
+		file: "src/execution/runtime.ts",
 		kind: "method",
 		className: "FlowCoordinator",
 		name: "executeFlowReference",
@@ -58,7 +58,7 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "agent-execute-node",
 		title: "管理 Agent 节点",
-		file: "src/agent.ts",
+		file: "src/execution/agent.ts",
 		kind: "method",
 		className: "AgentRunModel",
 		name: "executeNode",
@@ -66,7 +66,7 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "pi-execute-node",
 		title: "执行 Pi 节点",
-		file: "src/pi.ts",
+		file: "src/pi/adapter.ts",
 		kind: "method",
 		className: "PiAgentIntegrationAdapter",
 		name: "executeNode",
@@ -74,7 +74,7 @@ export const sourceGuideTargets: readonly SourceGuideTarget[] = [
 	{
 		id: "finalize-cli-turn",
 		title: "提交 CLI 节点结果",
-		file: "src/pi.ts",
+		file: "src/pi/adapter.ts",
 		kind: "method",
 		className: "PiAgentIntegrationAdapter",
 		name: "finalizeCliTurn",

@@ -6,9 +6,9 @@
 
 ## 能力与实体
 
-`src/parser.ts#parseFlow` 解析 YAML metadata、唯一 Mermaid TD 图、工作节点 action/results、变量表和 successors；`src/parser.ts#validateAndWireGraph`、`src/parser.ts#validateParallel`、`src/parser.ts#validateTemplates` 验证图连通性、模板作用域和 parallel join。
+`src/definition/parser.ts#parseFlow` 解析 YAML metadata、唯一 Mermaid TD 图、工作节点 action/results、变量表和 successors；`src/definition/parser.ts#validateAndWireGraph`、`src/definition/parser.ts#validateParallel`、`src/definition/parser.ts#validateTemplates` 验证图连通性、模板作用域和 parallel join。
 
-`src/flow-loader.ts#loadFlow`、`src/flow-loader.ts#loadFlowPackage` 检查入口与 realpath，解析资源并递归 sibling Flow closure；`src/flow-loader.ts#validatePackageResources` 只检查动作实际引用的 references/scripts 资源；`src/directory.ts` 提供目录发现。
+`src/definition/flow-loader.ts#loadFlow`、`src/definition/flow-loader.ts#loadFlowPackage` 检查入口与 realpath，解析资源并递归 sibling Flow closure；`src/definition/flow-loader.ts#validatePackageResources` 只检查动作实际引用的 references/scripts 资源；`src/definition/directory.ts` 提供目录发现。
 
 ## 依赖与规则
 
@@ -20,4 +20,4 @@ Parser 依赖 types 和变量校验；Loader 调 Parser，并产出 FlowPackage/
 
 ## 代码与测试映射
 
-代码映射为 `src/parser.ts#parseFlow`、`src/flow-loader.ts#loadFlow`、`src/flow-loader.ts#loadFlowPackage`、`src/directory.ts`。直接断言见 `test/parser.test.ts:266-294`、`test/parser.test.ts:340-413`、`test/flow-reference.test.ts:958-1058`；动作资源精确范围无本次核对的直接测试断言。本轮未执行。
+代码映射为 `src/definition/parser.ts#parseFlow`、`src/definition/flow-loader.ts#loadFlow`、`src/definition/flow-loader.ts#loadFlowPackage`、`src/definition/directory.ts`。直接断言见 `test/parser.test.ts:266-294`、`test/parser.test.ts:340-413`、`test/flow-reference.test.ts:958-1058`；动作资源边界由 `flow-package.test.ts` 和 `flow-reference.test.ts` 覆盖。

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { CommandRequest, CommandResult } from "../src/contracts/types.ts";
 import {
 	parseFlow,
 	renderCommandRequest,
 	renderTemplate,
-} from "../src/parser.ts";
+} from "../src/definition/parser.ts";
 import {
 	FlowCoordinator,
 	InMemoryRunStore,
 	ProcessCommandExecutor,
-} from "../src/runtime.ts";
-import type { CommandRequest, CommandResult } from "../src/types.ts";
+} from "../src/execution/runtime.ts";
 
 class RecordingCommands extends ProcessCommandExecutor {
 	readonly requests: CommandRequest[] = [];
@@ -23,7 +23,7 @@ class RecordingCommands extends ProcessCommandExecutor {
 					status: "success",
 					exitCode: 0,
 					stdout: JSON.stringify({
-						variables: { 路径: "src/runtime.ts" },
+						variables: { 路径: "src/execution/runtime.ts" },
 					}),
 					stderr: "",
 				}
@@ -151,7 +151,7 @@ describe("Flow variables", () => {
 		expect(run.variables).toEqual({ 任务: "检查模板" });
 		expect(commands.requests[0]?.stdin).toBe("检查模板");
 		expect(commands.requests[1]?.stdin).toEqual({
-			message: "src/runtime.ts",
+			message: "src/execution/runtime.ts",
 			path: "检查模板",
 		});
 	});

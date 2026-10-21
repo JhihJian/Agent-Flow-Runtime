@@ -1,5 +1,5 @@
 import { parse as parseYaml } from "yaml";
-import { parseAgentCapabilities } from "./agent-capabilities.ts";
+import { parseAgentCapabilities } from "../contracts/agent-capabilities.ts";
 import type {
 	CommandAction,
 	CommandRequest,
@@ -11,12 +11,12 @@ import type {
 	FlowValue,
 	FlowVariableDeclarations,
 	FlowVariables,
-} from "./types.ts";
+} from "../contracts/types.ts";
 import {
 	validateVariableDeclarations,
 	validateVariableName,
 	validateVariables,
-} from "./variables.ts";
+} from "../contracts/variables.ts";
 
 const IDENTIFIER = "[A-Za-z][A-Za-z0-9_-]*";
 const FLOW_REFERENCE_ID = /^[A-Za-z][A-Za-z0-9_-]*$/;

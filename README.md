@@ -37,7 +37,7 @@ After publishing the package, install a versioned package through Pi:
 pi install npm:@jhihjian/agent-flow-runtime@0.2.1
 ```
 
-Pi discovers `src/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Pi and `typebox` are optional peer dependencies for the Pi host entry point, while `yaml` is installed as the Runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
+Pi discovers `src/pi/extension.ts` and the bundled `skills/flow-planning` through the package manifest, so local and git package installs work without a prebuilt artifact. `dist` remains the SDK entry point and is included in npm releases. Pi and `typebox` are optional peer dependencies for the Pi host entry point, while `yaml` is installed as the Runtime dependency. The extension uses the CLI's enabled tools, Skills, context files, model, and session.
 
 To embed the runtime in your own Node.js program instead of the Pi CLI:
 
@@ -63,7 +63,7 @@ pi --flow ./.flows/release-check/FLOW.md "执行发布检查"
 When testing a checkout before installing it, load the built extension explicitly:
 
 ```bash
-pi -e ./dist/extension.js --flow ./test/fixtures/ordinary -p "验证 Flow"
+pi -e ./dist/pi/extension.js --flow ./test/fixtures/ordinary -p "验证 Flow"
 ```
 
 In Pi, use `/flow run <包目录或FLOW.md> <任务>`, `/flow list` for recent Run IDs, or `/flow show <runId>` for plain-text history. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
@@ -135,14 +135,14 @@ For the offline minimal example (no model required), resume and takeover, sessio
 
 ## Architecture
 
-For a compact source-level reading guide, see [源码逻辑阅读图](docs/source-pseudocode-guide.md).
+For the current system boundary, module responsibilities, and invariants, see [架构基线](docs/architecture/ARCHITECTURE.md). For a compact source-level reading guide, see [源码逻辑阅读图](docs/source-pseudocode-guide.md).
 
-- `src/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
-- `src/flow-loader.ts` loads package directories, resolves their resources, and builds the transitive reference closure for `执行Flow` nodes (sibling resolution, cycle detection); `src/directory.ts` recursively discovers package entries for reuse.
+- `src/definition/parser.ts` parses metadata, the one Mermaid graph, node action sections, result descriptions, command templates, and all structural constraints.
+- `src/definition/flow-loader.ts` loads package directories, resolves their resources, and builds the transitive reference closure for `执行Flow` nodes (sibling resolution, cycle detection); `src/definition/directory.ts` recursively discovers package entries for reuse.
 - `skills/flow-planning/SKILL.md` identifies long-running complex tasks that need Flow planning, then guides creation and checking of generic Flow files.
-- `src/runtime.ts` contains the coordinator, command executor, in-memory store, and JSON-file store; `src/agent.ts` contains the host-neutral Agent binding model. The coordinator alone changes Flow state and records node visits; `执行Flow` nodes run a child Flow as an independent child Run through a sub-coordinator sharing the same store and adapters. Flow capabilities are parsed by `src/agent-capabilities.ts`, fixed at Agent creation, and remain outside Flow control semantics.
-- `src/pi.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. It is exposed through the optional `@jhihjian/agent-flow-runtime/pi` entry point; the core runtime is exposed through `dist/index.js`. See [SDK 快速开始](docs/sdk-quick-start.md).
-- `src/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI outcomes are only confirmed at Pi's `agent_settled` boundary; when a result candidate is pending, the extension cancels the current node's compaction and waits only for retries and queued work to settle.
+- `src/execution/runtime.ts` contains the coordinator, command executor, in-memory store, and JSON-file store; `src/execution/agent.ts` contains the host-neutral Agent binding model. Flow capabilities are parsed by `src/contracts/agent-capabilities.ts`, fixed at Agent creation, and remain outside Flow control semantics.
+- `src/pi/adapter.ts` implements `AgentIntegrationAdapter` for Pi SDK sessions, restored sessions, and the current CLI session bridge. It is exposed through the package's `./pi` subpath. See [SDK 快速开始](docs/sdk-quick-start.md).
+- `src/pi/extension.ts` registers `--flow`, `/flow run`, and `submit_flow_outcome`. CLI outcomes are only confirmed at Pi's `agent_settled` boundary; when a result candidate is pending, the extension cancels the current node's compaction and waits only for retries and queued work to settle. It is exposed through the package's `./extension` subpath.
 - [发布级冒烟门禁设计](docs/release-smoke-design.md) defines the offline release gate for the complete path, parallel conflicts, and recovery, plus the boundary with real Pi/provider integration.
 
 The Pi CLI host treats every `新建Agent` action as a real fresh-session transition through the extension's injected `/flow-new-session` command and Pi's `ctx.newSession()` API. The command has a distinct name so it does not conflict with Pi's built-in interactive `/new`. A CLI outcome is first recorded by its tool call and is only committed after `agent_settled`; a pending outcome candidate cancels compaction for the current node, while retries and queued-input handling still complete before the coordinator routes or replaces a session. The transition rejects calls while Pi is still active instead of waiting on the active run. Session-bound UI and event publishing callbacks are rebound to the replacement context, so Flow completion never uses a stale context. `复用Agent` continues the current session. SDK hosts create an independent session for each `新建Agent` action and can take over a persisted Pi session.
@@ -164,7 +164,7 @@ npm run test:integration
 Fixtures cover ordinary routing, a gate loop, and command parallelism with a join. Runtime tests use a Fake Agent adapter and command executor. The production smoke test is:
 
 ```bash
-pi -e ./dist/extension.js --flow ./test/fixtures/ordinary --mode json -p "运行 Flow"
+pi -e ./dist/pi/extension.js --flow ./test/fixtures/ordinary --mode json -p "运行 Flow"
 ```
 
 The command should emit two successful `submit_flow_outcome` events, and `.pi/flow-runs.json` should contain a completed Flow run with two node records.

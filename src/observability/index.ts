@@ -15,7 +15,7 @@ import type {
 	FlowRunSummary,
 	NodeRunRecord,
 	RunStore,
-} from "./types.ts";
+} from "../contracts/types.ts";
 
 export interface FlowRunInspectorOptions {
 	evidenceReader?: FlowNodeEvidenceReader;

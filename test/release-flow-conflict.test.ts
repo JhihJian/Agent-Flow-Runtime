@@ -1,12 +1,12 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadFlow } from "../src/flow-loader.ts";
-import { FlowCoordinator, InMemoryRunStore } from "../src/runtime.ts";
 import type {
 	CommandExecutor,
 	CommandRequest,
 	CommandResult,
-} from "../src/types.ts";
+} from "../src/contracts/types.ts";
+import { loadFlow } from "../src/definition/flow-loader.ts";
+import { FlowCoordinator, InMemoryRunStore } from "../src/execution/runtime.ts";
 
 class ConflictCommands implements CommandExecutor {
 	readonly requests: CommandRequest[] = [];

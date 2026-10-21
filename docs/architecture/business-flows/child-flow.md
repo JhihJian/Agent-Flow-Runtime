@@ -10,5 +10,5 @@
 - **失败/恢复**：缺失 closure、子执行失败或持久化错误按 flow_reference 路径处理；父级恢复时复用已终态子 Run，或递归恢复未终态子 Run。子 Run 不支持独立恢复。
 - **后置结果**：父 NodeRun 有 childRunId 和 outcome；子 Run 保持独立状态和历史，NodeRun/ParallelRound 在各自生命周期内可更新。
 - **副作用**：子节点可建立 Agent session、执行命令，并写入共享 Store。
-- **证据**：`src/runtime.ts#FlowCoordinator.executeFlowReference`、`src/runtime.ts#FlowCoordinator.startChildRun`、`src/runtime.ts#FlowCoordinator.childOutcome`、`src/runtime.ts#FlowCoordinator.resumeFlowReferenceNode`、`src/flow-loader.ts#loadReferenceClosure`。
-- **测试预言机**：输入、父子关联和输出限制的直接断言见 `test/flow-reference.test.ts:461-480`；父失败和失败边见 `test/flow-reference.test.ts:496-515`、`test/flow-reference.test.ts:536-550`；成功输出映射见 `test/flow-reference.test.ts:571-585`；父子恢复见 `test/flow-reference.test.ts:710-725`、`test/flow-reference.test.ts:809-820`。本轮未执行。
+- **证据**：`src/execution/runtime.ts#FlowCoordinator.executeFlowReference`、`src/execution/runtime.ts#FlowCoordinator.startChildRun`、`src/execution/runtime.ts#FlowCoordinator.childOutcome`、`src/execution/runtime.ts#FlowCoordinator.resumeFlowReferenceNode`、`src/definition/flow-loader.ts#loadReferenceClosure`。
+- **测试预言机**：输入、父子关联和输出限制的直接断言见 `test/flow-reference.test.ts:461-480`；父失败和失败边见 `test/flow-reference.test.ts:496-515`、`test/flow-reference.test.ts:536-550`；成功输出映射见 `test/flow-reference.test.ts:571-585`；父子恢复见 `test/flow-reference.test.ts:710-725`、`test/flow-reference.test.ts:809-820`。

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AgentRunModel } from "../src/runtime.ts";
 import type {
 	AgentConnection,
 	AgentIntegrationAdapter,
 	NodeSession,
 	UnifiedMessage,
-} from "../src/types.ts";
+} from "../src/contracts/types.ts";
+import { AgentRunModel } from "../src/execution/runtime.ts";
 
 describe("AgentRunModel adapter contract", () => {
 	it("forwards the Flow capability declaration only when creating an Agent", async () => {

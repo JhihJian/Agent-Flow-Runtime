@@ -10,5 +10,5 @@
 - **失败/恢复**：Flow ID 不匹配、完整历史 drift、错误状态/位置或 Agent takeover 错误会拒绝或失败；命令中断写入 command_interrupted 和 fail_command recovery，保留原访问事实。
 - **后置结果**：继续执行或得到终态 Run，保留 recovery fact 和访问历史。
 - **副作用**：JSON Store 读取/写入、Agent session takeover、新 Agent 节点执行；命令中断不重放外部副作用。
-- **证据**：`src/runtime.ts#FlowCoordinator.resume`、`src/runtime.ts#FlowCoordinator.resumeRun`、`src/runtime.ts#FlowCoordinator.failInterruptedCommand`、`src/runtime.ts#FlowCoordinator.resumeFlowReferenceNode`、`src/runtime.ts#fingerprintFlow`、`src/extension.ts#resumeFlow`。
-- **测试预言机**：Agent 原访问中断、新访问 retryOf 和完成见 `test/correctness.test.ts:536-542`；命令请求数为零、Run failed 和类别见 `test/release-flow-recovery.test.ts:184-192`；子 Run 终态复用与递归恢复见 `test/flow-reference.test.ts:710-725`、`test/flow-reference.test.ts:809-820`；完整历史 drift 拒绝见 `test/flow-reference.test.ts:1097-1102`。本轮未执行。
+- **证据**：`src/execution/runtime.ts#FlowCoordinator.resume`、`src/execution/runtime.ts#FlowCoordinator.resumeRun`、`src/execution/runtime.ts#FlowCoordinator.failInterruptedCommand`、`src/execution/runtime.ts#FlowCoordinator.resumeFlowReferenceNode`、`src/execution/runtime.ts#fingerprintFlow`、`src/pi/extension.ts#resumeFlow`。
+- **测试预言机**：Agent 原访问中断、新访问 retryOf 和完成见 `test/correctness.test.ts:536-542`；命令请求数为零、Run failed 和类别见 `test/release-flow-recovery.test.ts:184-192`；子 Run 终态复用与递归恢复见 `test/flow-reference.test.ts:710-725`、`test/flow-reference.test.ts:809-820`；完整历史 drift 拒绝见 `test/flow-reference.test.ts:1097-1102`。

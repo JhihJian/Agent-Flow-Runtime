@@ -11,8 +11,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
-import type { FlowRuntime } from "./observability.ts";
+import { normalizeAgentCapabilities } from "../contracts/agent-capabilities.ts";
 import type {
 	AgentAssemblyIdentity,
 	AgentCapabilityDeclaration,
@@ -25,7 +24,8 @@ import type {
 	NodeSession,
 	OutcomeOption,
 	UnifiedMessage,
-} from "./types.ts";
+} from "../contracts/types.ts";
+import type { FlowRuntime } from "../observability/index.ts";
 
 interface PendingSdkNode {
 	nodeExecutionReference: string;

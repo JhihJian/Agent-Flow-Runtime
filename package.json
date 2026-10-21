@@ -30,12 +30,12 @@
 			"import": "./dist/index.js"
 		},
 		"./pi": {
-			"types": "./dist/pi.d.ts",
-			"import": "./dist/pi.js"
+			"types": "./dist/pi/adapter.d.ts",
+			"import": "./dist/pi/adapter.js"
 		},
 		"./extension": {
-			"types": "./dist/extension.d.ts",
-			"import": "./dist/extension.js"
+			"types": "./dist/pi/extension.d.ts",
+			"import": "./dist/pi/extension.js"
 		}
 	},
 	"files": [
@@ -88,7 +88,7 @@
 	},
 	"pi": {
 		"extensions": [
-			"./src/extension.ts"
+			"./src/pi/extension.ts"
 		],
 		"skills": [
 			"./skills"

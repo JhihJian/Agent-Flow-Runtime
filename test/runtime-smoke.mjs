@@ -3,14 +3,14 @@ import { cp, mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { FlowDirectory } from "../dist/directory.js";
-import { loadFlow } from "../dist/flow-loader.js";
-import { PiAgentIntegrationAdapter } from "../dist/pi.js";
+import { FlowDirectory } from "../dist/definition/directory.js";
+import { loadFlow } from "../dist/definition/flow-loader.js";
 import {
 	AgentRunModel,
 	FlowCoordinator,
 	InMemoryRunStore,
-} from "../dist/runtime.js";
+} from "../dist/execution/runtime.js";
+import { PiAgentIntegrationAdapter } from "../dist/pi/adapter.js";
 
 class FakeAdapter {
 	constructor(outcomes) {

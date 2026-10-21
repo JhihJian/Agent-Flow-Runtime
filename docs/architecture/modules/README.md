@@ -1,5 +1,7 @@
 # 模块设计
 
+源码按职责收纳在 `src/contracts`、`src/definition`、`src/execution`、`src/observability` 和 `src/pi`。根目录保留少量转导入口，供既有包出口和直接引用路径使用；新增内部依赖应直接指向职责目录。
+
 | 模块 | 责任 | 详细文档 |
 | --- | --- | --- |
 | 定义与装载 | 解析 Flow、校验图和变量、验证资源、构建引用闭包 | [definition-loading.md](definition-loading.md) |

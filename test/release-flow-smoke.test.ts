@@ -2,13 +2,6 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadFlow } from "../src/flow-loader.ts";
-import {
-	AgentRunModel,
-	FlowCoordinator,
-	JsonFileRunStore,
-	ProcessCommandExecutor,
-} from "../src/runtime.ts";
 import type {
 	AgentConnection,
 	AgentIntegrationAdapter,
@@ -18,7 +11,14 @@ import type {
 	NodeSession,
 	OutcomeOption,
 	UnifiedMessage,
-} from "../src/types.ts";
+} from "../src/contracts/types.ts";
+import { loadFlow } from "../src/definition/flow-loader.ts";
+import {
+	AgentRunModel,
+	FlowCoordinator,
+	JsonFileRunStore,
+	ProcessCommandExecutor,
+} from "../src/execution/runtime.ts";
 
 class ReleaseSmokeAgent implements AgentIntegrationAdapter {
 	readonly prompts: string[] = [];

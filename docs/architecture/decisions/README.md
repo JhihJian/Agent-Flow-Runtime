@@ -4,11 +4,11 @@
 
 ## 已记录且能由当前实现复核
 
-- **显式结果和变量作用域**：结构化结果名选择路线；变量按全局、当前结果和 branch scope 传递。复核：`src/parser.ts#parseResultVariables`、`src/parser.ts#validateTemplates`、`src/runtime.ts#initializeVariables`、`src/runtime.ts#validateOutcomeVariables`、`src/runtime.ts#extractNextInput`、`src/pi.ts#createFlowOutcomeTool`。
-- **单进程 JSON Store**：默认 JSON 快照由单个 Store 实例串行 mutation、临时文件和 rename 写入；未提供跨实例或跨进程协调。复核：`src/runtime.ts#JsonFileRunStore`。
-- **尽力而为的运行观测**：Store 提交成功后发布当前进程事件；Publisher 不持久化、不补发。复核：`src/runtime.ts#FlowCoordinator.commit`、`src/observability.ts#FlowObservationPublisher`、`src/observability.ts#FlowRuntime.openRunObservation`。
-- **Flow 级 Agent 能力声明与默认空能力**：Runtime 只提供通用 Agent 执行端口和 Flow 能力转发，工具、Skill 由宿主会话按声明装配。复核：`src/agent.ts#AgentRunModel`、`src/types.ts#AgentCapabilityDeclaration`、`src/types.ts#AgentIntegrationAdapter`、`src/pi.ts#PiAgentIntegrationAdapter`。
-- **Pi 宿主侧 Profile 插件装配**：Profile 只由`新建Agent`显式选择，插件返回受限装配贡献，能力必须是 Flow 声明的子集，恢复校验插件和装配身份。复核：[ADR-005](ADR-005-pi-agent-profile-plugins.md)、`src/parser.ts#parseAgentAction`、`src/runtime.ts#renderAgentProfile`、`src/pi.ts#PiAgentProfilePlugin`。
+- **显式结果和变量作用域**：结构化结果名选择路线；变量按全局、当前结果和 branch scope 传递。复核：`src/definition/parser.ts#parseResultVariables`、`src/definition/parser.ts#validateTemplates`、`src/execution/runtime.ts#initializeVariables`、`src/execution/runtime.ts#validateOutcomeVariables`、`src/execution/runtime.ts#extractNextInput`、`src/pi/adapter.ts#createFlowOutcomeTool`。
+- **单进程 JSON Store**：默认 JSON 快照由单个 Store 实例串行 mutation、临时文件和 rename 写入；未提供跨实例或跨进程协调。复核：`src/execution/runtime.ts#JsonFileRunStore`。
+- **尽力而为的运行观测**：Store 提交成功后发布当前进程事件；Publisher 不持久化、不补发。复核：`src/execution/runtime.ts#FlowCoordinator.commit`、`src/observability/index.ts#FlowObservationPublisher`、`src/observability/index.ts#FlowRuntime.openRunObservation`。
+- **Flow 级 Agent 能力声明与默认空能力**：Runtime 只提供通用 Agent 执行端口和 Flow 能力转发，工具、Skill 由宿主会话按声明装配。复核：`src/execution/agent.ts#AgentRunModel`、`src/contracts/types.ts#AgentCapabilityDeclaration`、`src/contracts/types.ts#AgentIntegrationAdapter`、`src/pi/adapter.ts#PiAgentIntegrationAdapter`。
+- **Pi 宿主侧 Profile 插件装配**：Profile 只由`新建Agent`显式选择，插件返回受限装配贡献，能力必须是 Flow 声明的子集，恢复校验插件和装配身份。复核：[ADR-005](ADR-005-pi-agent-profile-plugins.md)、`src/definition/parser.ts#parseAgentAction`、`src/execution/runtime.ts#renderAgentProfile`、`src/pi/adapter.ts#PiAgentProfilePlugin`。
 
 这些摘要只说明当前实现可复核的边界，不扩张其批准范围。
 

@@ -10,5 +10,5 @@
 - **失败/恢复**：入口、语法、资源越界、引用缺失或成环均在 Run 创建前失败；装载阶段没有 Run 恢复。
 - **后置结果**：返回 Flow、规范化入口路径、资源映射和引用包表。
 - **副作用**：文件系统读取和路径解析；不写运行状态或执行节点。
-- **证据**：`src/flow-loader.ts#loadFlow`、`src/flow-loader.ts#loadFlowPackage`、`src/flow-loader.ts#loadReferenceClosure`、`src/flow-loader.ts#validatePackageResources`、`src/flow-loader.ts#validateResource`、`src/parser.ts#parseFlow`、`src/parser.ts#validateParallel`、`src/parser.ts#validateTemplates`。
-- **测试预言机**：模板与并行约束的直接断言见 `test/parser.test.ts:247-259`、`test/parser.test.ts:266-294`、`test/parser.test.ts:340-358`、`test/parser.test.ts:368-413`；引用缺失、成环、传递闭包的直接断言见 `test/flow-reference.test.ts:958-1058`。本轮未执行。
+- **证据**：`src/definition/flow-loader.ts#loadFlow`、`src/definition/flow-loader.ts#loadFlowPackage`、`src/definition/flow-loader.ts#loadReferenceClosure`、`src/definition/flow-loader.ts#validatePackageResources`、`src/definition/flow-loader.ts#validateResource`、`src/definition/parser.ts#parseFlow`、`src/definition/parser.ts#validateParallel`、`src/definition/parser.ts#validateTemplates`。
+- **测试预言机**：模板与并行约束的直接断言见 `test/parser.test.ts:247-259`、`test/parser.test.ts:266-294`、`test/parser.test.ts:340-358`、`test/parser.test.ts:368-413`；引用缺失、成环、传递闭包的直接断言见 `test/flow-reference.test.ts:958-1058`。

@@ -1,36 +1,27 @@
-# Flow 文档
+# 项目文档
 
-Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务驱动执行。它用节点结果控制门禁、返工、循环和必要的并行检查，同时保留 Agent 在节点内的自主工作能力。
+Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务驱动执行。文档按使用、开发和架构三类组织，具体实现以源码和测试为准。
 
-## 从这里开始
+## 使用 Flow
 
 | 文档 | 用途 |
 | --- | --- |
-| [Flow 概览](flow-overview.md) | 理解 Flow 文件、一次运行、节点结果、并行和记录。 |
+| [Flow 概览](flow-overview.md) | 快速理解 Flow、运行、节点结果、并行和记录。 |
 | [Flow 规范](flow-spec.md) | 编写、生成或检查可运行的 Flow 文件。 |
-| [源码逻辑阅读图](source-pseudocode-guide.md) | 用函数级流程图、伪代码和源码链接建立从 Flow 文件到 Pi 会话的源码主线。 |
+| [SDK 快速开始](sdk-quick-start.md) | 在 Node.js 程序中组装运行时，用 Pi 会话执行 Agent 节点。 |
+
+## 开发与维护
+
+| 文档 | 用途 |
+| --- | --- |
+| [项目地图](project-map.md) | 定位入口、核心模块、修改位置和验证入口。 |
+| [发布级冒烟门禁](release-smoke-design.md) | 说明发布前离线门禁覆盖的主链路、并行冲突和恢复流程。 |
+| [源码逻辑阅读图](source-pseudocode-guide.md) | 按执行链阅读关键源码和伪代码。 |
 | [源码符号索引](source-index.md) | 自动生成的模块、符号和源码位置索引。 |
-| [Agent Flow Runtime 总体设计](agent-flow-runtime-design.md) | 理解 Flow 如何与一次具体任务、Agent 和命令结合。 |
-| [Agent Flow Runtime 架构设计](agent-flow-runtime-architecture.md) | 了解解释器、协调器、统一 Agent 运行模型和记录存储的职责边界。 |
-| [Flow 运行观测设计](flow-observability-design.md) | 了解运行事实如何产生，以及 CLI、JSON 和 RPC 如何读取和传递状态。 |
-| [Flow 引用执行设计](flow-reference-design.md) | 了解一个节点如何引用另一个 Flow 作为子 Run 执行，以及结果、绑定与恢复语义。 |
-| [发布级冒烟门禁设计](release-smoke-design.md) | 说明主链路、并行冲突、恢复流程的发布前离线门禁及其与真实 Pi/provider 集成测试的边界。 |
 
-## SDK 接入
+## 架构基线
 
-| 文档 | 用途 |
-| --- | --- |
-| [SDK 快速开始](sdk-quick-start.md) | 在自己的 Node.js 程序中安装并组装运行时，用 Pi 会话执行 Agent 节点。 |
-
-## Pi 接入
-
-| 文档 | 用途 |
-| --- | --- |
-| [Pi Agent 集成适配器实现设计](pi-agent-integration-adapter-design.md) | 了解 Pi 会话、节点提示、结果提交和节点交互记录如何接入运行时。 |
-| [Pi Flow 启动入口设计](pi-flow-host-design.md) | 了解如何在 Pi TUI、无头命令和 RPC 中启动指定 Flow。 |
-| [Pi 上下文锚点复用设计](pi-context-anchor-design.md) | 了解如何从 Pi 会话树的已准备位置派生独立会话，复用项目认知与稳定请求前缀。 |
-
-Flow 文件保持通用，Pi 文档只描述 Pi 的会话和启动实现。
+[架构基线](architecture/ARCHITECTURE.md)记录当前系统边界、核心流程、模块职责和关键不变量；模块、业务流、术语、决策和来源映射均从该入口继续阅读。
 
 ## 维护源码阅读资料
 

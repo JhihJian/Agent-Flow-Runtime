@@ -14,4 +14,4 @@ Coordinator 可以依赖 expected sequence 和提交后再发布观测的顺序�
 
 ## 证据
 
-`src/runtime.ts` 的 `JsonFileRunStore`、`mutate`、`persist` 和 `src/types.ts` 的 `RunStore`、`RunFactCommit`；既有设计声明也明确将其限定为单进程本地运行记录。
+`src/execution/runtime.ts` 的 `JsonFileRunStore`、`mutate`、`persist` 和 `src/contracts/types.ts` 的 `RunStore`、`RunFactCommit`；既有设计声明也明确将其限定为单进程本地运行记录。

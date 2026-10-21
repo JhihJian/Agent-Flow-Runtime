@@ -14,4 +14,4 @@
 
 ## 证据
 
-`src/parser.ts` 校验结果边、变量表和模板作用域；`src/runtime.ts` 的 `initializeVariables`、`validateOutcomeVariables`、`extractNextInput` 和 `mergeParallelVariables` 执行运行时约束；`src/pi.ts` 提供 `submit_flow_outcome`。
+`src/definition/parser.ts` 校验结果边、变量表和模板作用域；`src/execution/runtime.ts` 的 `initializeVariables`、`validateOutcomeVariables`、`extractNextInput` 和 `mergeParallelVariables` 执行运行时约束；`src/pi/adapter.ts` 提供 `submit_flow_outcome`。

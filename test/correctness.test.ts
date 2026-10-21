@@ -4,22 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { expect } from "vitest";
-import {
-	FlowObservationPublisher,
-	FlowRunInspector,
-	FlowRuntime,
-	formatFlowRunHistory,
-	toFlowEventEnvelope,
-} from "../src/observability.ts";
-import { parseFlow } from "../src/parser.ts";
-import { createFlowOutcomeTool, PiAgentIntegrationAdapter } from "../src/pi.ts";
-import {
-	AgentRunModel,
-	FlowCoordinator,
-	InMemoryRunStore,
-	JsonFileRunStore,
-	ProcessCommandExecutor,
-} from "../src/runtime.ts";
 import type {
 	AgentIntegrationAdapter,
 	CommandExecutor,
@@ -28,7 +12,26 @@ import type {
 	FlowObservationEvent,
 	FlowVariables,
 	NodeOutcome,
-} from "../src/types.ts";
+} from "../src/contracts/types.ts";
+import { parseFlow } from "../src/definition/parser.ts";
+import {
+	AgentRunModel,
+	FlowCoordinator,
+	InMemoryRunStore,
+	JsonFileRunStore,
+	ProcessCommandExecutor,
+} from "../src/execution/runtime.ts";
+import {
+	FlowObservationPublisher,
+	FlowRunInspector,
+	FlowRuntime,
+	formatFlowRunHistory,
+	toFlowEventEnvelope,
+} from "../src/observability/index.ts";
+import {
+	createFlowOutcomeTool,
+	PiAgentIntegrationAdapter,
+} from "../src/pi/adapter.ts";
 
 const fixture = (name: string) =>
 	readFile(join(import.meta.dirname, "fixtures", name, "FLOW.md"), "utf8");

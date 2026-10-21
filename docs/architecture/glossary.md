@@ -23,4 +23,4 @@
 | Agent protocol tool | `submit_flow_outcome`：Runtime 始终提供的结果提交工具，不属于业务能力。 |
 | Command executor | `CommandExecutor`：Runtime 注入的外部命令执行边界。 |
 
-类型定位：`src/types.ts#FlowValue`、`src/types.ts#FlowRunRecord`、`src/types.ts#NodeRunRecord`、`src/types.ts#FlowNodeEvidence`；变量传递：`src/runtime.ts#initializeVariables`、`src/runtime.ts#extractNextInput`；观测实现：`src/observability.ts#FlowRunInspector`、`src/observability.ts#FlowRuntime.openRunObservation`。
+类型定位：`src/contracts/types.ts#FlowValue`、`src/contracts/types.ts#FlowRunRecord`、`src/contracts/types.ts#NodeRunRecord`、`src/contracts/types.ts#FlowNodeEvidence`；变量传递：`src/execution/runtime.ts#initializeVariables`、`src/execution/runtime.ts#extractNextInput`；观测实现：`src/observability/index.ts#FlowRunInspector`、`src/observability/index.ts#FlowRuntime.openRunObservation`。

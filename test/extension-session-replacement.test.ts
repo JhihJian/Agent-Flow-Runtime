@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getCliFlowState } from "../src/cli-state.ts";
-import flowExtension from "../src/extension.ts";
+import { getCliFlowState } from "../src/pi/cli-state.ts";
+import flowExtension from "../src/pi/extension.ts";
 
 test("CLI 无法隔离能力时拒绝启动 Flow Agent", async () => {
 	const state = getCliFlowState() as unknown as Record<string, unknown>;

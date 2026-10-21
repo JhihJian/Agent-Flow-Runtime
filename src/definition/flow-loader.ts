@@ -8,14 +8,14 @@ import {
 	relative,
 	resolve,
 } from "node:path";
-import { parseFlow } from "./parser.ts";
 import type {
 	CommandRequest,
 	FlowDefinition,
 	FlowPackage,
 	FlowResourceContext,
 	LoadedFlow,
-} from "./types.ts";
+} from "../contracts/types.ts";
+import { parseFlow } from "./parser.ts";
 
 const PACKAGE_ENTRY = "FLOW.md";
 const REFERENCE_LINK = /(\[[^\]]*\]\()(references\/[^)\s]+)(\))/g;

@@ -21,9 +21,9 @@ Flow 可以用结构化 JSON 表达 Profile 选择，普通文本 Agent 动作�
 
 ## 复核入口
 
-- `src/parser.ts#parseAgentAction`
-- `src/agent.ts#AgentRunModel`
-- `src/runtime.ts#renderAgentProfile`
-- `src/pi.ts#PiAgentIntegrationAdapter`
-- `src/pi.ts#PiAgentProfilePlugin`
-- `src/types.ts#AgentAssemblyIdentity`
+- `src/definition/parser.ts#parseAgentAction`
+- `src/execution/agent.ts#AgentRunModel`
+- `src/execution/runtime.ts#renderAgentProfile`
+- `src/pi/adapter.ts#PiAgentIntegrationAdapter`
+- `src/pi/adapter.ts#PiAgentProfilePlugin`
+- `src/contracts/types.ts#AgentAssemblyIdentity`

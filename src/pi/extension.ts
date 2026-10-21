@@ -6,35 +6,35 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { AgentRunModel } from "./agent.ts";
-import {
-	getCliFlowState,
-	rejectPendingSessionReplacement,
-} from "./cli-state.ts";
-import { loadFlow } from "./flow-loader.ts";
+import type {
+	FlowObservationEvent,
+	FlowRunSummary,
+	FlowVariables,
+	UnifiedMessage,
+} from "../contracts/types.ts";
+import { validateVariables } from "../contracts/variables.ts";
+import { loadFlow } from "../definition/flow-loader.ts";
+import { AgentRunModel } from "../execution/agent.ts";
+import { FlowCoordinator, JsonFileRunStore } from "../execution/runtime.ts";
 import {
 	FlowObservationPublisher,
 	FlowRunInspector,
 	FlowRuntime,
 	formatFlowRunHistory,
 	toFlowEventEnvelope,
-} from "./observability.ts";
+} from "../observability/index.ts";
 import {
 	createFlowInspectionTool,
 	createFlowOutcomeTool,
 	PiAgentIntegrationAdapter,
 	type PiCliBridge,
-} from "./pi.ts";
-import { FlowCoordinator, JsonFileRunStore } from "./runtime.ts";
-import type {
-	FlowObservationEvent,
-	FlowRunSummary,
-	FlowVariables,
-	UnifiedMessage,
-} from "./types.ts";
-import { validateVariables } from "./variables.ts";
+} from "./adapter.ts";
+import {
+	getCliFlowState,
+	rejectPendingSessionReplacement,
+} from "./cli-state.ts";
 
-/** Install with `pi install <package>` or load with `pi -e ./dist/extension.js`. */
+/** Install with `pi install <package>` or load with `pi -e ./dist/pi/extension.js`. */
 export default function flowExtension(pi: ExtensionAPI) {
 	const state = getCliFlowState();
 

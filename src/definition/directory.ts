@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { FlowDefinition, LoadedFlow } from "../contracts/types.ts";
 import { loadFlow } from "./flow-loader.ts";
-import type { FlowDefinition, LoadedFlow } from "./types.ts";
 
 export interface FlowListing {
 	id: string;
