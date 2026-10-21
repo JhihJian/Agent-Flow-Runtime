@@ -106,7 +106,7 @@ parseFlow(Markdown, 标识):
 
 <!-- source-guide:coordinator-run -->
 <!-- source-guide:location:coordinator-run -->
-**源码：** [src/execution/runtime.ts:477-532](../src/execution/runtime.ts#L477)，`驱动一次运行`
+**源码：** [src/execution/runtime.ts:478-537](../src/execution/runtime.ts#L478)，`驱动一次运行`
 <!-- /source-guide:location:coordinator-run -->
 
 ```mermaid
@@ -145,7 +145,7 @@ run(任务, 可选已有会话):
 
 <!-- source-guide:execute-node -->
 <!-- source-guide:location:execute-node -->
-**源码：** [src/execution/runtime.ts:908-939](../src/execution/runtime.ts#L908)，`执行单个节点`
+**源码：** [src/execution/runtime.ts:913-944](../src/execution/runtime.ts#L913)，`执行单个节点`
 <!-- /source-guide:location:execute-node -->
 
 ```mermaid
@@ -183,7 +183,7 @@ executeNode(run, 节点引用, 输入, 分支结果):
 
 <!-- source-guide:execute-flow-reference -->
 <!-- source-guide:location:execute-flow-reference -->
-**源码：** [src/execution/runtime.ts:1170-1190](../src/execution/runtime.ts#L1170)，`执行 Flow 引用节点`
+**源码：** [src/execution/runtime.ts:1175-1195](../src/execution/runtime.ts#L1175)，`执行 Flow 引用节点`
 <!-- /source-guide:location:execute-flow-reference -->
 
 ```mermaid
@@ -215,7 +215,7 @@ executeFlowReference(run, record, node, cwd):
 
 <!-- source-guide:execute-parallel -->
 <!-- source-guide:location:execute-parallel -->
-**源码：** [src/execution/runtime.ts:796-906](../src/execution/runtime.ts#L796)，`执行并行分支`
+**源码：** [src/execution/runtime.ts:801-911](../src/execution/runtime.ts#L801)，`执行并行分支`
 <!-- /source-guide:location:execute-parallel -->
 
 ```mermaid

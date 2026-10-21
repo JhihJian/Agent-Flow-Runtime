@@ -332,6 +332,34 @@ export interface FlowRunInput {
 	variables?: FlowVariables;
 }
 
+/** Serializable Flow definition captured with a Run for historical inspection. */
+export interface FlowDefinitionSnapshot {
+	id: string;
+	name: string;
+	description: string;
+	startNodeRef: string;
+	version: string;
+	nodes: Array<{
+		ref: string;
+		name: string;
+		actionKind: string;
+		results: Array<{ name: string; destination: FlowDestination }>;
+	}>;
+	edges: Array<{
+		id: string;
+		from: string;
+		to: string;
+		result?: string;
+		kind: "node" | "parallel" | "finish" | "branch" | "join";
+	}>;
+	parallels: Array<{
+		ref: string;
+		branches: string[];
+		joinRef: string;
+	}>;
+	mermaid: string;
+}
+
 /**
  * Current Run snapshot. Historical facts live in NodeRun, RouteDecision,
  * ParallelRound and RunRecovery records, rather than in the current cursor.
@@ -355,6 +383,8 @@ export interface FlowRunRecord {
 	flowPath?: string;
 	cwd?: string;
 	sessionReference?: string;
+	/** Definition snapshot retained so historical Runs remain inspectable after file moves. */
+	definition?: FlowDefinitionSnapshot;
 	/** Current Agent assembly identity, when the host provides one. */
 	agentAssembly?: AgentAssemblyIdentity;
 	/** Profile reference used by the current Agent binding. */

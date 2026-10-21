@@ -374,6 +374,11 @@ test("运行事实保存 Flow 指纹、节点顺序和每次路由决定", async
 	const routes = await store.listRouteDecisions(run.id);
 	assert.equal(run.historyCompleteness, "complete");
 	assert.match(run.flowVersion, /^sha256:/);
+	assert.equal(run.definition?.version, run.flowVersion);
+	assert.deepEqual(
+		run.definition?.nodes.map((node) => node.ref),
+		["analyze", "finishNode"],
+	);
 	assert.deepEqual(
 		records.map((record) => [record.sequence, record.nodeRef, record.status]),
 		[

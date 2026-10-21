@@ -17,6 +17,8 @@ import type {
 } from "../contracts/types.ts";
 import { parseFlow } from "./parser.ts";
 
+export { snapshotFlowDefinition } from "./snapshot.ts";
+
 const PACKAGE_ENTRY = "FLOW.md";
 const REFERENCE_LINK = /(\[[^\]]*\]\()(references\/[^)\s]+)(\))/g;
 

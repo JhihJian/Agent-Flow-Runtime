@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
@@ -6,15 +7,26 @@ import {
 	type Server,
 	type ServerResponse,
 } from "node:http";
-import { extname, normalize, resolve } from "node:path";
+import {
+	basename,
+	dirname,
+	extname,
+	isAbsolute,
+	normalize,
+	relative,
+	resolve,
+} from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import type {
 	FlowNodeEvidenceReader,
+	FlowPackage,
 	FlowRunInspectorApi,
 	FlowRunRecord,
 	RunStore,
 } from "../contracts/types.ts";
 import { loadFlow } from "../definition/flow-loader.ts";
+import { parseFlow } from "../definition/parser.ts";
 import { fingerprintFlow, JsonFileRunStore } from "../execution/runtime.ts";
 import { FlowRunInspector } from "./index.ts";
 import {
@@ -25,6 +37,7 @@ import {
 } from "./view.ts";
 
 const UI_ROOT = resolve(fileURLToPath(new URL("../../ui/", import.meta.url)));
+const execFileAsync = promisify(execFile);
 
 export interface LocalFlowUiOptions {
 	storePath: string;
@@ -196,6 +209,19 @@ async function inspectView(
 	if (!history) return undefined;
 	const run = await store.getRun(runId);
 	if (!run) return undefined;
+	if (run.definition) {
+		if (run.definition.version !== run.flowVersion) {
+			return {
+				history,
+				definitionError: "运行记录中的 Flow 定义快照与 Flow 版本不匹配",
+			};
+		}
+		return {
+			history,
+			definition: run.definition,
+			definitionSource: "run-snapshot",
+		};
+	}
 	if (!run.flowPath) {
 		return { history, definitionError: "该运行没有保存 Flow 文件路径" };
 	}
@@ -211,12 +237,110 @@ async function inspectView(
 		return {
 			history,
 			definition: serializeFlowDefinition(loaded.flow, definitionVersion),
+			definitionSource: "current-file",
 		};
-	} catch (error) {
+	} catch {
+		const recovered = await recoverDefinitionFromGit(run);
+		if (recovered) {
+			return {
+				history,
+				definition: serializeFlowDefinition(recovered.flow, recovered.version),
+				definitionSource: "git-history",
+			};
+		}
 		return {
 			history,
-			definitionError: error instanceof Error ? error.message : String(error),
+			definitionSource: "run-history",
 		};
+	}
+}
+
+async function recoverDefinitionFromGit(
+	run: FlowRunRecord,
+): Promise<{ flow: FlowPackage["flow"]; version: string } | undefined> {
+	if (!run.flowPath || !isAbsolute(run.flowPath)) return undefined;
+	try {
+		const { stdout: rootOutput } = await execFileAsync(
+			"git",
+			["-C", dirname(run.flowPath), "rev-parse", "--show-toplevel"],
+			{ maxBuffer: 1024 * 1024 },
+		);
+		const repository = rootOutput.trim();
+		const entry = relative(repository, run.flowPath);
+		if (!entry || entry.startsWith("..")) return undefined;
+		const { stdout: commitsOutput } = await execFileAsync(
+			"git",
+			["-C", repository, "log", "--all", "--format=%H", "--", entry],
+			{ maxBuffer: 1024 * 1024 },
+		);
+		for (const commit of commitsOutput.trim().split(/\s+/).filter(Boolean)) {
+			if (!/^[0-9a-f]{40,64}$/i.test(commit)) continue;
+			try {
+				const references = new Map<string, FlowPackage>();
+				const root = await loadFlowPackageFromGit(repository, commit, entry);
+				await loadGitReferences(
+					repository,
+					commit,
+					root,
+					references,
+					new Set(),
+				);
+				const version = fingerprintFlow(root.flow, references);
+				if (version === run.flowVersion) return { flow: root.flow, version };
+			} catch {
+				// Try the next historical definition revision.
+			}
+		}
+	} catch {
+		return undefined;
+	}
+	return undefined;
+}
+
+async function loadFlowPackageFromGit(
+	repository: string,
+	commit: string,
+	entry: string,
+): Promise<FlowPackage> {
+	const { stdout } = await execFileAsync(
+		"git",
+		["-C", repository, "show", `${commit}:${entry}`],
+		{ maxBuffer: 4 * 1024 * 1024 },
+	);
+	const packageRoot = dirname(entry);
+	return {
+		flow: parseFlow(stdout, basename(packageRoot)),
+		path: resolve(repository, entry),
+		resources: {
+			packageRoot: resolve(repository, packageRoot),
+			resourcePaths: new Map(),
+		},
+	};
+}
+
+async function loadGitReferences(
+	repository: string,
+	commit: string,
+	root: FlowPackage,
+	references: Map<string, FlowPackage>,
+	chain: Set<string>,
+): Promise<void> {
+	for (const node of root.flow.nodes.values()) {
+		if (node.action.kind !== "执行Flow") continue;
+		const id = node.action.flow;
+		if (chain.has(id)) throw new Error(`Flow 引用成环: ${id}`);
+		if (references.has(id)) continue;
+		const siblingRoot = resolve(dirname(root.resources.packageRoot), id);
+		const entry = relative(repository, resolve(siblingRoot, "FLOW.md"));
+		const child = await loadFlowPackageFromGit(repository, commit, entry);
+		references.set(id, child);
+		await loadGitReferences(
+			repository,
+			commit,
+			child,
+			references,
+			new Set([...chain, id]),
+		);
 	}
 }
 

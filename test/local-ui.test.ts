@@ -117,3 +117,32 @@ test("serves the local Flow UI and read-only run APIs", async () => {
 		await readFile(storePath, "utf8");
 	}
 });
+
+test("keeps legacy run history readable when its Flow definition is missing", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "agent-flow-ui-legacy-"));
+	const storePath = join(directory, "flow-runs.json");
+	const store = new JsonFileRunStore(storePath);
+	const run = runRecord(join(directory, "removed-flow", "FLOW.md"));
+	await store.createRun(run);
+
+	const server = createLocalFlowUiServer({
+		storePath,
+		host: "127.0.0.1",
+		port: 0,
+	});
+	await server.start();
+	try {
+		const response = await fetch(`${server.url}/api/runs/${run.id}`);
+		assert.equal(response.status, 200);
+		const payload = (await response.json()) as {
+			definition?: unknown;
+			definitionSource?: string;
+			history: { run: { id: string } };
+		};
+		assert.equal(payload.history.run.id, run.id);
+		assert.equal(payload.definition, undefined);
+		assert.equal(payload.definitionSource, "run-history");
+	} finally {
+		await server.stop();
+	}
+});

@@ -300,6 +300,12 @@ function renderDetail() {
 	$("detailStatus").replaceChildren(statusPill(run.status));
 	renderSummaryFacts(runHistory);
 	const notices = [
+		payload.definitionSource === "git-history"
+			? "当前 Flow 文件已迁移或删除，执行图从匹配运行版本的 Git 历史恢复。"
+			: "",
+		payload.definitionSource === "run-history"
+			? "Flow 文件已迁移或删除，且没有可验证的历史定义快照。当前仅展示已记录的运行历史，不会用其他版本的 Flow 误画拓扑。"
+			: "",
 		payload.definitionError
 			? `Flow 定义不可用：${payload.definitionError}`
 			: "",
@@ -412,9 +418,14 @@ function renderDiagram(payload) {
 	diagram.replaceChildren();
 	if (!payload.definition) {
 		message.textContent =
-			payload.definitionError ||
-			"没有可用的 Flow 定义，无法展示 Mermaid 执行图。";
-		message.className = "diagram-message error";
+			payload.definitionSource === "run-history"
+				? "静态拓扑不可验证。节点访问、路由、并行轮次和时间线仍可查看。"
+				: payload.definitionError ||
+					"没有可用的 Flow 定义，无法展示 Mermaid 执行图。";
+		message.className =
+			payload.definitionSource === "run-history"
+				? "diagram-message info"
+				: "diagram-message error";
 		return;
 	}
 	message.textContent = "";

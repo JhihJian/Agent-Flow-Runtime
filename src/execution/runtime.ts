@@ -46,6 +46,7 @@ import {
 	renderCommandRequest,
 	renderTemplate,
 } from "../definition/parser.ts";
+import { snapshotFlowDefinition } from "../definition/snapshot.ts";
 import type { AgentRunModel } from "./agent.ts";
 
 export { AgentRunModel } from "./agent.ts";
@@ -499,6 +500,10 @@ export class FlowCoordinator {
 			historyCompleteness: "complete",
 			startedAt: now(),
 			flowPath: options.flowPath,
+			definition: snapshotFlowDefinition(
+				this.flow,
+				fingerprintFlow(this.flow, this.references),
+			),
 			cwd: options.cwd,
 			sessionReference: options.sessionReference,
 			parentRunId: options.parentRunId,
