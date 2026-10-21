@@ -63,6 +63,16 @@ function isRunActivityStale(status, lastActivityAt) {
 	);
 }
 
+function isMissingHistoricalDefinition(payload) {
+	return (
+		payload.definitionSource === "run-history" ||
+		(!payload.definition &&
+			typeof payload.definitionError === "string" &&
+			payload.definitionError.includes("无法读取 Flow 包") &&
+			payload.definitionError.includes("ENOENT:"))
+	);
+}
+
 function setMessage(element, text, kind = "") {
 	element.textContent = text;
 	element.className = `inline-message${kind ? ` ${kind}` : ""}`;
@@ -309,6 +319,7 @@ function renderDetail() {
 	const runHistory = payload.history;
 	const run = runHistory.run;
 	const definition = payload.definition;
+	const missingHistoricalDefinition = isMissingHistoricalDefinition(payload);
 	$("detailTitle").textContent = definition?.name || run.flowId;
 	$("detailSubtitle").textContent =
 		`${run.id} · ${run.flowId} · v${run.flowVersion}`;
@@ -338,17 +349,19 @@ function renderDetail() {
 		payload.definitionSource === "git-history"
 			? "当前 Flow 文件已迁移或删除，执行图从匹配运行版本的 Git 历史恢复。"
 			: "",
-		payload.definitionSource === "run-history"
+		missingHistoricalDefinition
 			? "Flow 文件已迁移或删除，且没有可验证的历史定义快照。当前仅展示已记录的运行历史，不会用其他版本的 Flow 误画拓扑。"
 			: "",
-		payload.definitionError
+		payload.definitionError && !missingHistoricalDefinition
 			? `Flow 定义不可用：${payload.definitionError}`
 			: "",
 		run.error?.summary ? `运行错误：${run.error.summary}` : "",
 		state.detailError,
 	];
 	const hasErrors = Boolean(
-		payload.definitionError || run.error?.summary || state.detailError,
+		(payload.definitionError && !missingHistoricalDefinition) ||
+			run.error?.summary ||
+			state.detailError,
 	);
 	setMessage(
 		$("detailMessage"),
@@ -461,15 +474,14 @@ function renderDiagram(payload) {
 	const diagram = $("diagram");
 	diagram.replaceChildren();
 	if (!payload.definition) {
-		message.textContent =
-			payload.definitionSource === "run-history"
-				? "静态拓扑不可验证。节点访问、路由、并行轮次和时间线仍可查看。"
-				: payload.definitionError ||
-					"没有可用的 Flow 定义，无法展示 Mermaid 执行图。";
-		message.className =
-			payload.definitionSource === "run-history"
-				? "diagram-message info"
-				: "diagram-message error";
+		const missingHistoricalDefinition = isMissingHistoricalDefinition(payload);
+		message.textContent = missingHistoricalDefinition
+			? "静态拓扑不可验证。节点访问、路由、并行轮次和时间线仍可查看。"
+			: payload.definitionError ||
+				"没有可用的 Flow 定义，无法展示 Mermaid 执行图。";
+		message.className = missingHistoricalDefinition
+			? "diagram-message info"
+			: "diagram-message error";
 		return;
 	}
 	message.textContent = "";
