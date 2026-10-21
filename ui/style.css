@@ -203,6 +203,9 @@ select {
 .inline-message.error {
 	color: var(--red);
 }
+.inline-message.warning {
+	color: var(--yellow);
+}
 .inline-message.info {
 	color: var(--blue);
 }
@@ -353,6 +356,12 @@ select {
 }
 .status-running {
 	color: var(--blue);
+}
+.status-stale {
+	color: var(--yellow);
+}
+.status-pill.status-stale::before {
+	background: transparent;
 }
 .status-completed {
 	color: var(--green);

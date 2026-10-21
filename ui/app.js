@@ -7,6 +7,7 @@ const STATUS_LABELS = {
 	interrupted: "已中断",
 	unvisited: "未访问",
 };
+const RUN_ACTIVITY_STALE_AFTER_MS = 5 * 60 * 1000;
 
 const state = {
 	view: "list",
@@ -45,11 +46,20 @@ function statusLabel(status) {
 	return STATUS_LABELS[status] ?? String(status ?? "未知");
 }
 
-function statusPill(status) {
+function statusPill(status, stale = false) {
 	return createElement(
 		"span",
-		`status-pill status-${status}`,
-		statusLabel(status),
+		`status-pill status-${status}${stale ? " status-stale" : ""}`,
+		stale ? `${statusLabel(status)} · 久未更新` : statusLabel(status),
+	);
+}
+
+function isRunActivityStale(status, lastActivityAt) {
+	const lastActivity = Date.parse(lastActivityAt);
+	return (
+		status === "running" &&
+		Number.isFinite(lastActivity) &&
+		Date.now() - lastActivity > RUN_ACTIVITY_STALE_AFTER_MS
 	);
 }
 
@@ -133,7 +143,12 @@ function renderList() {
 		main.append(createElement("span", "run-id", run.id));
 		main.append(createElement("span", "run-flow", runName(run)));
 		const status = createElement("span", "run-status");
-		status.append(statusPill(run.status));
+		status.append(
+			statusPill(
+				run.status,
+				isRunActivityStale(run.status, run.lastActivityAt),
+			),
+		);
 		const current = createElement("span", "run-current");
 		current.append(createElement("span", "run-label", "当前位置"));
 		current.append(
@@ -297,9 +312,29 @@ function renderDetail() {
 	$("detailTitle").textContent = definition?.name || run.flowId;
 	$("detailSubtitle").textContent =
 		`${run.id} · ${run.flowId} · v${run.flowVersion}`;
-	$("detailStatus").replaceChildren(statusPill(run.status));
+	const lastActivityAt = [
+		run.startedAt,
+		...runHistory.nodeRuns.flatMap((visit) => [
+			visit.startedAt,
+			visit.completedAt,
+		]),
+		...runHistory.routeDecisions.map((route) => route.selectedAt),
+		...runHistory.parallelRounds.flatMap((round) => [
+			round.startedAt,
+			round.completedAt,
+		]),
+		...runHistory.recoveries.map((recovery) => recovery.resumedAt),
+	]
+		.filter(Boolean)
+		.sort()
+		.at(-1);
+	const stale = isRunActivityStale(run.status, lastActivityAt);
+	$("detailStatus").replaceChildren(statusPill(run.status, stale));
 	renderSummaryFacts(runHistory);
 	const notices = [
+		stale
+			? `运行记录仍保存为运行中，最近事实更新于 ${formatTime(lastActivityAt)}。运行台只读，无法确认宿主进程是否仍存活。`
+			: "",
 		payload.definitionSource === "git-history"
 			? "当前 Flow 文件已迁移或删除，执行图从匹配运行版本的 Git 历史恢复。"
 			: "",
@@ -312,10 +347,19 @@ function renderDetail() {
 		run.error?.summary ? `运行错误：${run.error.summary}` : "",
 		state.detailError,
 	];
+	const hasErrors = Boolean(
+		payload.definitionError || run.error?.summary || state.detailError,
+	);
 	setMessage(
 		$("detailMessage"),
 		notices.filter(Boolean).join(" | "),
-		notices.some(Boolean) ? "error" : "",
+		hasErrors
+			? "error"
+			: stale
+				? "warning"
+				: notices.some(Boolean)
+					? "info"
+					: "",
 	);
 	renderDiagram(payload);
 	renderInspector(payload);
