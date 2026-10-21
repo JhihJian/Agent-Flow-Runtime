@@ -1097,16 +1097,17 @@ export class FlowCoordinator {
 				};
 				record.commandResult = commandResult;
 			} else {
+				const profile = renderAgentProfile(
+					node.action.profile,
+					nodeInput,
+					run.variables ?? {},
+				);
 				const result = await this.agentModel.executeNode({
 					runId: run.id,
 					action: record.retryOf ? "复用Agent" : node.action.kind,
 					nodeExecutionReference: record.id,
 					capabilities: normalizeAgentCapabilities(this.flow.capabilities),
-					profile: renderAgentProfile(
-						node.action.profile,
-						nodeInput,
-						run.variables ?? {},
-					),
+					profile,
 					prompt: renderAgentPrompt(
 						node.action.prompt,
 						nodeInput,
@@ -1121,8 +1122,7 @@ export class FlowCoordinator {
 					cwd,
 					onConnection: async (connection) => {
 						record.agentAssembly = connection.assembly;
-						if (node.action.kind === "新建Agent")
-							run.agentProfile = node.action.profile;
+						if (node.action.kind === "新建Agent") run.agentProfile = profile;
 						if (
 							run.sessionReference === connection.sessionReference &&
 							JSON.stringify(run.agentAssembly) ===
