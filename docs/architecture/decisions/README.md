@@ -8,6 +8,7 @@
 - **单进程 JSON Store**：默认 JSON 快照由单个 Store 实例串行 mutation、临时文件和 rename 写入；未提供跨实例或跨进程协调。复核：`src/runtime.ts#JsonFileRunStore`。
 - **尽力而为的运行观测**：Store 提交成功后发布当前进程事件；Publisher 不持久化、不补发。复核：`src/runtime.ts#FlowCoordinator.commit`、`src/observability.ts#FlowObservationPublisher`、`src/observability.ts#FlowRuntime.openRunObservation`。
 - **Flow 级 Agent 能力声明与默认空能力**：Runtime 只提供通用 Agent 执行端口和 Flow 能力转发，工具、Skill 由宿主会话按声明装配。复核：`src/agent.ts#AgentRunModel`、`src/types.ts#AgentCapabilityDeclaration`、`src/types.ts#AgentIntegrationAdapter`、`src/pi.ts#PiAgentIntegrationAdapter`。
+- **Pi 宿主侧 Profile 插件装配**：Profile 只由`新建Agent`显式选择，插件返回受限装配贡献，能力必须是 Flow 声明的子集，恢复校验插件和装配身份。复核：[ADR-005](ADR-005-pi-agent-profile-plugins.md)、`src/parser.ts#parseAgentAction`、`src/runtime.ts#renderAgentProfile`、`src/pi.ts#PiAgentProfilePlugin`。
 
 这些摘要只说明当前实现可复核的边界，不扩张其批准范围。
 

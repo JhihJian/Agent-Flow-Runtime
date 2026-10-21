@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import {
 	type AgentSession,
+	type CreateAgentSessionOptions,
 	createAgentSession,
 	DefaultResourceLoader,
 	defineTool,
@@ -12,10 +14,12 @@ import { Type } from "typebox";
 import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
 import type { FlowRuntime } from "./observability.ts";
 import type {
+	AgentAssemblyIdentity,
 	AgentCapabilityDeclaration,
 	AgentConnection,
 	AgentIntegrationAdapter,
 	AgentOutcomeSubmission,
+	AgentProfileReference,
 	FlowValue,
 	FlowVariables,
 	NodeSession,
@@ -160,6 +164,38 @@ export interface PiAgentAdapterOptions {
 	cwd?: string;
 	sessionDir?: string;
 	cliBridge?: PiCliBridge;
+	profilePlugins?: readonly PiAgentProfilePlugin[];
+}
+
+export interface PiAgentProfilePlugin {
+	pluginId: string;
+	pluginVersion: string;
+	pluginDigest: string;
+	profiles: readonly PiAgentProfileDefinition[];
+}
+
+export interface PiAgentProfileDefinition {
+	id: string;
+	resolve(request: {
+		params: Record<string, FlowValue>;
+		cwd: string;
+	}): Promise<PiAgentProfileContribution> | PiAgentProfileContribution;
+}
+
+export interface PiAgentProfileContribution {
+	/** Effective business tool names. Must be a subset of the Flow allowlist. */
+	tools?: readonly string[];
+	/** Optional custom tool implementations for names in tools. */
+	customTools?: readonly ToolDefinition[];
+	/** Inline Skill definitions made available to this session. */
+	skills?: readonly import("@earendil-works/pi-coding-agent").Skill[];
+	/** Effective Skill names. Must be a subset of the Flow allowlist. */
+	skillNames?: readonly string[];
+	/** Additional Skill directories controlled by the trusted plugin. */
+	additionalSkillPaths?: readonly string[];
+	systemPrompt?: string;
+	model?: CreateAgentSessionOptions["model"];
+	thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
 }
 
 /** Pi SDK and current-CLI implementation of the runtime adapter boundary. */
@@ -177,6 +213,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		runId: string;
 		cwd?: string;
 		capabilities: AgentCapabilityDeclaration;
+		profile?: AgentProfileReference;
 	}): Promise<AgentConnection> {
 		if (this.options.cliBridge)
 			throw new Error(
@@ -186,6 +223,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			request.runId,
 			request.cwd,
 			request.capabilities,
+			request.profile,
 		);
 	}
 
@@ -194,6 +232,8 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		agentReference: string;
 		cwd?: string;
 		capabilities: AgentCapabilityDeclaration;
+		expectedAssembly?: AgentAssemblyIdentity;
+		expectedProfile?: AgentProfileReference;
 	}): Promise<AgentConnection> {
 		if (this.options.cliBridge)
 			throw new Error(
@@ -206,18 +246,24 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 				throw new Error(
 					`Pi Agent 会话能力与当前 Flow 不匹配: ${request.agentReference}`,
 				);
+			assertAssemblyIdentity(
+				active.connection.assembly,
+				request.expectedAssembly,
+			);
 			return active.connection;
 		}
 		const manager = SessionManager.open(request.agentReference);
-		const { session } = await this.createSdkSession({
+		const { session, assembly } = await this.createSdkSession({
 			cwd: request.cwd ?? manager.getCwd(),
 			sessionManager: manager,
 			capabilities,
+			profile: request.expectedProfile,
 		});
 		const connection = {
 			id: `${request.runId}:agent`,
 			platformReference: request.agentReference,
 			sessionReference: session.sessionFile,
+			assembly,
 		};
 		const handle = { connection, session, manager, capabilities };
 		this.handles.set(connection.id, handle);
@@ -364,21 +410,24 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		runId: string,
 		cwd?: string,
 		capabilities: AgentCapabilityDeclaration = normalizeAgentCapabilities(),
+		profile?: AgentProfileReference,
 	): Promise<AgentConnection> {
 		const manager = SessionManager.create(
 			cwd ?? this.options.cwd ?? process.cwd(),
 			this.options.sessionDir,
 		);
 		const normalizedCapabilities = normalizeAgentCapabilities(capabilities);
-		const { session } = await this.createSdkSession({
+		const { session, assembly } = await this.createSdkSession({
 			cwd: cwd ?? this.options.cwd,
 			sessionManager: manager,
 			capabilities: normalizedCapabilities,
+			profile,
 		});
 		const connection = {
 			id: `${runId}:agent`,
 			platformReference: session.sessionId,
 			sessionReference: session.sessionFile,
+			assembly,
 		};
 		const handle = {
 			connection,
@@ -396,28 +445,55 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		cwd?: string;
 		sessionManager: SessionManager;
 		capabilities: AgentCapabilityDeclaration;
-	}): Promise<{ session: AgentSession }> {
+		profile?: AgentProfileReference;
+	}): Promise<{ session: AgentSession; assembly?: AgentAssemblyIdentity }> {
 		const capabilities = normalizeAgentCapabilities(request.capabilities);
+		const resolved = await this.resolveProfile(
+			request.profile,
+			capabilities,
+			request.cwd ?? this.options.cwd ?? process.cwd(),
+		);
+		const effectiveCapabilities = resolved?.capabilities ?? capabilities;
+		const profileSystemPrompt = resolved?.contribution.systemPrompt;
 		let discoveredSkills: string[] = [];
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: request.cwd ?? this.options.cwd ?? process.cwd(),
 			agentDir: getAgentDir(),
+			additionalSkillPaths: resolved?.contribution.additionalSkillPaths
+				? [...resolved.contribution.additionalSkillPaths]
+				: undefined,
 			noExtensions: true,
 			noContextFiles: true,
 			noPromptTemplates: true,
 			noThemes: true,
 			skillsOverride: (current) => {
-				discoveredSkills = current.skills.map((skill) => skill.name);
+				const skills = [
+					...current.skills,
+					...(resolved?.contribution.skills ?? []),
+				];
+				assertUnique(
+					skills.map((skill) => skill.name),
+					"Pi Skill",
+				);
+				discoveredSkills = skills.map((skill) => skill.name);
 				return {
 					...current,
-					skills: current.skills.filter((skill) =>
-						capabilities.skills.includes(skill.name),
+					skills: skills.filter((skill) =>
+						effectiveCapabilities.skills.includes(skill.name),
 					),
 				};
 			},
+			...(profileSystemPrompt
+				? {
+						appendSystemPromptOverride: (base: string[]) => [
+							...base,
+							profileSystemPrompt,
+						],
+					}
+				: {}),
 		});
 		await resourceLoader.reload();
-		const missingSkills = capabilities.skills.filter(
+		const missingSkills = effectiveCapabilities.skills.filter(
 			(name) => !discoveredSkills.includes(name),
 		);
 		if (missingSkills.length > 0)
@@ -426,20 +502,87 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			cwd: request.cwd,
 			sessionManager: request.sessionManager,
 			resourceLoader,
-			tools: [...capabilities.tools, "submit_flow_outcome"],
-			customTools: [this.flowOutcomeTool()],
+			tools: [...effectiveCapabilities.tools, "submit_flow_outcome"],
+			customTools: [
+				...(resolved?.contribution.customTools ?? []),
+				this.flowOutcomeTool(),
+			],
+			...(resolved?.contribution.model
+				? { model: resolved.contribution.model }
+				: {}),
+			...(resolved?.contribution.thinkingLevel
+				? { thinkingLevel: resolved.contribution.thinkingLevel }
+				: {}),
 		});
 		const availableTools = result.session.agent.state.tools.map(
 			(tool) => tool.name,
 		);
-		const missingTools = capabilities.tools.filter(
+		const missingTools = effectiveCapabilities.tools.filter(
 			(name) => !availableTools.includes(name),
 		);
 		if (missingTools.length > 0) {
 			result.session.dispose();
 			throw new Error(`Pi 宿主未提供声明的工具: ${missingTools.join(", ")}`);
 		}
-		return result;
+		return { session: result.session, assembly: resolved?.assembly };
+	}
+
+	private async resolveProfile(
+		profile: AgentProfileReference | undefined,
+		flowCapabilities: AgentCapabilityDeclaration,
+		cwd: string,
+	): Promise<
+		| {
+				contribution: PiAgentProfileContribution;
+				capabilities: AgentCapabilityDeclaration;
+				assembly: AgentAssemblyIdentity;
+		  }
+		| undefined
+	> {
+		if (!profile) return undefined;
+		const matches = (this.options.profilePlugins ?? []).flatMap((plugin) =>
+			plugin.profiles
+				.filter((definition) => definition.id === profile.id)
+				.map((definition) => ({ plugin, definition })),
+		);
+		if (matches.length === 0)
+			throw new Error(`Pi 宿主未提供声明的 Agent Profile: ${profile.id}`);
+		if (matches.length > 1)
+			throw new Error(`Agent Profile 标识重复: ${profile.id}`);
+		const { plugin, definition } = matches[0];
+		const contribution = await definition.resolve({
+			params: profile.params ?? {},
+			cwd,
+		});
+		const tools = [...(contribution.tools ?? flowCapabilities.tools)];
+		const skills = [...(contribution.skillNames ?? flowCapabilities.skills)];
+		assertSubset(tools, flowCapabilities.tools, `工具 (${profile.id})`);
+		assertSubset(skills, flowCapabilities.skills, `Skill (${profile.id})`);
+		const customToolNames = (contribution.customTools ?? []).map(
+			(tool) => tool.name,
+		);
+		assertUnique(customToolNames, "Profile 自定义工具");
+		assertSubset(customToolNames, tools, `Profile 自定义工具 (${profile.id})`);
+		if (customToolNames.includes("submit_flow_outcome"))
+			throw new Error("Profile 不能覆盖协议工具 submit_flow_outcome");
+		const inlineSkillNames = (contribution.skills ?? []).map(
+			(skill) => skill.name,
+		);
+		assertUnique(inlineSkillNames, "Profile 内联 Skill");
+		const capabilities = { tools, skills };
+		return {
+			contribution,
+			capabilities,
+			assembly: {
+				hostId: "pi-sdk",
+				pluginId: plugin.pluginId,
+				pluginVersion: plugin.pluginVersion,
+				pluginDigest: plugin.pluginDigest,
+				profileId: profile.id,
+				paramsDigest: digest(profile.params ?? {}),
+				resolvedCapabilityDigest: digest(capabilities),
+			},
+		};
 	}
 
 	private async executeCliNode(request: {
@@ -669,6 +812,53 @@ function sameCapabilities(
 		left.tools.every((name, index) => name === right.tools[index]) &&
 		left.skills.every((name, index) => name === right.skills[index])
 	);
+}
+
+function assertAssemblyIdentity(
+	actual: AgentAssemblyIdentity | undefined,
+	expected: AgentAssemblyIdentity | undefined,
+): void {
+	if (!expected) return;
+	if (!actual || digest(actual) !== digest(expected))
+		throw new Error("Pi Agent 会话的 Profile 装配身份不匹配");
+}
+
+function assertSubset(
+	values: readonly string[],
+	allowed: readonly string[],
+	description: string,
+): void {
+	assertUnique(values, description);
+	const missing = values.filter((value) => !allowed.includes(value));
+	if (missing.length > 0)
+		throw new Error(
+			`Agent Profile 超出 Flow 声明的${description}: ${missing.join(", ")}`,
+		);
+}
+
+function assertUnique(values: readonly string[], description: string): void {
+	const duplicates = values.filter(
+		(value, index) => values.indexOf(value) !== index,
+	);
+	if (duplicates.length > 0)
+		throw new Error(
+			`${description}存在重复名称: ${[...new Set(duplicates)].join(", ")}`,
+		);
+}
+
+function digest(value: unknown): string {
+	return createHash("sha256").update(stableJson(value)).digest("hex");
+}
+
+function stableJson(value: unknown): string {
+	if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+	if (value && typeof value === "object") {
+		return `{${Object.entries(value as Record<string, unknown>)
+			.sort(([left], [right]) => left.localeCompare(right))
+			.map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`)
+			.join(",")}}`;
+	}
+	return JSON.stringify(value);
 }
 
 function normalizeRole(role: unknown): UnifiedMessage["role"] | undefined {

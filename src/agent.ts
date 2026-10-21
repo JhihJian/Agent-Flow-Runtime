@@ -1,9 +1,11 @@
 import { normalizeAgentCapabilities } from "./agent-capabilities.ts";
 import type {
+	AgentAssemblyIdentity,
 	AgentCapabilityDeclaration,
 	AgentConnection,
 	AgentIntegrationAdapter,
 	AgentOutcomeSubmission,
+	AgentProfileReference,
 	NodeOutcome,
 	NodeSession,
 	OutcomeOption,
@@ -15,6 +17,16 @@ import type {
  * This module deliberately knows nothing about Pi, tools, Skills, or host
  * implementations. It only fixes the declared capabilities at session creation.
  */
+function assertAssembly(
+	actual: AgentAssemblyIdentity | undefined,
+	expected: AgentAssemblyIdentity | undefined,
+): void {
+	if (!expected) return;
+	if (!actual) throw new Error("Agent 接管未返回可验证的 Profile 装配身份");
+	if (JSON.stringify(actual) !== JSON.stringify(expected))
+		throw new Error("Agent 接管的 Profile 装配身份不匹配");
+}
+
 export class AgentRunModel {
 	private readonly bindings = new Map<
 		string,
@@ -31,6 +43,8 @@ export class AgentRunModel {
 		capabilities: AgentCapabilityDeclaration,
 		existingAgentReference?: string,
 		cwd?: string,
+		expectedAssembly?: AgentAssemblyIdentity,
+		expectedProfile?: AgentProfileReference,
 	): Promise<void> {
 		if (existingAgentReference) {
 			if (
@@ -48,7 +62,10 @@ export class AgentRunModel {
 				agentReference: existingAgentReference,
 				cwd,
 				capabilities,
+				expectedAssembly,
+				expectedProfile,
 			});
+			assertAssembly(connection.assembly, expectedAssembly);
 			this.bindings.set(runId, { connection, capabilities });
 		}
 	}
@@ -58,6 +75,7 @@ export class AgentRunModel {
 		action: "新建Agent" | "复用Agent";
 		nodeExecutionReference: string;
 		capabilities?: AgentCapabilityDeclaration;
+		profile?: AgentProfileReference;
 		prompt: string;
 		outcomes: OutcomeOption[];
 		cwd?: string;
@@ -71,7 +89,12 @@ export class AgentRunModel {
 				runId: request.runId,
 				cwd: request.cwd,
 				capabilities,
+				profile: request.profile,
 			});
+			if (request.profile && !connection.assembly) {
+				await this.adapter.releaseAgent(connection);
+				throw new Error(`Agent Profile 未返回装配身份: ${request.profile.id}`);
+			}
 			binding = { connection, capabilities };
 			this.bindings.set(request.runId, binding);
 		} else if (!binding) {

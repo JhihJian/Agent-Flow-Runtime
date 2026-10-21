@@ -15,6 +15,7 @@ import {
 	renderTemplate,
 } from "./parser.ts";
 import type {
+	AgentProfileReference,
 	CommandExecutor,
 	CommandRequest,
 	CommandResult,
@@ -572,6 +573,8 @@ export class FlowCoordinator {
 				normalizeAgentCapabilities(this.flow.capabilities),
 				resumedOptions.existingAgentReference,
 				resumedOptions.cwd,
+				run.agentAssembly,
+				run.agentProfile,
 			);
 			return this.continueRun(
 				run,
@@ -611,6 +614,8 @@ export class FlowCoordinator {
 				normalizeAgentCapabilities(this.flow.capabilities),
 				resumedOptions.existingAgentReference,
 				resumedOptions.cwd,
+				run.agentAssembly,
+				run.agentProfile,
 			);
 			return this.continueRun(
 				run,
@@ -629,6 +634,8 @@ export class FlowCoordinator {
 			normalizeAgentCapabilities(this.flow.capabilities),
 			resumedOptions.existingAgentReference,
 			resumedOptions.cwd,
+			run.agentAssembly,
+			run.agentProfile,
 		);
 		if (current?.status === "completed" && current.outcome) {
 			await this.recordRecovery(
@@ -667,6 +674,8 @@ export class FlowCoordinator {
 				normalizeAgentCapabilities(this.flow.capabilities),
 				options.existingAgentReference,
 				options.cwd,
+				run.agentAssembly,
+				run.agentProfile,
 			);
 		}
 		let nodeRef = initialNodeRef;
@@ -1093,6 +1102,11 @@ export class FlowCoordinator {
 					action: record.retryOf ? "复用Agent" : node.action.kind,
 					nodeExecutionReference: record.id,
 					capabilities: normalizeAgentCapabilities(this.flow.capabilities),
+					profile: renderAgentProfile(
+						node.action.profile,
+						nodeInput,
+						run.variables ?? {},
+					),
 					prompt: renderAgentPrompt(
 						node.action.prompt,
 						nodeInput,
@@ -1106,9 +1120,19 @@ export class FlowCoordinator {
 					})),
 					cwd,
 					onConnection: async (connection) => {
-						if (run.sessionReference === connection.sessionReference) return;
+						record.agentAssembly = connection.assembly;
+						if (node.action.kind === "新建Agent")
+							run.agentProfile = node.action.profile;
+						if (
+							run.sessionReference === connection.sessionReference &&
+							JSON.stringify(run.agentAssembly) ===
+								JSON.stringify(connection.assembly)
+						)
+							return;
 						await this.commit(run, (next) => {
 							next.sessionReference = connection.sessionReference;
+							next.agentAssembly = connection.assembly;
+							next.agentProfile = run.agentProfile;
 							return {};
 						});
 					},
@@ -1284,6 +1308,8 @@ export class FlowCoordinator {
 				normalizeAgentCapabilities(this.flow.capabilities),
 				options.existingAgentReference,
 				options.cwd,
+				run.agentAssembly,
+				run.agentProfile,
 			);
 			return this.continueRun(
 				run,
@@ -1305,6 +1331,8 @@ export class FlowCoordinator {
 				normalizeAgentCapabilities(this.flow.capabilities),
 				options.existingAgentReference,
 				options.cwd,
+				run.agentAssembly,
+				run.agentProfile,
 			);
 			await this.recordRecovery(
 				run,
@@ -1968,6 +1996,12 @@ function toFlowError(error: unknown, fallback: FlowErrorCategory): FlowError {
 		return { category: error.category, summary: error.message };
 	const summary = error instanceof Error ? error.message : String(error);
 	if (
+		/Agent Profile|Profile 装配|声明的工具|声明的 Skill|无法隔离|能力不匹配/.test(
+			summary,
+		)
+	)
+		return { category: "agent_capability", summary };
+	if (
 		/节点不允许结果|必须通过结果提交工具|只能提交一次结果|引用不匹配/.test(
 			summary,
 		)
@@ -2080,6 +2114,25 @@ function normalizeParallelRound(
 		branchStatuses,
 		variablePatches: { ...(legacy.variablePatches ?? {}) },
 	} as ParallelRoundRecord;
+}
+
+function renderAgentProfile(
+	profile: AgentProfileReference | undefined,
+	input: FlowValue | undefined,
+	variables: FlowVariables,
+): AgentProfileReference | undefined {
+	if (!profile) return undefined;
+	return {
+		id: profile.id,
+		...(profile.params
+			? {
+					params: renderTemplate(profile.params, {
+						input: isFlowValueRecord(input) ? input : {},
+						variables,
+					}) as FlowVariables,
+				}
+			: {}),
+	};
 }
 
 function renderAgentPrompt(

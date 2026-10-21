@@ -77,4 +77,4 @@ Pi SDK 适配器使用显式工具 allowlist，并通过隔离的 `DefaultResour
 - `src/runtime.ts#fingerprintFlow`：把能力声明纳入恢复版本。
 - `src/pi.ts#PiAgentIntegrationAdapter`：Pi SDK 能力装配和 CLI 隔离失败。
 
-首版不建立 Profile、能力注册表、Provider 体系、通用插件总线或节点级能力映射。若未来需要节点使用不同能力，再单独扩展 Agent 节点契约。
+能力组合本身不建立 Profile、能力注册表、Provider 体系、通用插件总线或节点级能力映射。Pi 宿主可以在适配器边界提供显式 Profile 插件，但 Profile 只能缩小 Flow 能力并参与会话装配，不能成为 Runtime 的全局配置中心。

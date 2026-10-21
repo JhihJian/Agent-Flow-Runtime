@@ -9,22 +9,61 @@ try {
 	const adapter = new PiAgentIntegrationAdapter({
 		cwd: root,
 		sessionDir: join(root, "sessions"),
+		profilePlugins: [
+			{
+				pluginId: "smoke-profile",
+				pluginVersion: "1.0.0",
+				pluginDigest: "smoke-digest",
+				profiles: [
+					{
+						id: "reviewer",
+						resolve: ({ params }) => ({
+							systemPrompt: `focus=${params.focus}`,
+						}),
+					},
+				],
+			},
+		],
 	});
-	const connection = await adapter.createAgent({ runId: "new", cwd: root });
+	const profile = { id: "reviewer", params: { focus: "security" } };
+	const connection = await adapter.createAgent({
+		runId: "new",
+		cwd: root,
+		capabilities: { tools: [], skills: [] },
+		profile,
+	});
 	assert.ok(
 		connection.sessionReference,
 		"new SDK agent should persist a session reference",
 	);
+	assert.equal(connection.assembly?.profileId, "reviewer");
 	await adapter.releaseAgent(connection);
 
 	const resumedAdapter = new PiAgentIntegrationAdapter({
 		cwd: root,
 		sessionDir: join(root, "sessions"),
+		profilePlugins: [
+			{
+				pluginId: "smoke-profile",
+				pluginVersion: "1.0.0",
+				pluginDigest: "smoke-digest",
+				profiles: [
+					{
+						id: "reviewer",
+						resolve: ({ params }) => ({
+							systemPrompt: `focus=${params.focus}`,
+						}),
+					},
+				],
+			},
+		],
 	});
 	const resumed = await resumedAdapter.takeOverAgent({
 		runId: "resumed",
 		agentReference: connection.sessionReference,
 		cwd: root,
+		expectedAssembly: connection.assembly,
+		expectedProfile: profile,
 	});
 	assert.equal(resumed.platformReference, connection.sessionReference);
 	await resumedAdapter.releaseAgent(resumed);

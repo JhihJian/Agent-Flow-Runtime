@@ -68,6 +68,19 @@ flowchart LR
 
 适配器实现通用接口，并维护平台引用到 Pi 会话句柄的映射。它向统一 Agent 运行模型暴露不透明的 Agent 连接和节点会话引用，Pi 的对象只停留在适配器内部。
 
+#### Profile 插件装配
+
+`PiAgentIntegrationAdapter`可以通过`profilePlugins`接收宿主显式配置的 Profile 插件。插件以`pluginId`、`pluginVersion`、`pluginDigest`和 Profile 定义组成；Profile 解析函数只返回受限的会话装配贡献，包括工具名、自定义工具、Skill、Skill 目录、模型、思考级别和追加系统提示。
+
+Profile 解析结果经过以下校验后才会交给 Pi SDK：
+
+- Profile 选择只能来自`新建Agent`，`复用Agent`不重新解析 Profile。
+- Profile 工具和 Skill 必须分别是 Flow `capabilities.tools`与`capabilities.skills`的子集。
+- `submit_flow_outcome`由适配器统一注入，Profile不能覆盖它。
+- 插件不能返回`AgentSession`、`ResourceLoader`、`ExtensionAPI`或`ExtensionContext`，也不能推进 Flow 或访问`RunStore`。
+
+会话连接记录`hostId`、插件版本与摘要、Profile 标识、参数摘要和解析后的能力摘要。恢复时用同一组 Profile 引用重新装配，并校验身份摘要，插件变化或参数变化会明确拒绝接管。
+
 ### 4.2 Pi 会话句柄
 
 每个活动 Pi 会话对应一个句柄。SDK 会话句柄包含：

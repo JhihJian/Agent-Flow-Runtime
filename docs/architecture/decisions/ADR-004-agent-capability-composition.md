@@ -24,9 +24,9 @@ Runtime 需要让 Flow 明确控制 Agent 可用的业务工具和 Skill，同�
 
 ## 结果
 
-普通 Flow 不声明能力也能获得确定的最小 Agent 会话。能力变化会改变 Flow fingerprint，完整历史恢复不会静默接管不同能力配置。Runtime 不需要理解 Pi 工具、Skill 文件或 Profile。
+普通 Flow 不声明能力也能获得确定的最小 Agent 会话。能力变化会改变 Flow fingerprint，完整历史恢复不会静默接管不同能力配置。Runtime 不需要理解 Pi 工具或 Skill 文件；Profile 插件的宿主边界另见 [ADR-005](ADR-005-pi-agent-profile-plugins.md)。
 
-首版不引入 Profile、能力注册表、能力 Provider、通用插件总线、宿主按 `flowId + nodeRef` 的映射或节点级能力配置。
+本 ADR 不引入 Runtime 级 Profile 注册表、能力 Provider、通用插件总线、宿主按 `flowId + nodeRef` 的映射或节点级能力配置。Pi 宿主侧的受限 Profile 装配由 ADR-005 单独定义。
 
 ## 拒绝的方案
 

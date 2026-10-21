@@ -10,6 +10,7 @@ import type {
 	FlowReferenceAction,
 	FlowValue,
 	FlowVariableDeclarations,
+	FlowVariables,
 } from "./types.ts";
 import {
 	validateVariableDeclarations,
@@ -121,6 +122,15 @@ export function parseFlow(markdown: string, id: string): FlowDefinition {
 			node.ref === definition.startNodeRef,
 			joins.has(node.ref),
 		);
+		if (
+			(node.action.kind === "新建Agent" || node.action.kind === "复用Agent") &&
+			node.action.profile?.params
+		)
+			validateTemplates(
+				node.action.profile.params,
+				node.ref === definition.startNodeRef,
+				joins.has(node.ref),
+			);
 	}
 	return definition;
 }
@@ -275,11 +285,70 @@ function parseAction(nodeName: string, actionArea: string): FlowAction {
 	const kind = blocks[0][1].trim();
 	const content = blocks[0][2].trim();
 	if (kind === "新建Agent" || kind === "复用Agent")
-		return { kind, prompt: content };
+		return parseAgentAction(nodeName, kind, content);
 	if (kind === "执行Flow") return parseFlowReferenceAction(nodeName, content);
 	if (kind !== "执行自定义命令")
 		throw new FlowSyntaxError(`节点“${nodeName}”的动作标记无效: ${kind}`);
 	return parseCommandAction(nodeName, content);
+}
+
+function parseAgentAction(
+	nodeName: string,
+	kind: "新建Agent" | "复用Agent",
+	content: string,
+): FlowAction {
+	if (!content.startsWith("{")) return { kind, prompt: content };
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(content);
+	} catch {
+		return { kind, prompt: content };
+	}
+	if (
+		!isRecord(parsed) ||
+		!["prompt", "profile", "params"].some((key) => key in parsed)
+	)
+		return { kind, prompt: content };
+	for (const key of Object.keys(parsed))
+		if (!["prompt", "profile", "params"].includes(key))
+			throw new FlowSyntaxError(
+				`节点“${nodeName}”的 Agent 动作不允许字段: ${key}`,
+			);
+	if (typeof parsed.prompt !== "string" || !parsed.prompt.trim())
+		throw new FlowSyntaxError(
+			`节点“${nodeName}”的 Agent prompt 必须是非空字符串`,
+		);
+	if (
+		kind === "复用Agent" &&
+		(parsed.profile !== undefined || parsed.params !== undefined)
+	)
+		throw new FlowSyntaxError("复用Agent 不能指定 Profile 或 Profile 参数");
+	if (
+		parsed.profile !== undefined &&
+		(typeof parsed.profile !== "string" ||
+			!/^[A-Za-z][A-Za-z0-9_-]*$/.test(parsed.profile))
+	)
+		throw new FlowSyntaxError("Agent profile 必须是字母开头的标识");
+	let params: FlowVariables | undefined;
+	if (parsed.params !== undefined) {
+		try {
+			validateVariables(parsed.params);
+		} catch (error) {
+			throw new FlowSyntaxError(
+				error instanceof Error ? error.message : String(error),
+			);
+		}
+		params = parsed.params as FlowVariables;
+	}
+	if (parsed.profile === undefined && params !== undefined)
+		throw new FlowSyntaxError("Agent params 必须跟随 profile 使用");
+	return {
+		kind,
+		prompt: parsed.prompt.trim(),
+		...(parsed.profile !== undefined
+			? { profile: { id: parsed.profile, ...(params ? { params } : {}) } }
+			: {}),
+	};
 }
 
 function parseFlowReferenceAction(

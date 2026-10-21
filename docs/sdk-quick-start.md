@@ -181,6 +181,27 @@ const run = await coordinator.run({ variables: { 任务: "修复登录超时问�
 console.log(run.status); // completed
 ```
 
+Profile 插件只参与 Pi 会话装配。插件返回的自定义工具、Skill、模型和追加系统提示会先经过 Flow 能力白名单校验，再由 `PiAgentIntegrationAdapter` 创建会话；插件不能创建会话或访问 Runtime。
+
+```typescript
+const adapter = new PiAgentIntegrationAdapter({
+	cwd: process.cwd(),
+	profilePlugins: [{
+		pluginId: "team-agent-profiles",
+		pluginVersion: "1.0.0",
+		pluginDigest: "sha256:发布包摘要",
+		profiles: [{
+			id: "reviewer",
+			resolve: ({ params }) => ({
+				systemPrompt: `评审重点：${params.focus}`,
+			}),
+		}],
+	}],
+});
+```
+
+Flow 节点使用上面的 Profile 时，将动作内容写成结构化 JSON。Profile 身份、参数摘要和解析后的能力摘要会写入运行记录，恢复会话时插件身份必须保持一致。
+
 前提条件：
 
 - 已安装 peer 依赖 `@earendil-works/pi-coding-agent`。
@@ -231,7 +252,8 @@ const resumed = await coordinator.resume(runId, {
 | 运行时 | `InMemoryRunStore` / `JsonFileRunStore` | 运行记录的内存与 JSON 文件存储 |
 | 运行时 | `ProcessCommandExecutor` | 默认命令执行器，真实 spawn 进程 |
 | Pi 集成 | `PiAgentIntegrationAdapter` | 用 Pi SDK 会话实现 Agent 适配器 |
-| Pi 集成 | `PiAgentAdapterOptions` | `cwd`、`sessionDir`、`cliBridge` 选项 |
+| Pi 集成 | `PiAgentAdapterOptions` | `cwd`、`sessionDir`、`cliBridge`、`profilePlugins` 选项 |
+| Pi 集成 | `PiAgentProfilePlugin`、`PiAgentProfileDefinition`、`PiAgentProfileContribution` | 以代码定义可审计的 Pi Agent 会话装配预设 |
 | Pi 集成 | `createFlowOutcomeTool` | 供 CLI bridge 宿主注册结果提交工具，SDK 宿主不需要 |
 | 类型 | `FlowDefinition`、`FlowNode`、`FlowRunRecord`、`NodeRunRecord` | Flow 与运行记录的结构类型 |
 | 类型 | `AgentIntegrationAdapter`、`AgentConnection`、`NodeSession` | 自定义 Agent 平台接入的边界接口 |

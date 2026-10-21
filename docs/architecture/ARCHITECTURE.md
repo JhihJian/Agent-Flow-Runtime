@@ -46,11 +46,12 @@ FlowDefinition 还保存 Flow 级 `AgentCapabilityDeclaration`。未声明时工
 - 恢复始终校验 Flow ID；只有 `historyCompleteness` 为 `complete` 时比较组合 Flow fingerprint，legacy 历史跳过该比较。
 - Store 成功提交后才发布事件；Publisher 不是事实存储。
 - JsonFileRunStore 只在每个实例内串行化写入，不提供跨实例或跨进程协调。
-- Runtime 只传递 Flow 能力声明，不持有 Agent Profile、工具实现、Skill 正文或宿主权限状态。
+- Runtime 只保存并转发 Flow 的 Profile 引用和能力声明，不加载 Profile 插件、不持有工具实现、Skill 正文或宿主权限状态；Profile 解析和会话装配由宿主适配器负责。
 - 未声明能力时，Agent 的业务工具和 Skill 集合为空；`submit_flow_outcome` 只作为 Runtime 协议能力注入。
 - `新建Agent` 按当前 Flow 声明创建能力固定的会话，`复用Agent` 沿用当前绑定，能力切换必须新建会话。
 - 子 Flow 使用自己的能力声明，不继承父 Flow 的 Agent 或能力。
 - 宿主无法隔离或提供声明能力时必须失败。
+- Profile 只能由`新建Agent`显式选择，Profile 工具和 Skill 必须是 Flow 能力声明的子集；恢复时必须校验插件身份、参数摘要和解析能力摘要。
 - Agent 能力不能改变 Flow 路由、结果和变量语义。
 - 能力声明纳入 Flow fingerprint，完整历史恢复会校验能力版本。
 

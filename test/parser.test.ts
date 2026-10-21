@@ -468,6 +468,38 @@ describe("Flow Agent 能力声明", () => {
 		});
 	});
 
+	it("解析新建Agent 的结构化 Profile 和参数", () => {
+		const flow = parseFlow(
+			serial({
+				first: JSON.stringify({
+					profile: "reviewer",
+					params: { focus: "{var.任务}" },
+					prompt: "请完成评审。",
+				}),
+			}),
+			"profile-action",
+		);
+		expect(flow.nodes.get("analyze")?.action).toEqual({
+			kind: "新建Agent",
+			prompt: "请完成评审。",
+			profile: { id: "reviewer", params: { focus: "{var.任务}" } },
+		});
+	});
+
+	it("复用Agent 不能重新指定 Profile", () => {
+		expect(() =>
+			parseFlow(
+				serial({
+					next: JSON.stringify({
+						profile: "reviewer",
+						prompt: "继续处理。",
+					}),
+				}),
+				"reuse-profile",
+			),
+		).toThrow(FlowSyntaxError);
+	});
+
 	it.each([
 		"capabilities: []",
 		"capabilities:\n  tools: read",

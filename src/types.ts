@@ -21,11 +21,29 @@ export interface AgentCapabilityDeclaration {
 	skills: string[];
 }
 
+/** Host-resolved identity of a profile-backed Agent assembly. */
+export interface AgentAssemblyIdentity {
+	hostId: string;
+	pluginId: string;
+	pluginVersion: string;
+	pluginDigest: string;
+	profileId: string;
+	paramsDigest: string;
+	resolvedCapabilityDigest: string;
+}
+
+/** Explicit host profile selection for a new Agent session. */
+export interface AgentProfileReference {
+	id: string;
+	params?: FlowVariables;
+}
+
 export type AgentActionKind = "新建Agent" | "复用Agent";
 
 export interface AgentAction {
 	kind: AgentActionKind;
 	prompt: string;
+	profile?: AgentProfileReference;
 }
 
 export interface CommandRequest {
@@ -120,6 +138,7 @@ export interface AgentConnection {
 	id: string;
 	platformReference: string;
 	sessionReference?: string;
+	assembly?: AgentAssemblyIdentity;
 }
 
 export interface NodeSession {
@@ -145,12 +164,15 @@ export interface AgentIntegrationAdapter {
 		runId: string;
 		cwd?: string;
 		capabilities: AgentCapabilityDeclaration;
+		profile?: AgentProfileReference;
 	}): Promise<AgentConnection>;
 	takeOverAgent(request: {
 		runId: string;
 		agentReference: string;
 		cwd?: string;
 		capabilities: AgentCapabilityDeclaration;
+		expectedAssembly?: AgentAssemblyIdentity;
+		expectedProfile?: AgentProfileReference;
 	}): Promise<AgentConnection>;
 	executeNode(request: {
 		connection: AgentConnection;
@@ -195,6 +217,7 @@ export type ParallelRoundStatus =
 	| "interrupted";
 
 export type FlowErrorCategory =
+	| "agent_capability"
 	| "agent_execution"
 	| "command_execution"
 	| "outcome_validation"
@@ -250,6 +273,8 @@ export interface NodeRunRecord {
 	error?: FlowError;
 	/** Execution evidence references. Full evidence stays with the host. */
 	session?: NodeSession;
+	/** Profile/plugin assembly used for this Agent visit. */
+	agentAssembly?: AgentAssemblyIdentity;
 	retryOf?: string;
 	enteredFrom: NodeRunSource;
 	parallelRoundId?: string;
@@ -330,6 +355,10 @@ export interface FlowRunRecord {
 	flowPath?: string;
 	cwd?: string;
 	sessionReference?: string;
+	/** Current Agent assembly identity, when the host provides one. */
+	agentAssembly?: AgentAssemblyIdentity;
+	/** Profile reference used by the current Agent binding. */
+	agentProfile?: AgentProfileReference;
 	currentNodeRef?: string;
 	currentInput?: FlowValue;
 	currentNodeRunId?: string;

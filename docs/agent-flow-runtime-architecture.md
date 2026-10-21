@@ -101,7 +101,7 @@ flowchart LR
 
 负责接入具体 Agent 平台：创建或恢复会话、注入节点提示、接收结构化结果、读取节点交互和释放会话。
 
-适配器只能通过统一接口与协调器间接协作，不保存流程状态。Runtime 通过 Flow 级 `AgentCapabilityDeclaration` 转发工具和 Skill 逻辑名称，未声明时传递空能力；不向适配器暴露 Profile、节点映射或宿主权限语义。
+适配器只能通过统一接口与协调器间接协作，不保存流程状态。Runtime 通过 Flow 级 `AgentCapabilityDeclaration` 转发工具和 Skill 逻辑名称，未声明时传递空能力；Agent 节点可以携带显式 Profile 引用和参数，但 Runtime 不加载 Profile 插件，也不向宿主按 `flowId + nodeRef` 隐式映射权限。Profile 解析、能力子集校验和会话装配由宿主适配器负责。
 
 ### Agent 能力组合模块
 

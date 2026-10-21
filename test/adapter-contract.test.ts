@@ -45,6 +45,56 @@ describe("AgentRunModel adapter contract", () => {
 		expect(createdCapabilities).toEqual(capabilities);
 	});
 
+	it("forwards Profile selection and requires a verifiable assembly identity", async () => {
+		let createdProfile: unknown;
+		const adapter: AgentIntegrationAdapter = {
+			async createAgent(request) {
+				createdProfile = request.profile;
+				return {
+					id: "agent",
+					platformReference: "agent",
+					assembly: {
+						hostId: "test",
+						pluginId: "review",
+						pluginVersion: "1",
+						pluginDigest: "digest",
+						profileId: "reviewer",
+						paramsDigest: "params",
+						resolvedCapabilityDigest: "capabilities",
+					},
+				};
+			},
+			async takeOverAgent() {
+				throw new Error("not used");
+			},
+			async executeNode(request) {
+				await request.submitOutcome({
+					nodeExecutionReference: request.nodeExecutionReference,
+					result: "合法",
+				});
+				return { id: "node" };
+			},
+			async getNodeSession() {
+				return [];
+			},
+			async releaseAgent() {},
+		};
+		const model = new AgentRunModel(adapter);
+		await model.executeNode({
+			runId: "run",
+			action: "新建Agent",
+			nodeExecutionReference: "node",
+			capabilities: { tools: [], skills: [] },
+			profile: { id: "reviewer", params: { focus: "security" } },
+			prompt: "work",
+			outcomes: [{ name: "合法", description: "ok" }],
+		});
+		expect(createdProfile).toEqual({
+			id: "reviewer",
+			params: { focus: "security" },
+		});
+	});
+
 	it("does not change capabilities when reusing an Agent", async () => {
 		const created: unknown[] = [];
 		const adapter: AgentIntegrationAdapter = {

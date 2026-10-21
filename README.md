@@ -129,6 +129,8 @@ Pi Agent hosts also expose the read-only `inspect_flow_run` tool. CLI history ou
 
 `PiAgentIntegrationAdapter` creates a real Pi SDK session for each `新建Agent` action and injects the `submit_flow_outcome` tool automatically. The session uses the Flow's explicit tool allowlist and selected Skills; omitted capabilities result in empty business capabilities. Model auth follows Pi conventions (`~/.pi/agent/auth.json`, environment variables, or the settings default model). Sessions persist under `~/.pi/agent/sessions/` by default; pass `sessionDir` to choose another location. Run records go wherever the `RunStore` points. The current Pi CLI path is rejected when it cannot isolate Flow capabilities.
 
+Advanced hosts can pass `profilePlugins` to the Pi adapter and select a Profile in a structured `新建Agent` action. A Profile plugin only contributes session assembly settings; its tools and Skills must stay within the Flow allowlist. The adapter records the plugin and resolved capability identity and verifies it again during recovery. `复用Agent` keeps the existing session assembly and cannot switch Profiles.
+
 For the offline minimal example (no model required), resume and takeover, session storage details, and the API overview, see [SDK 快速开始](docs/sdk-quick-start.md).
 
 ## Architecture
