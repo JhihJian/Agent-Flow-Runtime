@@ -23,6 +23,7 @@ import {
 	formatFlowRunHistory,
 	toFlowEventEnvelope,
 } from "../observability/index.ts";
+import { createLocalFlowUiServer } from "../observability/local-ui.ts";
 import {
 	createFlowInspectionTool,
 	createFlowOutcomeTool,
@@ -303,9 +304,23 @@ export default function flowExtension(pi: ExtensionAPI) {
 
 	pi.registerCommand("flow", {
 		description:
-			"Run or inspect a Flow: /flow run <package|FLOW.md> [自由文本]",
+			"Run, inspect, or open the local Flow UI: /flow run|show|list|ui",
 		handler: async (args, ctx) => {
 			bindContext(ctx);
+			const ui = /^ui(?:\s+(\d+))?$/.exec(args.trim());
+			if (ui) {
+				if (!state.uiServer) {
+					state.uiServer = createLocalFlowUiServer({
+						storePath: join(ctx.cwd, ".pi", "flow-runs.json"),
+						host: "0.0.0.0",
+						port: ui[1] ? Number(ui[1]) : undefined,
+						getEvidenceReader: () => state.adapter,
+					});
+					await state.uiServer.start();
+				}
+				ctx.ui.notify(`Flow 运行台已启动: ${state.uiServer.url}`, "info");
+				return;
+			}
 			const show = /^show\s+(\S+)$/.exec(args.trim());
 			if (show) {
 				await showRun(show[1], ctx);
@@ -342,6 +357,8 @@ export default function flowExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
+		await state.uiServer?.stop();
+		state.uiServer = undefined;
 		state.observation?.unsubscribe();
 		state.observation = undefined;
 		state.currentContext = undefined;

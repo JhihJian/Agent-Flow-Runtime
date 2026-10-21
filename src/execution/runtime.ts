@@ -2014,7 +2014,7 @@ function toFlowError(error: unknown, fallback: FlowErrorCategory): FlowError {
 	return { category: fallback, summary };
 }
 
-function fingerprintFlow(
+export function fingerprintFlow(
 	flow: FlowDefinition,
 	references?: ReadonlyMap<string, FlowPackage>,
 ): string {

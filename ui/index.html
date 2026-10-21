@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>Flow 运行台</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">LOCAL OBSERVABILITY</p>
+        <h1>Flow 运行台</h1>
+      </div>
+      <div class="connection-state" id="connectionNotice" role="status" hidden></div>
+    </header>
+
+    <main>
+      <section id="listView" aria-labelledby="listTitle">
+        <div class="view-heading">
+          <div>
+            <h2 id="listTitle">本机 Flow 会话</h2>
+            <p class="muted">只读查看运行状态、执行路径和节点证据。</p>
+          </div>
+          <button class="button button-primary" type="button" data-action="refresh-list">刷新列表</button>
+        </div>
+
+        <div class="list-toolbar" aria-label="会话筛选">
+          <label class="search-field">
+            <span>搜索</span>
+            <input id="runSearch" type="search" placeholder="运行 ID、Flow 名称或当前节点" autocomplete="off" />
+          </label>
+          <label class="filter-field">
+            <span>状态</span>
+            <select id="statusFilter">
+              <option value="all">全部状态</option>
+              <option value="running">运行中</option>
+              <option value="completed">已完成</option>
+              <option value="failed">失败</option>
+              <option value="interrupted">已中断</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="inline-message" id="listMessage" role="status"></div>
+        <ul class="run-list" id="runList" aria-live="polite"></ul>
+      </section>
+
+      <section id="detailView" aria-labelledby="detailTitle" hidden>
+        <div class="detail-topbar">
+          <button class="button button-quiet" type="button" data-action="back-to-list">返回会话列表</button>
+          <span class="detail-refresh-note">运行中会每 2 秒检查一次新序号</span>
+        </div>
+
+        <div class="run-summary">
+          <div class="summary-title">
+            <p class="eyebrow">FLOW SESSION</p>
+            <h2 id="detailTitle">运行详情</h2>
+            <p class="muted" id="detailSubtitle"></p>
+          </div>
+          <div class="summary-status" id="detailStatus"></div>
+          <dl class="summary-facts" id="summaryFacts"></dl>
+        </div>
+
+        <div class="inline-message" id="detailMessage" role="status"></div>
+
+        <div class="detail-layout">
+          <section class="diagram-panel" aria-labelledby="diagramTitle">
+            <div class="section-heading">
+              <div>
+                <h3 id="diagramTitle">执行图</h3>
+                <p class="muted">节点颜色来自实际访问记录，路由颜色只来自已保存的路由事实。</p>
+              </div>
+              <div class="legend" aria-label="状态图例">
+                <span><i class="legend-mark status-completed"></i>已完成</span>
+                <span><i class="legend-mark status-running"></i>运行中</span>
+                <span><i class="legend-mark status-failed"></i>失败</span>
+                <span><i class="legend-mark status-interrupted"></i>中断</span>
+                <span><i class="legend-mark status-unvisited"></i>未访问</span>
+              </div>
+            </div>
+            <div class="diagram-message" id="diagramMessage"></div>
+            <div class="diagram-scroll" id="diagram" aria-label="Flow Mermaid 执行图"></div>
+          </section>
+
+          <aside class="inspector-panel" aria-labelledby="inspectorTitle">
+            <div class="section-heading compact-heading">
+              <h3 id="inspectorTitle">运行检查</h3>
+              <span class="muted" id="selectionHint">选择图中节点</span>
+            </div>
+            <section class="inspector-section" aria-labelledby="nodeInspectorTitle">
+              <h4 id="nodeInspectorTitle">节点访问</h4>
+              <div id="nodeInspector"></div>
+            </section>
+            <section class="inspector-section" aria-labelledby="routeInspectorTitle">
+              <h4 id="routeInspectorTitle">路由事实</h4>
+              <ol class="fact-list" id="routeInspector"></ol>
+            </section>
+            <section class="inspector-section" aria-labelledby="parallelInspectorTitle">
+              <h4 id="parallelInspectorTitle">并行轮次</h4>
+              <ol class="fact-list" id="parallelInspector"></ol>
+            </section>
+            <section class="evidence-section" aria-labelledby="evidenceTitle">
+              <div class="section-heading compact-heading">
+                <h4 id="evidenceTitle">节点证据</h4>
+                <span class="muted" id="evidenceHint">未选择访问</span>
+              </div>
+              <div id="evidencePanel" class="evidence-panel"></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="timeline-panel" aria-labelledby="timelineTitle">
+          <div class="section-heading">
+            <div>
+              <h3 id="timelineTitle">运行时间线</h3>
+              <p class="muted">按 sequence 展示持久化的节点、路由、并行和恢复事实。</p>
+            </div>
+          </div>
+          <ol class="timeline" id="timeline"></ol>
+        </section>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

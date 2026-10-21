@@ -66,7 +66,7 @@ When testing a checkout before installing it, load the built extension explicitl
 pi -e ./dist/pi/extension.js --flow ./test/fixtures/ordinary -p "验证 Flow"
 ```
 
-In Pi, use `/flow run <包目录或FLOW.md> <任务>`, `/flow list` for recent Run IDs, or `/flow show <runId>` for plain-text history. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
+In Pi, use `/flow run <包目录或FLOW.md> <任务>`, `/flow list` for recent Run IDs, `/flow show <runId>` for plain-text history, or `/flow ui` to open the local read-only Flow 运行台. The UI lists local Flow runs and opens a detail view with the execution graph, route facts, timeline, and node evidence. It reads `.pi/flow-runs.json` and polls the selected run for new sequence numbers. In RPC mode, send a normal `prompt` request after starting Pi with `--flow`; the extension intercepts it and drives the full Flow. JSON and RPC streams receive `flow_event` custom messages whose `details` contain the structured event, rather than using Agent prose to infer state.
 
 After installing the package, ask Pi to create a Flow and it can use the bundled `flow-planning` Skill. For example: `请根据当前项目的发布流程，创建一个可执行 Flow，保存到 .flows/release-check/FLOW.md，并按规范检查结构。` The Skill only teaches the generic Flow format; the generated Markdown remains independent of Pi. Installed users point `--flow` at their package directory or its `FLOW.md` entry.
 

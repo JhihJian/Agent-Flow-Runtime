@@ -6,3 +6,5 @@ export * from "./definition/parser.ts";
 export * from "./execution/agent.ts";
 export * from "./execution/runtime.ts";
 export * from "./observability/index.ts";
+export * from "./observability/local-ui.ts";
+export * from "./observability/view.ts";

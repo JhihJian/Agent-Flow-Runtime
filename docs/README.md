@@ -9,6 +9,7 @@ Flow 将可复用的工作方法写成 Markdown，由运行时结合具体任务
 | [Flow 概览](flow-overview.md) | 快速理解 Flow、运行、节点结果、并行和记录。 |
 | [Flow 规范](flow-spec.md) | 编写、生成或检查可运行的 Flow 文件。 |
 | [SDK 快速开始](sdk-quick-start.md) | 在 Node.js 程序中组装运行时，用 Pi 会话执行 Agent 节点。 |
+| [Flow 运行台](flow-ui.md) | 在本机查看 Flow 会话列表、Run 详情、执行图和节点证据。 |
 
 ## 开发与维护
 

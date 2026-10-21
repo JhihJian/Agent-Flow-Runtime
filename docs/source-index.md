@@ -266,7 +266,7 @@
 | `pickDeclaredGlobalVariables` | 函数 | 否 | [src/execution/runtime.ts:1974-1983](../src/execution/runtime.ts#L1974) |
 | `extractNextInput` | 函数 | 否 | [src/execution/runtime.ts:1985-1995](../src/execution/runtime.ts#L1985) |
 | `toFlowError` | 函数 | 否 | [src/execution/runtime.ts:1997-2015](../src/execution/runtime.ts#L1997) |
-| `fingerprintFlow` | 函数 | 否 | [src/execution/runtime.ts:2017-2051](../src/execution/runtime.ts#L2017) |
+| `fingerprintFlow` | 函数 | 是 | [src/execution/runtime.ts:2017-2051](../src/execution/runtime.ts#L2017) |
 | `normalizeRun` | 函数 | 否 | [src/execution/runtime.ts:2053-2080](../src/execution/runtime.ts#L2053) |
 | `normalizeNodeRun` | 函数 | 否 | [src/execution/runtime.ts:2082-2093](../src/execution/runtime.ts#L2082) |
 | `displayNodeName` | 函数 | 否 | [src/execution/runtime.ts:2095-2099](../src/execution/runtime.ts#L2095) |
@@ -320,6 +320,42 @@
 | `locateCurrent` | 函数 | 否 | [src/observability/index.ts:339-368](../src/observability/index.ts#L339) |
 | `evidenceSummary` | 函数 | 否 | [src/observability/index.ts:370-378](../src/observability/index.ts#L370) |
 
+## [src/observability/local-ui.ts](../src/observability/local-ui.ts)
+
+依赖：`node:fs`、`node:fs/promises`、`node:http`、`node:path`、`node:url`、`../contracts/types.ts`、`../definition/flow-loader.ts`、`../execution/runtime.ts`、`./index.ts`、`./view.ts`
+
+| 符号 | 类别 | 外部可见 | 位置 |
+| --- | --- | --- | --- |
+| `LocalFlowUiOptions` | 接口 | 是 | [src/observability/local-ui.ts:29-36](../src/observability/local-ui.ts#L29) |
+| `LocalFlowUiServer` | 接口 | 是 | [src/observability/local-ui.ts:38-44](../src/observability/local-ui.ts#L38) |
+| `createLocalFlowUiServer` | 函数 | 是 | [src/observability/local-ui.ts:46-108](../src/observability/local-ui.ts#L46) |
+| `handleRequest` | 函数 | 否 | [src/observability/local-ui.ts:110-168](../src/observability/local-ui.ts#L110) |
+| `listSessions` | 函数 | 否 | [src/observability/local-ui.ts:170-188](../src/observability/local-ui.ts#L170) |
+| `inspectView` | 函数 | 否 | [src/observability/local-ui.ts:190-221](../src/observability/local-ui.ts#L190) |
+| `resolveFlowName` | 函数 | 否 | [src/observability/local-ui.ts:223-232](../src/observability/local-ui.ts#L223) |
+| `serveStatic` | 函数 | 否 | [src/observability/local-ui.ts:234-251](../src/observability/local-ui.ts#L234) |
+| `contentType` | 函数 | 否 | [src/observability/local-ui.ts:253-262](../src/observability/local-ui.ts#L253) |
+| `json` | 函数 | 否 | [src/observability/local-ui.ts:264-271](../src/observability/local-ui.ts#L264) |
+| `listen` | 函数 | 否 | [src/observability/local-ui.ts:273-287](../src/observability/local-ui.ts#L273) |
+| `isAddressInUse` | 函数 | 否 | [src/observability/local-ui.ts:289-296](../src/observability/local-ui.ts#L289) |
+
+## [src/observability/view.ts](../src/observability/view.ts)
+
+依赖：`../contracts/types.ts`
+
+| 符号 | 类别 | 外部可见 | 位置 |
+| --- | --- | --- | --- |
+| `FlowDefinitionView` | 接口 | 是 | [src/observability/view.ts:14-39](../src/observability/view.ts#L14) |
+| `FlowSessionListItem` | 接口 | 是 | [src/observability/view.ts:41-56](../src/observability/view.ts#L41) |
+| `FlowRunView` | 接口 | 是 | [src/observability/view.ts:58-62](../src/observability/view.ts#L58) |
+| `serializeFlowDefinition` | 函数 | 是 | [src/observability/view.ts:64-116](../src/observability/view.ts#L64) |
+| `toSessionListItem` | 函数 | 是 | [src/observability/view.ts:118-151](../src/observability/view.ts#L118) |
+| `currentLocationLabel` | 函数 | 是 | [src/observability/view.ts:153-159](../src/observability/view.ts#L153) |
+| `nodeVisitSummary` | 函数 | 是 | [src/observability/view.ts:161-167](../src/observability/view.ts#L161) |
+| `serializeParallel` | 函数 | 否 | [src/observability/view.ts:169-175](../src/observability/view.ts#L169) |
+| `toMermaid` | 函数 | 否 | [src/observability/view.ts:177-198](../src/observability/view.ts#L177) |
+| `mermaidText` | 函数 | 否 | [src/observability/view.ts:200-206](../src/observability/view.ts#L200) |
+
 ## [src/pi/adapter.ts](../src/pi/adapter.ts)
 
 依赖：`node:crypto`、`@earendil-works/pi-coding-agent`、`typebox`、`../contracts/agent-capabilities.ts`、`../contracts/types.ts`、`../observability/index.ts`
@@ -371,23 +407,23 @@
 
 ## [src/pi/cli-state.ts](../src/pi/cli-state.ts)
 
-依赖：`@earendil-works/pi-coding-agent`、`../contracts/types.ts`、`../observability/index.ts`、`./adapter.ts`
+依赖：`@earendil-works/pi-coding-agent`、`../contracts/types.ts`、`../observability/index.ts`、`../observability/local-ui.ts`、`./adapter.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `PendingSessionReplacement` | 接口 | 否 | [src/pi/cli-state.ts:9-12](../src/pi/cli-state.ts#L9) |
-| `CliFlowState` | 接口 | 是 | [src/pi/cli-state.ts:14-31](../src/pi/cli-state.ts#L14) |
-| `getCliFlowState` | 函数 | 是 | [src/pi/cli-state.ts:37-44](../src/pi/cli-state.ts#L37) |
-| `rejectPendingSessionReplacement` | 函数 | 是 | [src/pi/cli-state.ts:46-51](../src/pi/cli-state.ts#L46) |
+| `PendingSessionReplacement` | 接口 | 否 | [src/pi/cli-state.ts:10-13](../src/pi/cli-state.ts#L10) |
+| `CliFlowState` | 接口 | 是 | [src/pi/cli-state.ts:15-33](../src/pi/cli-state.ts#L15) |
+| `getCliFlowState` | 函数 | 是 | [src/pi/cli-state.ts:39-46](../src/pi/cli-state.ts#L39) |
+| `rejectPendingSessionReplacement` | 函数 | 是 | [src/pi/cli-state.ts:48-53](../src/pi/cli-state.ts#L48) |
 
 ## [src/pi/extension.ts](../src/pi/extension.ts)
 
-依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`../contracts/types.ts`、`../contracts/variables.ts`、`../definition/flow-loader.ts`、`../execution/agent.ts`、`../execution/runtime.ts`、`../observability/index.ts`、`./adapter.ts`、`./cli-state.ts`
+依赖：`node:crypto`、`node:fs/promises`、`node:path`、`@earendil-works/pi-coding-agent`、`../contracts/types.ts`、`../contracts/variables.ts`、`../definition/flow-loader.ts`、`../execution/agent.ts`、`../execution/runtime.ts`、`../observability/index.ts`、`../observability/local-ui.ts`、`./adapter.ts`、`./cli-state.ts`
 
 | 符号 | 类别 | 外部可见 | 位置 |
 | --- | --- | --- | --- |
-| `flowExtension` | 函数 | 是 | [src/pi/extension.ts:38-591](../src/pi/extension.ts#L38) |
-| `createRuntimeForContext` | 函数 | 否 | [src/pi/extension.ts:593-599](../src/pi/extension.ts#L593) |
-| `flowEventMessage` | 函数 | 否 | [src/pi/extension.ts:601-608](../src/pi/extension.ts#L601) |
-| `formatRunSummaryOption` | 函数 | 否 | [src/pi/extension.ts:610-612](../src/pi/extension.ts#L610) |
-| `formatRecentRuns` | 函数 | 否 | [src/pi/extension.ts:614-619](../src/pi/extension.ts#L614) |
+| `flowExtension` | 函数 | 是 | [src/pi/extension.ts:39-608](../src/pi/extension.ts#L39) |
+| `createRuntimeForContext` | 函数 | 否 | [src/pi/extension.ts:610-616](../src/pi/extension.ts#L610) |
+| `flowEventMessage` | 函数 | 否 | [src/pi/extension.ts:618-625](../src/pi/extension.ts#L618) |
+| `formatRunSummaryOption` | 函数 | 否 | [src/pi/extension.ts:627-629](../src/pi/extension.ts#L627) |
+| `formatRecentRuns` | 函数 | 否 | [src/pi/extension.ts:631-636](../src/pi/extension.ts#L631) |

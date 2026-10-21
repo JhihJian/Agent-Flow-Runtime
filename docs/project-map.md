@@ -2,7 +2,7 @@
 
 ## 一眼看懂
 
-这是一个 TypeScript/ESM Node.js 包，将目录化的 `FLOW.md` 解析为 `FlowDefinition`，由 `FlowCoordinator` 驱动 Agent、命令节点、结果路由、并行检查、子 Flow 和恢复。项目不是 Web 服务；宿主是 Pi CLI/SDK，并提供可嵌入 Node.js 程序的运行时 API。Agent 的业务工具和 Skill 由 Flow 顶层 `capabilities` 声明，未声明时为空，具体装配由宿主适配层完成。
+这是一个 TypeScript/ESM Node.js 包，将目录化的 `FLOW.md` 解析为 `FlowDefinition`，由 `FlowCoordinator` 驱动 Agent、命令节点、结果路由、并行检查、子 Flow 和恢复。核心运行时不是 Web 服务；Pi 扩展可按需启动一个本机只读 Flow 运行台。宿主仍是 Pi CLI/SDK，并提供可嵌入 Node.js 程序的运行时 API。Agent 的业务工具和 Skill 由 Flow 顶层 `capabilities` 声明，未声明时为空，具体装配由宿主适配层完成。
 
 宿主入口是 [`src/pi/extension.ts`](../src/pi/extension.ts) 的 `flowExtension`，库入口是 [`src/index.ts`](../src/index.ts) 的公共导出。Flow 的实际入口是 `<包目录>/FLOW.md`，由 [`src/definition/flow-loader.ts`](../src/definition/flow-loader.ts) 的 `loadFlow` 加载。主线经过解析、运行记录、节点执行、结果路由、JSON 快照和观测事件；外部边界包括 Pi SDK/会话文件、Node 文件系统、命令子进程、YAML/TypeBox 依赖和 npm 发布工作流。
 
@@ -49,7 +49,7 @@
 | 持久化与命令 | `runtime.ts` 的 `InMemoryRunStore`/`JsonFileRunStore` 保存事实，`ProcessCommandExecutor.execute` 通过子进程执行命令。 |
 | Pi 适配 | [`src/pi/adapter.ts`](../src/pi/adapter.ts) 的 `PiAgentIntegrationAdapter` 接入新建/接管会话、结果工具、消息证据和缺失结果重试。 |
 | Pi 宿主 | [`src/pi/extension.ts`](../src/pi/extension.ts) 绑定 Pi 生命周期、输入、命令、会话替换、恢复和 JSON/RPC 事件；[`src/pi/cli-state.ts`](../src/pi/cli-state.ts) 保存会话级状态。 |
-| 观测读模型 | [`src/observability/index.ts`](../src/observability/index.ts) 的 `FlowObservationPublisher`、`FlowRunInspector`、`FlowRuntime` 提供事件、历史和证据读取。 |
+| 观测读模型 | [`src/observability/index.ts`](../src/observability/index.ts) 的 `FlowObservationPublisher`、`FlowRunInspector`、`FlowRuntime` 提供事件、历史和证据读取；[`src/observability/local-ui.ts`](../src/observability/local-ui.ts) 提供本机只读运行台。 |
 | 文档与样例 | `docs/` 定义规范和设计，`examples/` 提供 Flow 包，`skills/flow-planning/SKILL.md` 提供规划 Skill，`tools/` 用 `ts-morph` 维护源码索引。 |
 | 验证入口 | `test/parser.test.ts`、`runtime.test.ts`、`flow-reference.test.ts`、`release-flow-*.test.ts` 等覆盖解析、运行、引用、恢复和冒烟。 |
 
@@ -87,7 +87,7 @@
 - `JsonFileRunStore` 只在单进程实例内串行化写入；多进程是否能同时写同一 `.pi/flow-runs.json`，源码未定义。
 - `ProcessCommandExecutor` 未见超时、取消、输出上限或沙箱策略；命令治理需由宿主和安全策略确认。
 - `FlowRunInspector` 的 `authorizeEvidence` 默认允许访问；输入、结果、命令输出和会话消息是否需要授权或脱敏，源码未决定。
-- 项目未声明独立服务、数据库后端或跨实例调度；超出 Pi CLI/JSON/RPC/SDK 的生产宿主方案需外部确认。
+- 项目没有数据库后端或跨实例调度；Pi 扩展提供的本机运行台是可选的 HTTP 静态页面适配器，不改变核心运行时边界。超出 Pi CLI/本机运行台/JSON/RPC/SDK 的生产宿主方案需外部确认。
 - 构建、测试、集成、发布和源码索引命令以 `package.json#scripts` 为准，配置入口本身不代表执行结果。
 
 ## 证据索引

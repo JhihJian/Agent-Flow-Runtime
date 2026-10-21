@@ -32,7 +32,7 @@ FlowDefinition 还保存 Flow 级 `AgentCapabilityDeclaration`。未声明时工
 | [执行与事实](modules/execution-runtime.md) | Run 协调、动作、存储、路由、恢复 |
 | [Agent 能力声明](agent-capability-composition.md) | Flow 级工具和 Skill 声明、默认空能力及 Pi 会话装配 |
 | [Pi 宿主](modules/pi-host.md) | Pi session、结果工具、Extension 装配 |
-| [观测读侧](modules/observability.md) | 历史/evidence 与进程内通知 |
+| [观测读侧](modules/observability.md) | 历史/evidence、进程内通知和可选本机只读运行台 |
 | [工程入口](modules/engineering-entries.md) | 包出口、构建、测试、发布配置 |
 
 ## 关键不变量

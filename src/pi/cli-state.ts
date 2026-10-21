@@ -4,6 +4,7 @@ import type {
 	FlowObservationSubscription,
 } from "../contracts/types.ts";
 import type { FlowRuntime } from "../observability/index.ts";
+import type { LocalFlowUiServer } from "../observability/local-ui.ts";
 import type { PiAgentIntegrationAdapter } from "./adapter.ts";
 
 interface PendingSessionReplacement {
@@ -14,6 +15,7 @@ interface PendingSessionReplacement {
 export interface CliFlowState {
 	adapter?: PiAgentIntegrationAdapter;
 	runtime?: FlowRuntime;
+	uiServer?: LocalFlowUiServer;
 
 	observation?: FlowObservationSubscription;
 	activeRunId?: string;
