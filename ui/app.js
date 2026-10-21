@@ -555,13 +555,21 @@ function nodeLabel(payload, nodeRef) {
 			(parallel) => parallel.ref === nodeRef,
 		) &&
 			`并行 ${nodeRef}`) ||
+		[...payload.history.nodeRuns]
+			.reverse()
+			.find((visit) => visit.nodeRef === nodeRef)?.nodeName ||
+		(payload.history.current.kind === "node" &&
+			payload.history.current.nodeRef === nodeRef &&
+			payload.history.current.nodeName) ||
 		nodeRef
 	);
 }
 
 function renderInspector(payload) {
 	const history = payload.history;
-	const nodeRefs = payload.definition?.nodes.map((node) => node.ref) || [];
+	const nodeRefs = payload.definition
+		? payload.definition.nodes.map((node) => node.ref)
+		: [...new Set(history.nodeRuns.map((visit) => visit.nodeRef))];
 	if (!state.selectedNodeRef || !nodeRefs.includes(state.selectedNodeRef)) {
 		state.selectedNodeRef =
 			history.current.kind === "node" &&
@@ -640,6 +648,25 @@ function renderNodeInspector(payload, selectedRuns) {
 		if (!payload.history.evidence?.[visit.id]) evidenceButton.disabled = true;
 		item.append(row, meta, result, evidenceButton);
 		list.append(item);
+	}
+	if (!payload.definition) {
+		const selector = createElement("select", "node-history-select");
+		selector.setAttribute("aria-label", "选择已访问节点");
+		for (const ref of [
+			...new Set(payload.history.nodeRuns.map((run) => run.nodeRef)),
+		]) {
+			const option = createElement("option", "", nodeLabel(payload, ref));
+			option.value = ref;
+			selector.append(option);
+		}
+		selector.value = state.selectedNodeRef;
+		selector.addEventListener("change", () => {
+			state.selectedNodeRef = selector.value;
+			state.selectedNodeRunId = null;
+			state.selectedEvidence = null;
+			renderInspector(payload);
+		});
+		container.prepend(selector);
 	}
 	container.append(list);
 }
