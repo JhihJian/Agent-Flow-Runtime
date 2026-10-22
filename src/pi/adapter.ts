@@ -196,6 +196,8 @@ export interface PiAgentProfileContribution {
 	systemPrompt?: string;
 	model?: CreateAgentSessionOptions["model"];
 	thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
+	/** Optional model runtime carrying host-registered providers and credentials. */
+	modelRuntime?: CreateAgentSessionOptions["modelRuntime"];
 }
 
 /** Pi SDK and current-CLI implementation of the runtime adapter boundary. */
@@ -512,6 +514,9 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 				: {}),
 			...(resolved?.contribution.thinkingLevel
 				? { thinkingLevel: resolved.contribution.thinkingLevel }
+				: {}),
+			...(resolved?.contribution.modelRuntime
+				? { modelRuntime: resolved.contribution.modelRuntime }
 				: {}),
 		});
 		const availableTools = result.session.agent.state.tools.map(
