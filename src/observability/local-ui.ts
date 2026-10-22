@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import {
 	createServer,
 	type IncomingMessage,
@@ -21,6 +21,7 @@ import { promisify } from "node:util";
 import type {
 	FlowNodeEvidenceReader,
 	FlowPackage,
+	FlowRunHistory,
 	FlowRunInspectorApi,
 	FlowRunRecord,
 	RunStore,
@@ -161,6 +162,11 @@ async function handleRequest(
 		const evidenceMatch =
 			/^\/api\/runs\/([^/]+)\/nodes\/([^/]+)\/evidence$/.exec(url.pathname);
 		if (evidenceMatch) {
+			const run = await store.getRun(decodeURIComponent(evidenceMatch[1]));
+			if (!run || !(await isFlowEntryReadable(run.flowPath))) {
+				json(response, 404, { error: "证据不存在或不可访问" });
+				return;
+			}
 			const evidence = await inspector.inspectNodeEvidence(
 				decodeURIComponent(evidenceMatch[1]),
 				decodeURIComponent(evidenceMatch[2]),
@@ -187,10 +193,12 @@ async function listSessions(
 ): Promise<FlowSessionListItem[]> {
 	const runs = (await store.listAllRuns())
 		.filter((run) => !run.parentRunId)
-		.sort((left, right) => right.startedAt.localeCompare(left.startedAt))
-		.slice(0, Math.max(1, limit));
+		.sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+	const maxItems = Math.max(1, limit);
 	const items: FlowSessionListItem[] = [];
 	for (const run of runs) {
+		if (items.length >= maxItems) break;
+		if (!(await isFlowEntryReadable(run.flowPath))) continue;
 		const history = await inspector.inspectRun(run.id);
 		if (!history) continue;
 		const flowName = await resolveFlowName(run);
@@ -206,37 +214,43 @@ async function inspectView(
 	store: RunStore,
 	inspector: FlowRunInspectorApi,
 ): Promise<FlowRunView | undefined> {
+	const run = await store.getRun(runId);
+	if (!run || !(await isFlowEntryReadable(run.flowPath))) return undefined;
 	const history = await inspector.inspectRun(runId);
 	if (!history) return undefined;
-	const run = await store.getRun(runId);
-	if (!run) return undefined;
+	const availableChildRunIds = await getReadableChildRunIds(
+		runId,
+		history,
+		store,
+	);
+	const base = { history, availableChildRunIds };
 	if (run.definition) {
 		if (run.definition.version !== run.flowVersion) {
 			return {
-				history,
+				...base,
 				definitionError: "运行记录中的 Flow 定义快照与 Flow 版本不匹配",
 			};
 		}
 		return {
-			history,
+			...base,
 			definition: run.definition,
 			definitionSource: "run-snapshot",
 		};
 	}
 	if (!run.flowPath) {
-		return { history, definitionError: "该运行没有保存 Flow 文件路径" };
+		return { ...base, definitionError: "该运行没有保存 Flow 文件路径" };
 	}
 	try {
 		const loaded = await loadFlow(run.flowPath);
 		const definitionVersion = fingerprintFlow(loaded.flow, loaded.references);
 		if (definitionVersion !== run.flowVersion) {
 			return {
-				history,
+				...base,
 				definitionError: `Flow 定义版本不匹配：运行记录为 ${run.flowVersion}，当前文件为 ${definitionVersion}`,
 			};
 		}
 		return {
-			history,
+			...base,
 			definition: serializeFlowDefinition(loaded.flow, definitionVersion),
 			definitionSource: "current-file",
 		};
@@ -244,15 +258,53 @@ async function inspectView(
 		const recovered = await recoverDefinitionFromGit(run);
 		if (recovered) {
 			return {
-				history,
+				...base,
 				definition: serializeFlowDefinition(recovered.flow, recovered.version),
 				definitionSource: "git-history",
 			};
 		}
 		return {
-			history,
+			...base,
 			definitionSource: "run-history",
 		};
+	}
+}
+
+async function getReadableChildRunIds(
+	parentRunId: string,
+	history: FlowRunHistory,
+	store: RunStore,
+): Promise<string[]> {
+	const referencedIds = new Set(
+		history.nodeRuns
+			.map((node) => node.childRunId)
+			.filter((id): id is string => Boolean(id)),
+	);
+	const children = await store.listChildRuns(parentRunId);
+	const readableIds: string[] = [];
+	for (const child of children) {
+		if (
+			referencedIds.has(child.id) &&
+			(await isFlowEntryReadable(child.flowPath))
+		) {
+			readableIds.push(child.id);
+		}
+	}
+	return readableIds;
+}
+
+async function isFlowEntryReadable(flowPath?: string): Promise<boolean> {
+	if (!flowPath) return false;
+	try {
+		const pathStat = await stat(flowPath);
+		const entryPath = pathStat.isDirectory()
+			? resolve(flowPath, "FLOW.md")
+			: flowPath;
+		if (basename(entryPath) !== "FLOW.md") return false;
+		await readFile(entryPath, "utf8");
+		return true;
+	} catch {
+		return false;
 	}
 }
 

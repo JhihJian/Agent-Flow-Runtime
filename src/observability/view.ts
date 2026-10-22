@@ -30,6 +30,7 @@ export interface FlowSessionListItem {
 }
 
 export interface FlowRunView {
+	availableChildRunIds: string[];
 	definition?: FlowDefinitionView;
 	definitionSource?:
 		| "current-file"

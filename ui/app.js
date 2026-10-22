@@ -659,7 +659,7 @@ function renderNodeInspector(payload, selectedRuns) {
 		evidenceButton.textContent = "查看证据";
 		if (!payload.history.evidence?.[visit.id]) evidenceButton.disabled = true;
 		item.append(row, meta, result, evidenceButton);
-		if (visit.childRunId) {
+		if (payload.availableChildRunIds?.includes(visit.childRunId)) {
 			const childButton = createElement("button", "button button-small");
 			childButton.type = "button";
 			childButton.dataset.action = "open-run";

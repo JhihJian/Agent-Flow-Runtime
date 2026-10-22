@@ -90,6 +90,40 @@ test("serves the local Flow UI and read-only run APIs", async () => {
 		parentRunId: run.id,
 		parentNodeRunId: "ui-parent-node",
 	});
+	await store.createRun({
+		...runRecord(join(directory, "missing-child", "FLOW.md")),
+		id: "ui-missing-child-run",
+		parentRunId: run.id,
+		parentNodeRunId: "ui-missing-child-node",
+	});
+	await store.createNodeRun({
+		id: "ui-parent-node",
+		runId: run.id,
+		sequence: 1,
+		nodeName: "子流程",
+		nodeRef: "child",
+		actionKind: "执行Flow",
+		input: {},
+		status: "completed",
+		startedAt: run.startedAt,
+		completedAt: run.startedAt,
+		enteredFrom: { kind: "start" },
+		childRunId: "ui-child-run",
+	});
+	await store.createNodeRun({
+		id: "ui-missing-child-node",
+		runId: run.id,
+		sequence: 2,
+		nodeName: "缺失定义的子流程",
+		nodeRef: "missing-child",
+		actionKind: "执行Flow",
+		input: {},
+		status: "completed",
+		startedAt: run.startedAt,
+		completedAt: run.startedAt,
+		enteredFrom: { kind: "start" },
+		childRunId: "ui-missing-child-run",
+	});
 
 	const server = createLocalFlowUiServer({
 		storePath,
@@ -111,22 +145,28 @@ test("serves the local Flow UI and read-only run APIs", async () => {
 		);
 		const childDetail = await fetch(`${server.url}/api/runs/ui-child-run`);
 		assert.equal(childDetail.status, 200);
+		const missingChildDetail = await fetch(
+			`${server.url}/api/runs/ui-missing-child-run`,
+		);
+		assert.equal(missingChildDetail.status, 404);
 
 		const detail = await fetch(`${server.url}/api/runs/${run.id}`);
 		assert.equal(detail.status, 200);
 		const detailPayload = (await detail.json()) as {
+			availableChildRunIds: string[];
 			definition?: { id: string };
 			history: { run: { id: string } };
 		};
 		assert.equal(detailPayload.history.run.id, run.id);
 		assert.equal(detailPayload.definition?.id, "ordinary");
+		assert.deepEqual(detailPayload.availableChildRunIds, ["ui-child-run"]);
 	} finally {
 		await server.stop();
 		await readFile(storePath, "utf8");
 	}
 });
 
-test("keeps legacy run history readable when its Flow definition is missing", async () => {
+test("hides run history when its Flow definition file is missing", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "agent-flow-ui-legacy-"));
 	const storePath = join(directory, "flow-runs.json");
 	const store = new JsonFileRunStore(storePath);
@@ -140,16 +180,16 @@ test("keeps legacy run history readable when its Flow definition is missing", as
 	});
 	await server.start();
 	try {
+		const list = await fetch(`${server.url}/api/runs`);
+		assert.equal(list.status, 200);
+		assert.deepEqual((await list.json()).runs, []);
+
 		const response = await fetch(`${server.url}/api/runs/${run.id}`);
-		assert.equal(response.status, 200);
-		const payload = (await response.json()) as {
-			definition?: unknown;
-			definitionSource?: string;
-			history: { run: { id: string } };
-		};
-		assert.equal(payload.history.run.id, run.id);
-		assert.equal(payload.definition, undefined);
-		assert.equal(payload.definitionSource, "run-history");
+		assert.equal(response.status, 404);
+		const evidence = await fetch(
+			`${server.url}/api/runs/${run.id}/nodes/missing-node/evidence`,
+		);
+		assert.equal(evidence.status, 404);
 	} finally {
 		await server.stop();
 	}
