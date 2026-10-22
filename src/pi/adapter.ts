@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
 	type AgentSession,
+	type AgentSessionEvent,
 	type CreateAgentSessionOptions,
 	createAgentSession,
 	DefaultResourceLoader,
@@ -41,6 +42,8 @@ interface SdkHandle {
 	manager: SessionManager;
 	capabilities: AgentCapabilityDeclaration;
 	pending?: PendingSdkNode;
+	activeNodeExecutionReference?: string;
+	unsubscribeEvents?: () => void;
 }
 
 interface PendingCliNode extends PendingSdkNode {
@@ -160,11 +163,19 @@ export interface PiCliBridge {
 	): UnifiedMessage[];
 }
 
+export interface PiAgentObservation {
+	sessionReference?: string;
+	profileId?: string;
+	nodeExecutionReference?: string;
+	event: AgentSessionEvent;
+}
+
 export interface PiAgentAdapterOptions {
 	cwd?: string;
 	sessionDir?: string;
 	cliBridge?: PiCliBridge;
 	profilePlugins?: readonly PiAgentProfilePlugin[];
+	onEvent?: (observation: PiAgentObservation) => void;
 }
 
 export interface PiAgentProfilePlugin {
@@ -268,6 +279,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			assembly,
 		};
 		const handle = { connection, session, manager, capabilities };
+		this.bindSessionEvents(handle);
 		this.handles.set(connection.id, handle);
 		if (connection.sessionReference)
 			this.sessionHandles.set(connection.sessionReference, handle);
@@ -295,6 +307,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			submitted: false,
 		};
 		handle.pending = pending;
+		handle.activeNodeExecutionReference = request.nodeExecutionReference;
 		try {
 			let prompt = request.prompt;
 			for (let attempt = 0; ; attempt += 1) {
@@ -311,6 +324,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			return nodeSession(sessionReference, pending.startEntryId, endEntryId);
 		} finally {
 			handle.pending = undefined;
+			handle.activeNodeExecutionReference = undefined;
 		}
 	}
 
@@ -338,6 +352,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		this.handles.delete(connection.id);
 		if (handle.connection.sessionReference)
 			this.sessionHandles.delete(handle.connection.sessionReference);
+		handle.unsubscribeEvents?.();
 		handle.session.dispose();
 	}
 
@@ -408,6 +423,21 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 		}
 	}
 
+	private bindSessionEvents(handle: SdkHandle): void {
+		handle.unsubscribeEvents = handle.session.subscribe((event) => {
+			try {
+				this.options.onEvent?.({
+					sessionReference: handle.connection.sessionReference,
+					profileId: handle.connection.assembly?.profileId,
+					nodeExecutionReference: handle.activeNodeExecutionReference,
+					event,
+				});
+			} catch {
+				// Observers must never affect Agent execution.
+			}
+		});
+	}
+
 	private async createSdkConnection(
 		runId: string,
 		cwd?: string,
@@ -437,6 +467,7 @@ export class PiAgentIntegrationAdapter implements AgentIntegrationAdapter {
 			manager,
 			capabilities: normalizedCapabilities,
 		};
+		this.bindSessionEvents(handle);
 		this.handles.set(connection.id, handle);
 		if (connection.sessionReference)
 			this.sessionHandles.set(connection.sessionReference, handle);
