@@ -1,33 +1,21 @@
-import { execFile } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import {
 	createServer,
 	type IncomingMessage,
 	type Server,
 	type ServerResponse,
 } from "node:http";
-import {
-	basename,
-	dirname,
-	extname,
-	isAbsolute,
-	normalize,
-	relative,
-	resolve,
-} from "node:path";
+import { extname, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import type {
 	FlowNodeEvidenceReader,
-	FlowPackage,
 	FlowRunHistory,
 	FlowRunInspectorApi,
 	FlowRunRecord,
 	RunStore,
 } from "../contracts/types.ts";
 import { loadFlow } from "../definition/flow-loader.ts";
-import { parseFlow } from "../definition/parser.ts";
 import { fingerprintFlow, JsonFileRunStore } from "../execution/runtime.ts";
 import { FlowRunInspector } from "./index.ts";
 import {
@@ -38,7 +26,6 @@ import {
 } from "./view.ts";
 
 const UI_ROOT = resolve(fileURLToPath(new URL("../../ui/", import.meta.url)));
-const execFileAsync = promisify(execFile);
 
 export interface LocalFlowUiOptions {
 	storePath: string;
@@ -163,7 +150,7 @@ async function handleRequest(
 			/^\/api\/runs\/([^/]+)\/nodes\/([^/]+)\/evidence$/.exec(url.pathname);
 		if (evidenceMatch) {
 			const run = await store.getRun(decodeURIComponent(evidenceMatch[1]));
-			if (!run || !(await isFlowEntryReadable(run.flowPath))) {
+			if (!run || !(await loadMatchingFlow(run))) {
 				json(response, 404, { error: "证据不存在或不可访问" });
 				return;
 			}
@@ -198,11 +185,11 @@ async function listSessions(
 	const items: FlowSessionListItem[] = [];
 	for (const run of runs) {
 		if (items.length >= maxItems) break;
-		if (!(await isFlowEntryReadable(run.flowPath))) continue;
+		const flow = await loadMatchingFlow(run);
+		if (!flow) continue;
 		const history = await inspector.inspectRun(run.id);
 		if (!history) continue;
-		const flowName = await resolveFlowName(run);
-		items.push(toSessionListItem(run, history, flowName));
+		items.push(toSessionListItem(run, history, flow.flow.name));
 	}
 	return items.sort((left, right) =>
 		right.lastActivityAt.localeCompare(left.lastActivityAt),
@@ -215,7 +202,9 @@ async function inspectView(
 	inspector: FlowRunInspectorApi,
 ): Promise<FlowRunView | undefined> {
 	const run = await store.getRun(runId);
-	if (!run || !(await isFlowEntryReadable(run.flowPath))) return undefined;
+	if (!run) return undefined;
+	const flow = await loadMatchingFlow(run);
+	if (!flow) return undefined;
 	const history = await inspector.inspectRun(runId);
 	if (!history) return undefined;
 	const availableChildRunIds = await getReadableChildRunIds(
@@ -225,49 +214,20 @@ async function inspectView(
 	);
 	const base = { history, availableChildRunIds };
 	if (run.definition) {
-		if (run.definition.version !== run.flowVersion) {
-			return {
-				...base,
-				definitionError: "运行记录中的 Flow 定义快照与 Flow 版本不匹配",
-			};
-		}
 		return {
 			...base,
 			definition: run.definition,
 			definitionSource: "run-snapshot",
 		};
 	}
-	if (!run.flowPath) {
-		return { ...base, definitionError: "该运行没有保存 Flow 文件路径" };
-	}
-	try {
-		const loaded = await loadFlow(run.flowPath);
-		const definitionVersion = fingerprintFlow(loaded.flow, loaded.references);
-		if (definitionVersion !== run.flowVersion) {
-			return {
-				...base,
-				definitionError: `Flow 定义版本不匹配：运行记录为 ${run.flowVersion}，当前文件为 ${definitionVersion}`,
-			};
-		}
-		return {
-			...base,
-			definition: serializeFlowDefinition(loaded.flow, definitionVersion),
-			definitionSource: "current-file",
-		};
-	} catch {
-		const recovered = await recoverDefinitionFromGit(run);
-		if (recovered) {
-			return {
-				...base,
-				definition: serializeFlowDefinition(recovered.flow, recovered.version),
-				definitionSource: "git-history",
-			};
-		}
-		return {
-			...base,
-			definitionSource: "run-history",
-		};
-	}
+	return {
+		...base,
+		definition: serializeFlowDefinition(
+			flow.flow,
+			fingerprintFlow(flow.flow, flow.references),
+		),
+		definitionSource: "current-file",
+	};
 }
 
 async function getReadableChildRunIds(
@@ -283,126 +243,25 @@ async function getReadableChildRunIds(
 	const children = await store.listChildRuns(parentRunId);
 	const readableIds: string[] = [];
 	for (const child of children) {
-		if (
-			referencedIds.has(child.id) &&
-			(await isFlowEntryReadable(child.flowPath))
-		) {
+		if (referencedIds.has(child.id) && (await loadMatchingFlow(child))) {
 			readableIds.push(child.id);
 		}
 	}
 	return readableIds;
 }
 
-async function isFlowEntryReadable(flowPath?: string): Promise<boolean> {
-	if (!flowPath) return false;
-	try {
-		const pathStat = await stat(flowPath);
-		const entryPath = pathStat.isDirectory()
-			? resolve(flowPath, "FLOW.md")
-			: flowPath;
-		if (basename(entryPath) !== "FLOW.md") return false;
-		await readFile(entryPath, "utf8");
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-async function recoverDefinitionFromGit(
+async function loadMatchingFlow(
 	run: FlowRunRecord,
-): Promise<{ flow: FlowPackage["flow"]; version: string } | undefined> {
-	if (!run.flowPath || !isAbsolute(run.flowPath)) return undefined;
-	try {
-		const { stdout: rootOutput } = await execFileAsync(
-			"git",
-			["-C", dirname(run.flowPath), "rev-parse", "--show-toplevel"],
-			{ maxBuffer: 1024 * 1024 },
-		);
-		const repository = rootOutput.trim();
-		const entry = relative(repository, run.flowPath);
-		if (!entry || entry.startsWith("..")) return undefined;
-		const { stdout: commitsOutput } = await execFileAsync(
-			"git",
-			["-C", repository, "log", "--all", "--format=%H", "--", entry],
-			{ maxBuffer: 1024 * 1024 },
-		);
-		for (const commit of commitsOutput.trim().split(/\s+/).filter(Boolean)) {
-			if (!/^[0-9a-f]{40,64}$/i.test(commit)) continue;
-			try {
-				const references = new Map<string, FlowPackage>();
-				const root = await loadFlowPackageFromGit(repository, commit, entry);
-				await loadGitReferences(
-					repository,
-					commit,
-					root,
-					references,
-					new Set(),
-				);
-				const version = fingerprintFlow(root.flow, references);
-				if (version === run.flowVersion) return { flow: root.flow, version };
-			} catch {
-				// Try the next historical definition revision.
-			}
-		}
-	} catch {
+): Promise<Awaited<ReturnType<typeof loadFlow>> | undefined> {
+	if (!run.flowPath) return undefined;
+	if (run.definition && run.definition.version !== run.flowVersion) {
 		return undefined;
 	}
-	return undefined;
-}
-
-async function loadFlowPackageFromGit(
-	repository: string,
-	commit: string,
-	entry: string,
-): Promise<FlowPackage> {
-	const { stdout } = await execFileAsync(
-		"git",
-		["-C", repository, "show", `${commit}:${entry}`],
-		{ maxBuffer: 4 * 1024 * 1024 },
-	);
-	const packageRoot = dirname(entry);
-	return {
-		flow: parseFlow(stdout, basename(packageRoot)),
-		path: resolve(repository, entry),
-		resources: {
-			packageRoot: resolve(repository, packageRoot),
-			resourcePaths: new Map(),
-		},
-	};
-}
-
-async function loadGitReferences(
-	repository: string,
-	commit: string,
-	root: FlowPackage,
-	references: Map<string, FlowPackage>,
-	chain: Set<string>,
-): Promise<void> {
-	for (const node of root.flow.nodes.values()) {
-		if (node.action.kind !== "执行Flow") continue;
-		const id = node.action.flow;
-		if (chain.has(id)) throw new Error(`Flow 引用成环: ${id}`);
-		if (references.has(id)) continue;
-		const siblingRoot = resolve(dirname(root.resources.packageRoot), id);
-		const entry = relative(repository, resolve(siblingRoot, "FLOW.md"));
-		const child = await loadFlowPackageFromGit(repository, commit, entry);
-		references.set(id, child);
-		await loadGitReferences(
-			repository,
-			commit,
-			child,
-			references,
-			new Set([...chain, id]),
-		);
-	}
-}
-
-async function resolveFlowName(
-	run: FlowRunRecord,
-): Promise<string | undefined> {
-	if (!run.flowPath) return undefined;
 	try {
-		return (await loadFlow(run.flowPath)).flow.name;
+		const flow = await loadFlow(run.flowPath);
+		return fingerprintFlow(flow.flow, flow.references) === run.flowVersion
+			? flow
+			: undefined;
 	} catch {
 		return undefined;
 	}

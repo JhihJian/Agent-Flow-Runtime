@@ -87,6 +87,7 @@ test("serves the local Flow UI and read-only run APIs", async () => {
 	await store.createRun({
 		...runRecord(fixturePath),
 		id: "ui-child-run",
+		flowVersion: run.flowVersion,
 		parentRunId: run.id,
 		parentNodeRunId: "ui-parent-node",
 	});
@@ -190,6 +191,46 @@ test("hides run history when its Flow definition file is missing", async () => {
 			`${server.url}/api/runs/${run.id}/nodes/missing-node/evidence`,
 		);
 		assert.equal(evidence.status, 404);
+	} finally {
+		await server.stop();
+	}
+});
+
+test("hides runs when the current or snapshotted Flow version does not match", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "agent-flow-ui-version-"));
+	const storePath = join(directory, "flow-runs.json");
+	const store = new JsonFileRunStore(storePath);
+	const loaded = await loadFlow(fixturePath);
+	const currentMismatch = runRecord(fixturePath);
+	currentMismatch.id = "ui-current-version-mismatch";
+	currentMismatch.flowVersion = "sha256:old-version";
+	await store.createRun(currentMismatch);
+
+	const snapshotMismatch = runRecord(fixturePath);
+	snapshotMismatch.id = "ui-snapshot-version-mismatch";
+	snapshotMismatch.flowVersion = fingerprintFlow(
+		loaded.flow,
+		loaded.references,
+	);
+	snapshotMismatch.definition = serializeFlowDefinition(
+		loaded.flow,
+		"sha256:old-snapshot-version",
+	);
+	await store.createRun(snapshotMismatch);
+
+	const server = createLocalFlowUiServer({
+		storePath,
+		host: "127.0.0.1",
+		port: 0,
+	});
+	await server.start();
+	try {
+		const list = await fetch(`${server.url}/api/runs`);
+		assert.deepEqual((await list.json()).runs, []);
+		for (const run of [currentMismatch, snapshotMismatch]) {
+			const detail = await fetch(`${server.url}/api/runs/${run.id}`);
+			assert.equal(detail.status, 404);
+		}
 	} finally {
 		await server.stop();
 	}
