@@ -186,6 +186,7 @@ async function listSessions(
 	limit: number,
 ): Promise<FlowSessionListItem[]> {
 	const runs = (await store.listAllRuns())
+		.filter((run) => !run.parentRunId)
 		.sort((left, right) => right.startedAt.localeCompare(left.startedAt))
 		.slice(0, Math.max(1, limit));
 	const items: FlowSessionListItem[] = [];

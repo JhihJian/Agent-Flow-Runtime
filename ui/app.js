@@ -659,6 +659,14 @@ function renderNodeInspector(payload, selectedRuns) {
 		evidenceButton.textContent = "查看证据";
 		if (!payload.history.evidence?.[visit.id]) evidenceButton.disabled = true;
 		item.append(row, meta, result, evidenceButton);
+		if (visit.childRunId) {
+			const childButton = createElement("button", "button button-small");
+			childButton.type = "button";
+			childButton.dataset.action = "open-run";
+			childButton.dataset.runId = visit.childRunId;
+			childButton.textContent = "查看子 Flow";
+			item.append(childButton);
+		}
 		list.append(item);
 	}
 	if (!payload.definition) {

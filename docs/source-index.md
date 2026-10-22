@@ -341,17 +341,17 @@
 | `LocalFlowUiServer` | 接口 | 是 | [src/observability/local-ui.ts:51-57](../src/observability/local-ui.ts#L51) |
 | `createLocalFlowUiServer` | 函数 | 是 | [src/observability/local-ui.ts:59-121](../src/observability/local-ui.ts#L59) |
 | `handleRequest` | 函数 | 否 | [src/observability/local-ui.ts:123-181](../src/observability/local-ui.ts#L123) |
-| `listSessions` | 函数 | 否 | [src/observability/local-ui.ts:183-201](../src/observability/local-ui.ts#L183) |
-| `inspectView` | 函数 | 否 | [src/observability/local-ui.ts:203-256](../src/observability/local-ui.ts#L203) |
-| `recoverDefinitionFromGit` | 函数 | 否 | [src/observability/local-ui.ts:258-298](../src/observability/local-ui.ts#L258) |
-| `loadFlowPackageFromGit` | 函数 | 否 | [src/observability/local-ui.ts:300-319](../src/observability/local-ui.ts#L300) |
-| `loadGitReferences` | 函数 | 否 | [src/observability/local-ui.ts:321-345](../src/observability/local-ui.ts#L321) |
-| `resolveFlowName` | 函数 | 否 | [src/observability/local-ui.ts:347-356](../src/observability/local-ui.ts#L347) |
-| `serveStatic` | 函数 | 否 | [src/observability/local-ui.ts:358-375](../src/observability/local-ui.ts#L358) |
-| `contentType` | 函数 | 否 | [src/observability/local-ui.ts:377-386](../src/observability/local-ui.ts#L377) |
-| `json` | 函数 | 否 | [src/observability/local-ui.ts:388-395](../src/observability/local-ui.ts#L388) |
-| `listen` | 函数 | 否 | [src/observability/local-ui.ts:397-411](../src/observability/local-ui.ts#L397) |
-| `isAddressInUse` | 函数 | 否 | [src/observability/local-ui.ts:413-420](../src/observability/local-ui.ts#L413) |
+| `listSessions` | 函数 | 否 | [src/observability/local-ui.ts:183-202](../src/observability/local-ui.ts#L183) |
+| `inspectView` | 函数 | 否 | [src/observability/local-ui.ts:204-257](../src/observability/local-ui.ts#L204) |
+| `recoverDefinitionFromGit` | 函数 | 否 | [src/observability/local-ui.ts:259-299](../src/observability/local-ui.ts#L259) |
+| `loadFlowPackageFromGit` | 函数 | 否 | [src/observability/local-ui.ts:301-320](../src/observability/local-ui.ts#L301) |
+| `loadGitReferences` | 函数 | 否 | [src/observability/local-ui.ts:322-346](../src/observability/local-ui.ts#L322) |
+| `resolveFlowName` | 函数 | 否 | [src/observability/local-ui.ts:348-357](../src/observability/local-ui.ts#L348) |
+| `serveStatic` | 函数 | 否 | [src/observability/local-ui.ts:359-376](../src/observability/local-ui.ts#L359) |
+| `contentType` | 函数 | 否 | [src/observability/local-ui.ts:378-387](../src/observability/local-ui.ts#L378) |
+| `json` | 函数 | 否 | [src/observability/local-ui.ts:389-396](../src/observability/local-ui.ts#L389) |
+| `listen` | 函数 | 否 | [src/observability/local-ui.ts:398-412](../src/observability/local-ui.ts#L398) |
+| `isAddressInUse` | 函数 | 否 | [src/observability/local-ui.ts:414-421](../src/observability/local-ui.ts#L414) |
 
 ## [src/observability/view.ts](../src/observability/view.ts)
 

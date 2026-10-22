@@ -84,6 +84,12 @@ test("serves the local Flow UI and read-only run APIs", async () => {
 	const loaded = await loadFlow(fixturePath);
 	run.flowVersion = fingerprintFlow(loaded.flow, loaded.references);
 	await store.createRun(run);
+	await store.createRun({
+		...runRecord(fixturePath),
+		id: "ui-child-run",
+		parentRunId: run.id,
+		parentNodeRunId: "ui-parent-node",
+	});
 
 	const server = createLocalFlowUiServer({
 		storePath,
@@ -103,6 +109,8 @@ test("serves the local Flow UI and read-only run APIs", async () => {
 			listPayload.runs.map((item) => item.id),
 			[run.id],
 		);
+		const childDetail = await fetch(`${server.url}/api/runs/ui-child-run`);
+		assert.equal(childDetail.status, 200);
 
 		const detail = await fetch(`${server.url}/api/runs/${run.id}`);
 		assert.equal(detail.status, 200);
